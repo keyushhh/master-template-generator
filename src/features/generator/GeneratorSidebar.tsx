@@ -2,14 +2,28 @@ import { useState } from 'react';
 import { SlideNavList } from './SlideNavList';
 import { UploadPanel } from './UploadPanel';
 import type { DocumentNode } from '../business-record/parser/ast';
+import type { Deck } from '../deck/types';
 import logoBlack from '../../assets/Logo_Black_Transparent.png';
 
 interface GeneratorSidebarProps {
   hasPresentation: boolean;
+  deck: Deck;
   onDocumentParsed: (ast: DocumentNode | null) => void;
+  onGenerate: () => void;
+  onToggleHidden: (instanceId: string) => void;
+  onDuplicate: (instanceId: string) => void;
+  onDelete: (instanceId: string) => void;
 }
 
-export function GeneratorSidebar({ hasPresentation, onDocumentParsed }: GeneratorSidebarProps) {
+export function GeneratorSidebar({
+  hasPresentation,
+  deck,
+  onDocumentParsed,
+  onGenerate,
+  onToggleHidden,
+  onDuplicate,
+  onDelete,
+}: GeneratorSidebarProps) {
   const [shareOpen, setShareOpen] = useState(false);
 
   return (
@@ -21,7 +35,12 @@ export function GeneratorSidebar({ hasPresentation, onDocumentParsed }: Generato
       
       {/* Scrollable Navigation section */}
       <div className="sidenav-scroll flex-1 overflow-y-auto px-3 py-4">
-        <SlideNavList />
+        <SlideNavList
+          slides={deck.slides}
+          onToggleHidden={onToggleHidden}
+          onDuplicate={onDuplicate}
+          onDelete={onDelete}
+        />
       </div>
       
       {/* Tools Section at the bottom with premium vertical layout rhythm */}
@@ -36,9 +55,15 @@ export function GeneratorSidebar({ hasPresentation, onDocumentParsed }: Generato
         
         {/* CTA Actions container */}
         <div className="flex flex-col gap-2">
-          {/* Primary CTA: Generate Deck */}
+          {/* Primary CTA: Generate Deck — enabled once a Business Record parses */}
           <button
-            className="w-full flex items-center justify-center gap-2.5 bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white border-none h-[44px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[14px] cursor-pointer transition-colors"
+            disabled={!hasPresentation}
+            onClick={() => hasPresentation && onGenerate()}
+            className={`w-full flex items-center justify-center gap-2.5 border-none h-[44px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[14px] transition-colors ${
+              hasPresentation
+                ? 'bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white cursor-pointer'
+                : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+            }`}
           >
             Generate Deck
           </button>

@@ -1,67 +1,84 @@
 import { useEffect, useState } from 'react';
+import type { SlideInstance } from '../deck/types';
 
-export interface SlideEntry {
-  id: string;
-  num: string;
-  title: string;
+interface SlideNavListProps {
+  slides: SlideInstance[];
+  onToggleHidden: (instanceId: string) => void;
+  onDuplicate: (instanceId: string) => void;
+  onDelete: (instanceId: string) => void;
 }
 
-export interface SlideGroup {
+interface NavGroup {
   label: string;
-  slides: SlideEntry[];
+  slides: SlideInstance[];
 }
 
-/**
- * Canonical slide registry — 14 slides across 5 groups.
- * This is the single source of truth shared by SlideNavList and PresentationCanvas.
- */
-export const SLIDE_GROUPS: SlideGroup[] = [
-  {
-    label: 'Introduction',
-    slides: [
-      { id: 's1',  num: '01', title: 'Cover' },
-      { id: 's2',  num: '02', title: 'Index / Contents' },
-      { id: 's3',  num: '03', title: 'Executive Summary' },
-    ],
-  },
-  {
-    label: 'Context',
-    slides: [
-      { id: 's4',  num: '04', title: 'Section Divider' },
-      { id: 's5',  num: '05', title: 'Two-Column Context' },
-      { id: 's6',  num: '06', title: 'Data Monument' },
-    ],
-  },
-  {
-    label: 'Performance',
-    slides: [
-      { id: 's7',  num: '07', title: 'Metrics Dashboard' },
-      { id: 's8',  num: '08', title: 'Comparative Table' },
-      { id: 's9',  num: '09', title: 'Strategic Roadmap' },
-    ],
-  },
-  {
-    label: 'Strategy',
-    slides: [
-      { id: 's10', num: '10', title: 'Image Editorial' },
-      { id: 's11', num: '11', title: 'Process Architecture' },
-      { id: 's12', num: '12', title: 'Global Reach Map' },
-    ],
-  },
-  {
-    label: 'Closing',
-    slides: [
-      { id: 's13', num: '13', title: 'Featured Quote' },
-      { id: 's14', num: '14', title: 'Exit / Thank You' },
-    ],
-  },
-];
+/** Group consecutive slides sharing the same group label. */
+function groupSlides(slides: SlideInstance[]): NavGroup[] {
+  const groups: NavGroup[] = [];
+  for (const slide of slides) {
+    const last = groups[groups.length - 1];
+    if (last && last.label === slide.group) {
+      last.slides.push(slide);
+    } else {
+      groups.push({ label: slide.group, slides: [slide] });
+    }
+  }
+  return groups;
+}
 
-/** Flat array derived from groups — used by the observer. */
-export const SLIDES: SlideEntry[] = SLIDE_GROUPS.flatMap((g) => g.slides);
+function EyeIcon({ off }: { off?: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {off ? (
+        <>
+          <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+          <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+          <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+          <line x1="2" y1="2" x2="22" y2="22" />
+        </>
+      ) : (
+        <>
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      )}
+    </svg>
+  );
+}
 
-export function SlideNavList() {
-  const [activeId, setActiveId] = useState<string>('s1');
+function PlusIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete }: SlideNavListProps) {
+  const [activeId, setActiveId] = useState<string>(slides[0]?.instanceId ?? '');
+
+  // Visible-slide numbering — must match the canvas footer numbering.
+  const numbering = new Map<string, string>();
+  let visibleIndex = 0;
+  for (const slide of slides) {
+    if (!slide.hidden) {
+      visibleIndex += 1;
+      numbering.set(slide.instanceId, String(visibleIndex).padStart(2, '0'));
+    }
+  }
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -79,17 +96,17 @@ export function SlideNavList() {
       }
     );
 
-    SLIDES.forEach((slide) => {
-      const element = document.getElementById(slide.id);
+    slides.forEach((slide) => {
+      const element = document.getElementById(slide.instanceId);
       if (element) observer.observe(element);
     });
 
     return () => observer.disconnect();
-  }, []);
+  }, [slides]);
 
-  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
-    e.preventDefault();
-    const element = document.getElementById(id);
+  const handleNavigate = (slide: SlideInstance) => {
+    if (slide.hidden) return;
+    const element = document.getElementById(slide.instanceId);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
     }
@@ -97,20 +114,10 @@ export function SlideNavList() {
 
   return (
     <div className="flex flex-col">
-      {/* Reduced visual weight heading + divider rule */}
-      <div 
-        className="px-3 pb-2 flex items-center justify-between border-b border-neutral-150"
-        style={{ marginBottom: 16 }}
-      >
-        <div className="font-sans font-semibold text-[11px] tracking-[0.1em] text-neutral-400 uppercase">
-          Presentation
-        </div>
-      </div>
-
       <div className="px-1">
-        {SLIDE_GROUPS.map((group, index) => (
+        {groupSlides(slides).map((group, index) => (
           <div
-            key={group.label}
+            key={`${group.label}-${index}`}
             style={{ marginTop: index === 0 ? 0 : 40 }}
           >
             {/* Group Label: 40px systematic spacer on groups after first */}
@@ -121,31 +128,97 @@ export function SlideNavList() {
             {/* Slide items with generous spacing rhythm */}
             <div className="space-y-[6px]">
               {group.slides.map((slide) => {
-                const isActive = activeId === slide.id;
+                const isActive = activeId === slide.instanceId && !slide.hidden;
                 return (
-                  <a
-                    key={slide.id}
-                    href={`#${slide.id}`}
-                    onClick={(e) => handleClick(e, slide.id)}
-                    className={`flex items-baseline gap-3 px-3 py-[9px] rounded-[var(--radius-sharp)] transition-all duration-150 cursor-pointer ${
+                  <div
+                    key={slide.instanceId}
+                    className={`group/item relative flex items-center rounded-[var(--radius-sharp)] transition-all duration-150 ${
                       isActive
                         ? 'bg-indigo-50 text-indigo-700 font-semibold'
-                        : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
+                        : slide.hidden
+                          ? 'text-neutral-300 hover:bg-neutral-50'
+                          : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
                     }`}
                   >
-                    {/* Slide Number: fixed column alignment with min-width */}
-                    <span
-                      className={`font-mono text-[11px] tracking-[0.1em] min-w-[24px] ${
-                        isActive ? 'text-indigo-600 font-medium' : 'text-neutral-400'
+                    <a
+                      href={`#${slide.instanceId}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleNavigate(slide);
+                      }}
+                      className={`flex items-baseline gap-3 px-3 py-[9px] flex-1 min-w-0 ${
+                        slide.hidden ? 'cursor-default pr-24' : 'cursor-pointer'
                       }`}
                     >
-                      {slide.num}
-                    </span>
-                    {/* Slide Title: clean weights */}
-                    <span className="font-sans text-[13px] tracking-normal">
-                      {slide.title}
-                    </span>
-                  </a>
+                      {/* Slide Number: fixed column alignment with min-width */}
+                      <span
+                        className={`font-mono text-[11px] tracking-[0.1em] min-w-[24px] ${
+                          isActive
+                            ? 'text-indigo-600 font-medium'
+                            : slide.hidden
+                              ? 'text-neutral-300'
+                              : 'text-neutral-400'
+                        }`}
+                      >
+                        {slide.hidden ? '—' : numbering.get(slide.instanceId)}
+                      </span>
+                      {/* Slide Title: clean weights, struck through when hidden */}
+                      <span
+                        className={`font-sans text-[13px] tracking-normal truncate ${
+                          slide.hidden ? 'line-through' : ''
+                        }`}
+                      >
+                        {slide.title}
+                      </span>
+                    </a>
+
+                    {/* Hover actions: hide/show + duplicate. Absolutely
+                        positioned so idle rows keep their full title width;
+                        the background matches the row's hover state so icons
+                        sit cleanly over long titles. The eye stays visible
+                        while a slide is hidden so it can be restored. */}
+                    <div
+                      className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1 transition-opacity duration-150 ${
+                        slide.hidden
+                          ? 'opacity-100'
+                          : `opacity-0 group-hover/item:opacity-100 ${
+                              isActive ? 'bg-indigo-50' : 'bg-neutral-100'
+                            }`
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        title={slide.hidden ? 'Show slide' : 'Hide slide'}
+                        aria-label={slide.hidden ? 'Show slide' : 'Hide slide'}
+                        onClick={() => onToggleHidden(slide.instanceId)}
+                        className={`flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent transition-colors ${
+                          slide.hidden
+                            ? 'text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100'
+                            : 'text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200'
+                        }`}
+                      >
+                        <EyeIcon off={slide.hidden} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Duplicate slide"
+                        aria-label="Duplicate slide"
+                        onClick={() => onDuplicate(slide.instanceId)}
+                        className="flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200 transition-colors"
+                      >
+                        <PlusIcon />
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete slide"
+                        aria-label="Delete slide"
+                        onClick={() => onDelete(slide.instanceId)}
+                        className="flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
