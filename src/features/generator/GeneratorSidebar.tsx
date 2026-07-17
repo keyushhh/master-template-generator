@@ -50,6 +50,15 @@ export function GeneratorSidebar({
   const [shareOpen, setShareOpen] = useState(false);
   const [generateArmed, setGenerateArmed] = useArmedConfirm();
 
+  // Export states
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [isExportingPPTX, setIsExportingPPTX] = useState(false);
+  const [pptxProgress, setPptxProgress] = useState({ current: 0, total: 0 });
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Derive visible slides for export
+  const visibleSlideIds = deck.slides.filter((s) => !s.hidden).map((s) => s.instanceId);
+
   // Regenerating replaces an existing generated deck (and any edits) — require
   // a second confirming click in that case. A pristine template deck is safe.
   const generateNeedsConfirm = deckGenerated || dirty || editing;
@@ -62,6 +71,40 @@ export function GeneratorSidebar({
     }
     setGenerateArmed(false);
     onGenerate();
+  };
+
+  const handleExportPDF = () => {
+    setIsExportingPDF(true);
+    setTimeout(() => {
+      window.print();
+      setIsExportingPDF(false);
+    }, 150);
+  };
+
+  const handleExportPPTX = async () => {
+    if (visibleSlideIds.length === 0) return;
+    setIsExportingPPTX(true);
+    setPptxProgress({ current: 0, total: visibleSlideIds.length });
+    try {
+      const { exportToPPTX } = await import('./exportHelper');
+      const presentationTitle = deck.slides[0]?.content.heading || deck.slides[0]?.title || 'Presentation';
+      await exportToPPTX(visibleSlideIds, presentationTitle, (current, total) => {
+        setPptxProgress({ current, total });
+      });
+    } catch (err) {
+      console.error('PPTX export error:', err);
+    } finally {
+      setIsExportingPPTX(false);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    const { copyShareLink } = await import('./exportHelper');
+    const ok = await copyShareLink();
+    if (ok) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
   };
 
 
@@ -137,17 +180,35 @@ export function GeneratorSidebar({
           {/* Dropdown items for Share CTA */}
           {shareOpen && (
             <div className="flex flex-col gap-1 mt-1">
-              <button className="w-full flex items-center gap-2.5 h-[40px] px-3.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 cursor-pointer transition-colors rounded-[var(--radius-sharp)]">
+              <button
+                disabled={isExportingPDF || isExportingPPTX}
+                onClick={handleExportPDF}
+                className="w-full flex items-center gap-2.5 h-[40px] px-3.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-[var(--radius-sharp)]"
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Export PDF
+                {isExportingPDF ? 'Preparing PDF…' : 'Export PDF'}
               </button>
-              <button className="w-full flex items-center gap-2.5 h-[40px] px-3.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 cursor-pointer transition-colors rounded-[var(--radius-sharp)]">
+              <button
+                disabled={isExportingPDF || isExportingPPTX}
+                onClick={handleExportPPTX}
+                className="w-full flex items-center gap-2.5 h-[40px] px-3.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-[var(--radius-sharp)]"
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Export PPTX
+                {isExportingPPTX
+                  ? `Exporting (${pptxProgress.current}/${pptxProgress.total})…`
+                  : 'Export PPTX'}
               </button>
-              <button className="w-full flex items-center gap-2.5 h-[40px] px-3.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 cursor-pointer transition-colors rounded-[var(--radius-sharp)]">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                Copy Share Link
+              <button
+                disabled={isExportingPDF || isExportingPPTX}
+                onClick={handleCopyLink}
+                className="w-full flex items-center gap-2.5 h-[40px] px-3.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-[var(--radius-sharp)]"
+              >
+                {linkCopied ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="green" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                )}
+                {linkCopied ? 'Link Copied!' : 'Copy Share Link'}
               </button>
             </div>
           )}
