@@ -1,56 +1,544 @@
+@import "tailwindcss";
+
+/* Tailwind v4 otherwise uses the visitor's OS preference for `dark:`.
+   The product theme picker controls this class, so every dark variant must
+   follow the class it applies to <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Satoshi", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", "Inter", ui-sans-serif, sans-serif;
+  --font-display: "Space Grotesk", "Inter", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-surface-canvas: var(--surface-canvas);
-  --color-surface-panel: var(--surface-panel);
-  --color-surface-subtle: var(--surface-subtle);
-  --color-content-primary: var(--content-primary);
-  --color-content-secondary: var(--content-secondary);
-  --color-content-muted: var(--content-muted);
-  --color-content-inverse: var(--content-inverse);
-  --color-border-subtle: var(--border-subtle);
-  --color-border-default: var(--border-default);
-  --color-border-strong: var(--border-strong);
-  --color-action-primary: var(--action-primary);
-  --color-action-primary-subtle: var(--action-primary-subtle);
+  --color-brand-primary: #1A1A1B;
+  --color-brand-accent: #6B6B6B;
+  --color-brand-purple: #10b981;
+
+  /* Fixed colors for surfaces that intentionally remain dark in every theme. */
+  --color-fixed-white: #ffffff;
+  --color-fixed-light: #c7c7d1;
+  --color-fixed-muted: #9696a3;
+  --color-fixed-dark: #141418;
+
+  /* Dynamically map core Tailwind colors to CSS properties for instant Dark Mode */
+  --color-white: var(--bg-white);
+  --color-card-accent: var(--bg-card-accent);
+  
+  --color-neutral-50: var(--neutral-50);
+  --color-neutral-100: var(--neutral-100);
+  --color-neutral-150: var(--neutral-200);
+  --color-neutral-200: var(--neutral-200);
+  --color-neutral-300: var(--neutral-300);
+  --color-neutral-400: var(--neutral-400);
+  --color-neutral-500: var(--neutral-500);
+  --color-neutral-600: var(--neutral-600);
+  --color-neutral-700: var(--neutral-700);
+  --color-neutral-800: var(--neutral-800);
+  --color-neutral-850: var(--neutral-800);
+  --color-neutral-900: var(--neutral-900);
+  --color-neutral-950: var(--neutral-950);
+
+  --color-slate-50: var(--neutral-50);
+  --color-slate-100: var(--neutral-100);
+  --color-slate-200: var(--neutral-200);
+  --color-slate-300: var(--neutral-300);
+  --color-slate-400: var(--neutral-400);
+  --color-slate-500: var(--neutral-500);
+  --color-slate-600: var(--neutral-600);
+  --color-slate-700: var(--neutral-700);
+  --color-slate-800: var(--neutral-800);
+  --color-slate-900: var(--neutral-900);
+  --color-slate-950: var(--neutral-950);
+
+  /* Map Indigo scale to dynamic CSS properties for Theme Switcher options */
+  --color-indigo-50: var(--indigo-50);
+  --color-indigo-100: var(--indigo-100);
+  --color-indigo-200: var(--indigo-200);
+  --color-indigo-300: var(--indigo-300);
+  --color-indigo-400: var(--indigo-400);
+  --color-indigo-500: var(--indigo-500);
+  --color-indigo-600: var(--indigo-600);
+  --color-indigo-650: var(--indigo-650);
+  --color-indigo-700: var(--indigo-700);
+  --color-indigo-800: var(--indigo-800);
+  --color-indigo-900: var(--indigo-900);
+  --color-indigo-950: var(--indigo-950);
+
+  /* Map Violet scale to same dynamic properties to capture gradient middle highlights */
+  --color-violet-50: var(--indigo-50);
+  --color-violet-100: var(--indigo-100);
+  --color-violet-200: var(--indigo-200);
+  --color-violet-300: var(--indigo-300);
+  --color-violet-400: var(--indigo-400);
+  --color-violet-500: var(--indigo-500);
+  --color-violet-600: var(--indigo-600);
+  --color-violet-650: var(--indigo-650);
+  --color-violet-700: var(--indigo-700);
+  --color-violet-800: var(--indigo-800);
+  --color-violet-900: var(--indigo-900);
+  --color-violet-950: var(--indigo-950);
+
+  /* Map Purple scale to same dynamic properties to capture CTA highlights */
+  --color-purple-50: var(--indigo-50);
+  --color-purple-100: var(--indigo-100);
+  --color-purple-200: var(--indigo-200);
+  --color-purple-300: var(--indigo-300);
+  --color-purple-400: var(--indigo-400);
+  --color-purple-500: var(--indigo-500);
+  --color-purple-600: var(--indigo-600);
+  --color-purple-650: var(--indigo-650);
+  --color-purple-700: var(--indigo-700);
+  --color-purple-800: var(--indigo-800);
+  --color-purple-900: var(--indigo-900);
+  --color-purple-950: var(--indigo-950);
+
+  /* Map Fuchsia scale to same dynamic properties to capture other gradient edges */
+  --color-fuchsia-50: var(--indigo-50);
+  --color-fuchsia-100: var(--indigo-100);
+  --color-fuchsia-200: var(--indigo-200);
+  --color-fuchsia-300: var(--indigo-300);
+  --color-fuchsia-400: var(--indigo-400);
+  --color-fuchsia-500: var(--indigo-500);
+  --color-fuchsia-600: var(--indigo-600);
+  --color-fuchsia-650: var(--indigo-650);
+  --color-fuchsia-700: var(--indigo-700);
+  --color-fuchsia-800: var(--indigo-800);
+  --color-fuchsia-900: var(--indigo-900);
+  --color-fuchsia-950: var(--indigo-950);
+
+  /* Map Secondary scale to dynamic CSS properties */
+  --color-secondary-50: var(--secondary-50);
+  --color-secondary-100: var(--secondary-100);
+  --color-secondary-200: var(--secondary-200);
+  --color-secondary-300: var(--secondary-300);
+  --color-secondary-400: var(--secondary-400);
+  --color-secondary-500: var(--secondary-500);
+  --color-secondary-600: var(--secondary-600);
+  --color-secondary-650: var(--secondary-650);
+  --color-secondary-700: var(--secondary-700);
+  --color-secondary-800: var(--secondary-800);
+  --color-secondary-900: var(--secondary-900);
+  --color-secondary-950: var(--secondary-950);
+
+  /* Map Accent scale to dynamic CSS properties */
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-650: var(--accent-650);
+  --color-accent-700: var(--accent-700);
+  --color-accent-800: var(--accent-800);
+  --color-accent-900: var(--accent-900);
+  --color-accent-950: var(--accent-950);
 }
 
 :root {
-  --app-sidebar-width: 15rem;
-
-  --surface-canvas: #fafafa;
-  --surface-panel: #ffffff;
-  --surface-subtle: #f5f5f5;
-  --content-primary: #171717;
-  --content-secondary: #525252;
-  --content-muted: #737373;
-  --content-inverse: #ffffff;
-  --border-subtle: #f5f5f5;
-  --border-default: #e5e5e5;
-  --border-strong: #d4d4d4;
-  --action-primary: #4f46e5;
-  --action-primary-subtle: #f5f3ff;
-
+  /* Design-system foundations: stable primitives for components and Figma exports. */
+  --space-0: 0px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+  --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px rgb(0 0 0 / 0.1);
   --shadow-xl: 0 20px 25px rgb(0 0 0 / 0.1);
+
+  /* Default Theme Base - Light Mode */
+  --bg-white: #ffffff;
+  --bg-card-accent: #FAF9F6;
+
+  --neutral-50: #FBFBFB;
+  --neutral-100: #f5f5f5;
+  --neutral-200: #e5e5e5;
+  --neutral-300: #d4d4d4;
+  --neutral-400: #a3a3a3;
+  --neutral-500: #737373;
+  --neutral-600: #525252;
+  --neutral-700: #404040;
+  --neutral-800: #262626;
+  --neutral-900: #171717;
+  --neutral-950: #0a0a0a;
+
+  /* Integrations sandbox grid line color */
+  --grid-line-color: rgba(226, 232, 240, 0.4);
+
+  /* Default Indigo Presets */
+  --indigo-50: #f5f3ff;
+  --indigo-100: #e0e7ff;
+  --indigo-200: #c7d2fe;
+  --indigo-300: #a5b4fc;
+  --indigo-400: #818cf8;
+  --indigo-500: #6366f1;
+  --indigo-600: #4f46e5;
+  --indigo-650: #4338ca;
+  --indigo-700: #4338ca;
+  --indigo-800: #3730a3;
+  --indigo-900: #1e1b4b;
+  --indigo-950: #07070a;
+
+  /* Default Secondary Presets */
+  --secondary-50: #f5f3ff;
+  --secondary-100: #e0e7ff;
+  --secondary-200: #c7d2fe;
+  --secondary-300: #a5b4fc;
+  --secondary-400: #818cf8;
+  --secondary-500: #6366f1;
+  --secondary-600: #4f46e5;
+  --secondary-650: #4338ca;
+  --secondary-700: #4338ca;
+  --secondary-800: #3730a3;
+  --secondary-900: #1e1b4b;
+  --secondary-950: #07070a;
+
+  /* Default Accent Presets */
+  --accent-50: #f5f3ff;
+  --accent-100: #e0e7ff;
+  --accent-200: #c7d2fe;
+  --accent-300: #a5b4fc;
+  --accent-400: #818cf8;
+  --accent-500: #6366f1;
+  --accent-600: #4f46e5;
+  --accent-650: #4338ca;
+  --accent-700: #4338ca;
+  --accent-800: #3730a3;
+  --accent-900: #1e1b4b;
+  --accent-950: #07070a;
+
+  /* Semantic aliases. Components can target meaning instead of a palette step. */
+  --surface-canvas: var(--neutral-50);
+  --surface-default: var(--bg-white);
+  --surface-subtle: var(--bg-card-accent);
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-600);
+  --text-muted: var(--neutral-500);
+  --text-inverse: #ffffff;
+  --border-default: var(--neutral-200);
+  --border-subtle: var(--neutral-100);
+  --border-strong: var(--neutral-300);
+  --action-primary: var(--indigo-600);
+  --action-primary-hover: var(--indigo-700);
+  --action-primary-subtle: var(--indigo-50);
+  --focus-ring: var(--indigo-500);
 }
 
-.theme-emerald {
-  --action-primary: #059669;
-  --action-primary-subtle: #ecfdf5;
+/* Site-Wide Dark Mode Overrides */
+.dark {
+  --bg-white: #0c0c0e;
+  --bg-card-accent: #141418;
+
+  --neutral-50: #060608;
+  --neutral-100: #121216;
+  --neutral-200: #1c1c21;
+  --neutral-300: #282830;
+  --neutral-400: #52525a;
+  --neutral-500: #71717a;
+  --neutral-600: #a1a1aa;
+  --neutral-700: #d4d4d8;
+  --neutral-800: #e4e4e7;
+  --neutral-900: #fafafa;
+  --neutral-950: #fafafa;
+
+  /* Dim grid lines in dark mode */
+  --grid-line-color: rgba(255, 255, 255, 0.05);
+
+  /* Tweak default dark bounds so layouts scale in dark mode */
+  --indigo-950: #fafafa;
+  --secondary-950: #fafafa;
+  --accent-950: #fafafa;
 }
 
-.theme-rose {
-  --action-primary: #e11d48;
-  --action-primary-subtle: #fff1f2;
+/* Colour-picker presets.  Components use the indigo/secondary/accent scales
+   as semantic tokens, so changing these values recolours the full interface. */
+.theme-emerald { --indigo-50:#ecfdf5; --indigo-100:#d1fae5; --indigo-200:#a7f3d0; --indigo-300:#6ee7b7; --indigo-400:#34d399; --indigo-500:#10b981; --indigo-600:#059669; --indigo-650:#047857; --indigo-700:#047857; --indigo-800:#065f46; --indigo-900:#064e3b; --secondary-50:#ecfdf5; --secondary-100:#d1fae5; --secondary-200:#a7f3d0; --secondary-300:#6ee7b7; --secondary-400:#34d399; --secondary-500:#10b981; --secondary-600:#059669; --secondary-650:#047857; --secondary-700:#047857; --secondary-800:#065f46; --secondary-900:#064e3b; --accent-50:#f0fdf4; --accent-100:#dcfce7; --accent-200:#bbf7d0; --accent-300:#86efac; --accent-400:#4ade80; --accent-500:#22c55e; --accent-600:#16a34a; --accent-650:#15803d; --accent-700:#15803d; --accent-800:#166534; --accent-900:#14532d; }
+.theme-rose { --indigo-50:#fff1f2; --indigo-100:#ffe4e6; --indigo-200:#fecdd3; --indigo-300:#fda4af; --indigo-400:#fb7185; --indigo-500:#f43f5e; --indigo-600:#e11d48; --indigo-650:#be123c; --indigo-700:#be123c; --indigo-800:#9f1239; --indigo-900:#881337; --secondary-50:#fff1f2; --secondary-100:#ffe4e6; --secondary-200:#fecdd3; --secondary-300:#fda4af; --secondary-400:#fb7185; --secondary-500:#f43f5e; --secondary-600:#e11d48; --secondary-650:#be123c; --secondary-700:#be123c; --secondary-800:#9f1239; --secondary-900:#881337; --accent-50:#fff7ed; --accent-100:#ffedd5; --accent-200:#fed7aa; --accent-300:#fdba74; --accent-400:#fb923c; --accent-500:#f97316; --accent-600:#ea580c; --accent-650:#c2410c; --accent-700:#c2410c; --accent-800:#9a3412; --accent-900:#7c2d12; }
+.theme-amber { --indigo-50:#fffbeb; --indigo-100:#fef3c7; --indigo-200:#fde68a; --indigo-300:#fcd34d; --indigo-400:#fbbf24; --indigo-500:#f59e0b; --indigo-600:#d97706; --indigo-650:#b45309; --indigo-700:#b45309; --indigo-800:#92400e; --indigo-900:#78350f; --secondary-50:#fff7ed; --secondary-100:#ffedd5; --secondary-200:#fed7aa; --secondary-300:#fdba74; --secondary-400:#fb923c; --secondary-500:#f97316; --secondary-600:#ea580c; --secondary-650:#c2410c; --secondary-700:#c2410c; --secondary-800:#9a3412; --secondary-900:#7c2d12; --accent-50:#fefce8; --accent-100:#fef9c3; --accent-200:#fef08a; --accent-300:#fde047; --accent-400:#facc15; --accent-500:#eab308; --accent-600:#ca8a04; --accent-650:#a16207; --accent-700:#a16207; --accent-800:#854d0e; --accent-900:#713f12; }
+.theme-violet { --indigo-50:#f5f3ff; --indigo-100:#ede9fe; --indigo-200:#ddd6fe; --indigo-300:#c4b5fd; --indigo-400:#a78bfa; --indigo-500:#8b5cf6; --indigo-600:#7c3aed; --indigo-650:#6d28d9; --indigo-700:#6d28d9; --indigo-800:#5b21b6; --indigo-900:#4c1d95; --secondary-50:#faf5ff; --secondary-100:#f3e8ff; --secondary-200:#e9d5ff; --secondary-300:#d8b4fe; --secondary-400:#c084fc; --secondary-500:#a855f7; --secondary-600:#9333ea; --secondary-650:#7e22ce; --secondary-700:#7e22ce; --secondary-800:#6b21a8; --secondary-900:#581c87; --accent-50:#fdf4ff; --accent-100:#fae8ff; --accent-200:#f5d0fe; --accent-300:#f0abfc; --accent-400:#e879f9; --accent-500:#d946ef; --accent-600:#c026d3; --accent-650:#a21caf; --accent-700:#a21caf; --accent-800:#86198f; --accent-900:#701a75; }
+.theme-sky { --indigo-50:#f0f9ff; --indigo-100:#e0f2fe; --indigo-200:#bae6fd; --indigo-300:#7dd3fc; --indigo-400:#38bdf8; --indigo-500:#0ea5e9; --indigo-600:#0284c7; --indigo-650:#0369a1; --indigo-700:#0369a1; --indigo-800:#075985; --indigo-900:#0c4a6e; --secondary-50:#ecfeff; --secondary-100:#cffafe; --secondary-200:#a5f3fc; --secondary-300:#67e8f9; --secondary-400:#22d3ee; --secondary-500:#06b6d4; --secondary-600:#0891b2; --secondary-650:#0e7490; --secondary-700:#0e7490; --secondary-800:#155e75; --secondary-900:#164e63; --accent-50:#eff6ff; --accent-100:#dbeafe; --accent-200:#bfdbfe; --accent-300:#93c5fd; --accent-400:#60a5fa; --accent-500:#3b82f6; --accent-600:#2563eb; --accent-650:#1d4ed8; --accent-700:#1d4ed8; --accent-800:#1e40af; --accent-900:#1e3a8a; }
+.theme-fuchsia { --indigo-50:#fdf4ff; --indigo-100:#fae8ff; --indigo-200:#f5d0fe; --indigo-300:#f0abfc; --indigo-400:#e879f9; --indigo-500:#d946ef; --indigo-600:#c026d3; --indigo-650:#a21caf; --indigo-700:#a21caf; --indigo-800:#86198f; --indigo-900:#701a75; --secondary-50:#fff1f2; --secondary-100:#ffe4e6; --secondary-200:#fecdd3; --secondary-300:#fda4af; --secondary-400:#fb7185; --secondary-500:#f43f5e; --secondary-600:#e11d48; --secondary-650:#be123c; --secondary-700:#be123c; --secondary-800:#9f1239; --secondary-900:#881337; --accent-50:#faf5ff; --accent-100:#f3e8ff; --accent-200:#e9d5ff; --accent-300:#d8b4fe; --accent-400:#c084fc; --accent-500:#a855f7; --accent-600:#9333ea; --accent-650:#7e22ce; --accent-700:#7e22ce; --accent-800:#6b21a8; --accent-900:#581c87; }
+.theme-crimson { --indigo-50:#fef2f2; --indigo-100:#fee2e2; --indigo-200:#fecaca; --indigo-300:#fca5a5; --indigo-400:#f87171; --indigo-500:#dc2626; --indigo-600:#b91c1c; --indigo-650:#991b1b; --indigo-700:#991b1b; --indigo-800:#7f1d1d; --indigo-900:#651313; --secondary-50:#fff1f2; --secondary-100:#ffe4e6; --secondary-200:#fecdd3; --secondary-300:#fda4af; --secondary-400:#fb7185; --secondary-500:#f43f5e; --secondary-600:#e11d48; --secondary-650:#be123c; --secondary-700:#be123c; --secondary-800:#9f1239; --secondary-900:#881337; --accent-50:#fff7ed; --accent-100:#ffedd5; --accent-200:#fed7aa; --accent-300:#fdba74; --accent-400:#fb923c; --accent-500:#f97316; --accent-600:#ea580c; --accent-650:#c2410c; --accent-700:#c2410c; --accent-800:#9a3412; --accent-900:#7c2d12; }
+
+/* Dark-mode badge normalization for icon chips that were still using light pastel fills. */
+.dark .bg-indigo-50,
+.dark .bg-blue-50,
+.dark .bg-violet-50,
+.dark .bg-purple-50,
+.dark .bg-teal-50,
+.dark .bg-emerald-50,
+.dark .bg-amber-50,
+.dark .bg-sky-50 {
+  background-color: color-mix(in srgb, var(--indigo-500) 14%, #141418) !important;
 }
 
-.theme-amber {
-  --action-primary: #d97706;
-  --action-primary-subtle: #fffbeb;
+.dark .border-indigo-100,
+.dark .border-blue-100,
+.dark .border-violet-100,
+.dark .border-purple-100,
+.dark .border-teal-100,
+.dark .border-emerald-100,
+.dark .border-amber-100,
+.dark .border-sky-100 {
+  border-color: color-mix(in srgb, var(--indigo-500) 26%, rgba(255, 255, 255, 0.08)) !important;
 }
+
+.dark .text-indigo-600,
+.dark .text-blue-600,
+.dark .text-violet-600,
+.dark .text-purple-600,
+.dark .text-teal-600,
+.dark .text-emerald-600,
+.dark .text-amber-600,
+.dark .text-sky-600 {
+  color: color-mix(in srgb, var(--indigo-400) 90%, white 10%) !important;
+}
+
+.dark .text-indigo-700,
+.dark .text-blue-700,
+.dark .text-violet-700,
+.dark .text-purple-700,
+.dark .text-teal-700,
+.dark .text-emerald-700,
+.dark .text-amber-700,
+.dark .text-sky-700 {
+  color: color-mix(in srgb, var(--indigo-300) 92%, white 8%) !important;
+}
+
+/* Secondary & Accent dark mode badge overrides */
+.dark .bg-secondary-50 {
+  background-color: color-mix(in srgb, var(--secondary-500) 14%, #141418) !important;
+}
+.dark .bg-accent-50 {
+  background-color: color-mix(in srgb, var(--accent-500) 14%, #141418) !important;
+}
+.dark .border-secondary-100 {
+  border-color: color-mix(in srgb, var(--secondary-500) 26%, rgba(255, 255, 255, 0.08)) !important;
+}
+.dark .border-accent-100 {
+  border-color: color-mix(in srgb, var(--accent-500) 26%, rgba(255, 255, 255, 0.08)) !important;
+}
+.dark .text-secondary-600 {
+  color: color-mix(in srgb, var(--secondary-400) 90%, white 10%) !important;
+}
+.dark .text-accent-600 {
+  color: color-mix(in srgb, var(--accent-400) 90%, white 10%) !important;
+}
+.dark .text-secondary-700 {
+  color: color-mix(in srgb, var(--secondary-300) 92%, white 8%) !important;
+}
+.dark .text-accent-700 {
+  color: color-mix(in srgb, var(--accent-300) 92%, white 8%) !important;
+}
+
+/* Normalize CTA/text contrast on theme-colored buttons and active tabs in dark mode. */
+.dark button[class*="bg-indigo-600"],
+.dark a[class*="bg-indigo-600"],
+.dark button[class*="bg-indigo-500"],
+.dark a[class*="bg-indigo-500"],
+.dark button[class*="from-indigo-500"],
+.dark a[class*="from-indigo-500"],
+.dark button[class*="bg-emerald-500"],
+.dark a[class*="bg-emerald-500"],
+.dark button[class*="bg-amber-500"],
+.dark a[class*="bg-amber-500"] {
+  color: var(--color-fixed-white) !important;
+}
+
+.dark button[class*="bg-indigo-600"] svg,
+.dark a[class*="bg-indigo-600"] svg,
+.dark button[class*="bg-indigo-500"] svg,
+.dark a[class*="bg-indigo-500"] svg,
+.dark button[class*="bg-emerald-500"] svg,
+.dark a[class*="bg-emerald-500"] svg,
+.dark button[class*="bg-amber-500"] svg,
+.dark a[class*="bg-amber-500"] svg {
+  color: currentColor !important;
+}
+
+.dark button[class*="bg-indigo-600"][class*="shadow-"],
+.dark a[class*="bg-indigo-600"][class*="shadow-"],
+.dark button[class*="bg-indigo-500"][class*="shadow-"],
+.dark a[class*="bg-indigo-500"][class*="shadow-"] {
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--indigo-500) 22%, transparent) !important;
+}
+
+.dark button[class*="bg-neutral-900"],
+.dark a[class*="bg-neutral-900"],
+.dark button[class*="bg-slate-900"],
+.dark a[class*="bg-slate-900"] {
+  background-color: #141418 !important;
+  color: var(--color-fixed-white) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22) !important;
+}
+
+
+
+
+@layer base {
+  body {
+    background-color: var(--neutral-50);
+    color: var(--neutral-900);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--neutral-100);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--neutral-300);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--neutral-400);
+  }
+}
+
+/* Custom Dotted Background Grid - Light & Dark adaptation */
+.bg-grid-dots {
+  background-size: 24px 24px !important;
+  background-image: radial-gradient(circle, var(--neutral-200) 1px, transparent 1px) !important;
+}
+
+.bg-grid-dots-dark {
+  background-size: 24px 24px !important;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.12) 1.2px, transparent 1.2px) !important;
+}
+
+.bg-grid-dots-accent {
+  background-size: 20px 20px !important;
+  background-image: radial-gradient(circle, var(--neutral-300) 1.2px, transparent 1.2px) !important;
+}
+
+/* India map pulse ring animation */
+@keyframes ping {
+  0% { transform: scale(1); opacity: 0.5; }
+  70%, 100% { transform: scale(2); opacity: 0; }
+}
+
+svg { overflow: visible; }
+
+/* Sharp/Squared corners styling toggle */
+:root.corners-sharp,
+.corners-sharp,
+.corners-sharp * {
+  border-radius: 0px !important;
+}
+
+/* Exclude map ripples, tiny status indicators, and color preset circles from being squared */
+.corners-sharp .custom-ripple,
+.corners-sharp .reach-ripple,
+.corners-sharp [class*="ripple"],
+.corners-sharp .w-1.h-1,
+.corners-sharp .w-2.h-2,
+.corners-sharp .w-3.h-3,
+.corners-sharp .h-1.w-1,
+.corners-sharp .h-2.w-2,
+.corners-sharp .h-3.w-3,
+.corners-sharp .w-7.h-7,
+.corners-sharp .w-8.h-8,
+.corners-sharp .h-7.w-7,
+.corners-sharp .h-8.w-8 {
+  border-radius: 50% !important;
+}
+
+.corners-sharp ::-webkit-scrollbar-thumb {
+  border-radius: 0px !important;
+}
+
+/* Hide all page and section description pills/badges and tracking-widest uppercase sub-labels */
+span[class*="tracking-widest"][class*="uppercase"],
+span[class*="tracking-widest"][class*="font-mono"],
+span[class*="font-mono"][class*="uppercase"][class*="px-"],
+span.font-mono.uppercase[class*="bg-"] {
+  display: none !important;
+}
+
+/* Standard height utility to keep inputs, buttons, and selects in perfect visual sync */
+.modal-control-height {
+  height: 44px !important;
+  box-sizing: border-box !important;
+}
+
+/* Ambient background blur orbs compositor-friendly animations */
+.animate-orb-top-left {
+  animation: orb-drift-top-left 18s ease-in-out infinite;
+}
+.animate-orb-top-right {
+  animation: orb-drift-top-right 22s ease-in-out infinite;
+}
+.animate-orb-center {
+  animation: orb-pulse-center 28s ease-in-out infinite;
+}
+.animate-orb-mid-left {
+  animation: orb-pulse-mid-left 24s ease-in-out infinite;
+}
+.animate-orb-lower {
+  animation: orb-pulse-lower 20s ease-in-out infinite;
+}
+.animate-orb-bottom {
+  animation: orb-pulse-bottom 26s ease-in-out infinite;
+}
+
+@keyframes orb-drift-top-left {
+  0%, 100% { translate: 0 0; scale: 1; }
+  33% { translate: 60px -40px; scale: 1.2; }
+  66% { translate: -40px 40px; scale: 0.9; }
+}
+
+@keyframes orb-drift-top-right {
+  0%, 100% { translate: 0 0; scale: 1; }
+  33% { translate: -60px 50px; scale: 0.95; }
+  66% { translate: 40px -30px; scale: 1.15; }
+}
+
+@keyframes orb-pulse-center {
+  0%, 100% { scale: 1; }
+  50% { scale: 1.18; }
+  75% { scale: 0.88; }
+}
+
+@keyframes orb-pulse-mid-left {
+  0%, 100% { scale: 1; }
+  50% { scale: 0.9; }
+  75% { scale: 1.1; }
+}
+
+@keyframes orb-pulse-lower {
+  0%, 100% { scale: 1; }
+  50% { scale: 0.98; }
+  75% { scale: 1.12; }
+}
+
+@keyframes orb-pulse-bottom {
+  0%, 100% { scale: 1; }
+  50% { scale: 1.15; }
+  75% { scale: 0.95; }
+}
+
+

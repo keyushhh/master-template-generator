@@ -1,3 +1,5 @@
+import type { DocumentNode } from './ast';
+
 export interface ValidationError {
   severity: 'error' | 'warning';
   title: string;
@@ -9,4 +11,5 @@ export interface ValidationResult {
   isValid: boolean;
   errors: ValidationError[];
   metadata?: Record<string, string>;
+  ast?: DocumentNode;
 }
