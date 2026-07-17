@@ -1,33 +1,55 @@
 # Master Template Generator
 
-Master Template turns structured business documents into polished, on-brand presentations. The current version establishes the production application shell and design-system foundation only; generation, presentation editing, and export are intentionally not implemented yet.
+Master Template turns structured business documents into polished, on-brand presentations. It parses structured Markdown files, dynamically compiles a slide deck using predefined visual templates, and allows interactive slide editing, duplication, reordering, and exporting.
 
-## Stack
+---
 
-- React + TypeScript
-- Vite
-- Tailwind CSS v4
-- Framer Motion
+## Key Features
 
-## Project structure
+### ⚡ Automatic Generation
+* Upload structured Markdown documents (`.md` or `.markdown`) with YAML frontmatter.
+* The built-in parser validates required metadata keys (`title`, `version`, `type`, `client`) and constructs an Abstract Syntax Tree (AST).
+* The Presentation Compiler maps document sections (e.g. *Executive Summary*, *Key Metric*, *Comparative Table*, *Process*) to custom-designed slide layouts.
 
-- `src/app` — application composition and shell
-- `src/components` — reusable, presentation-agnostic UI components
-- `src/features` — future bounded product workflows
-- `src/domain` — future canonical business concepts
-- `src/theme` — token-backed visual foundations
-- `src/hooks` — shared React hooks
-- `src/lib` — framework-independent utilities
-- `src/styles` — global CSS entry points and base styles
+### ✍️ Interactive Slide Editing
+* Click the **Edit Content** button to toggle editing mode.
+* Slide slots become directly editable inline (`contentEditable` spans).
+* A floating session bar lets you save or discard in-progress edits.
+* Click the **Reset** button (armed with a confirmation safeguard) to revert the deck back to its generated state.
 
-## Commands
+### 📋 Slide Thumbnails & Deck Operations
+* Dim / hide slides to exclude them from the presentation view.
+* Duplicate, rename, or delete slides directly from the navigation sidebar.
 
+### 💾 Export & Sharing
+* **Export PDF:** Triggers a vector print layout tailored via print stylesheets to render slides at their exact 1920x1080 resolution, complete with slide-by-slide page breaks.
+* **Export PPTX:** Captures slides as high-definition images and compiles them into a standard 16:9 widescreen PowerPoint deck.
+* **Copy Share Link:** Instantly copies the active deck's URL to your clipboard.
+
+---
+
+## Tech Stack
+
+* **Core Framework:** React, TypeScript, Vite
+* **Styling:** CSS variables + Tailwind CSS v4
+* **Motion & Interactions:** Framer Motion
+* **Libraries:** `html2canvas` (slide capturing), `pptxgenjs` (PowerPoint compilation)
+
+---
+
+## Development
+
+Install dependencies:
 ```sh
 npm install
-npm run dev
-npm run build
 ```
 
-## Design-system principle
+Start the local development server:
+```sh
+npm run dev
+```
 
-Application UI must use semantic theme tokens and Tailwind utilities mapped to them. Product features must not introduce hardcoded presentation styling; business data and rendering decisions remain separate.
+Build the application for production:
+```sh
+npm run build
+```
