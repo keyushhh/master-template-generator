@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SlideNavList } from './SlideNavList';
 import { UploadPanel } from './UploadPanel';
+// Sidebar for presenting the generated slides list and actions
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
 import logoBlack from '../../assets/Logo_Black_Transparent.png';
@@ -8,23 +9,61 @@ import logoBlack from '../../assets/Logo_Black_Transparent.png';
 interface GeneratorSidebarProps {
   hasPresentation: boolean;
   deck: Deck;
+  /** True once the committed deck was produced by Generate (guards regenerate). */
+  deckGenerated: boolean;
+  editing: boolean;
+  dirty: boolean;
   onDocumentParsed: (ast: DocumentNode | null) => void;
   onGenerate: () => void;
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
   onDelete: (instanceId: string) => void;
+  onRename: (instanceId: string, title: string) => void;
+}
+
+/** Two-step confirm state that disarms itself after a short pause. */
+function useArmedConfirm(timeoutMs = 3000): [boolean, (armed: boolean) => void] {
+  const [armed, setArmed] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (armed) {
+      timer.current = window.setTimeout(() => setArmed(false), timeoutMs);
+    }
+    return () => window.clearTimeout(timer.current);
+  }, [armed, timeoutMs]);
+  return [armed, setArmed];
 }
 
 export function GeneratorSidebar({
   hasPresentation,
   deck,
+  deckGenerated,
+  editing,
+  dirty,
   onDocumentParsed,
   onGenerate,
   onToggleHidden,
   onDuplicate,
   onDelete,
+  onRename,
 }: GeneratorSidebarProps) {
   const [shareOpen, setShareOpen] = useState(false);
+  const [generateArmed, setGenerateArmed] = useArmedConfirm();
+
+  // Regenerating replaces an existing generated deck (and any edits) — require
+  // a second confirming click in that case. A pristine template deck is safe.
+  const generateNeedsConfirm = deckGenerated || dirty || editing;
+
+  const handleGenerateClick = () => {
+    if (!hasPresentation) return;
+    if (generateNeedsConfirm && !generateArmed) {
+      setGenerateArmed(true);
+      return;
+    }
+    setGenerateArmed(false);
+    onGenerate();
+  };
+
 
   return (
     <aside className="sidenav">
@@ -32,7 +71,7 @@ export function GeneratorSidebar({
       <div className="sidenav-brand flex items-center justify-center py-6 border-b border-neutral-150">
         <img src={logoBlack} alt="Wozku" className="w-[110px] h-auto" />
       </div>
-      
+
       {/* Scrollable Navigation section */}
       <div className="sidenav-scroll flex-1 overflow-y-auto px-3 py-4">
         <SlideNavList
@@ -40,9 +79,10 @@ export function GeneratorSidebar({
           onToggleHidden={onToggleHidden}
           onDuplicate={onDuplicate}
           onDelete={onDelete}
+          onRename={onRename}
         />
       </div>
-      
+
       {/* Tools Section at the bottom with premium vertical layout rhythm */}
       <div className="sidenav-tools flex flex-col gap-5 p-4 border-t border-neutral-150 bg-neutral-50/50">
         {/* Source Material label and dropzone container */}
@@ -52,20 +92,23 @@ export function GeneratorSidebar({
           </div>
           <UploadPanel onDocumentParsed={onDocumentParsed} />
         </div>
-        
+
         {/* CTA Actions container */}
         <div className="flex flex-col gap-2">
-          {/* Primary CTA: Generate Deck — enabled once a Business Record parses */}
+          {/* Primary CTA: Generate Deck — enabled once a Business Record parses.
+              Regeneration over an existing deck requires a confirming click. */}
           <button
             disabled={!hasPresentation}
-            onClick={() => hasPresentation && onGenerate()}
+            onClick={handleGenerateClick}
             className={`w-full flex items-center justify-center gap-2.5 border-none h-[44px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[14px] transition-colors ${
-              hasPresentation
-                ? 'bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white cursor-pointer'
-                : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+              !hasPresentation
+                ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                : generateArmed
+                  ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
+                  : 'bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white cursor-pointer'
             }`}
           >
-            Generate Deck
+            {generateArmed ? 'Replace Current Deck?' : 'Generate Deck'}
           </button>
 
           {/* Share dropdown trigger */}
