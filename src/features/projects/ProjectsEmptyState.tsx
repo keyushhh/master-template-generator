@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 
-export function ProjectsEmptyState() {
+export function ProjectsEmptyState({ onCreateProject }: { onCreateProject: () => void }) {
   return (
     <motion.section
       className="flex min-h-80 flex-col items-center justify-center rounded-[var(--radius-xl)] border border-dashed border-border-strong bg-surface-panel p-8 text-center"
@@ -15,6 +15,9 @@ export function ProjectsEmptyState() {
       <p className="mt-2 max-w-sm text-sm leading-6 text-content-secondary">
         Projects will bring together the business record, presentations, assets, and exports for each client engagement.
       </p>
+      <button className="mt-5 rounded-[var(--radius-md)] bg-action-primary px-4 py-2.5 text-sm font-semibold text-content-inverse shadow-[var(--shadow-xs)] transition-opacity hover:opacity-90" type="button" onClick={onCreateProject}>
+        New Project
+      </button>
     </motion.section>
   );
 }

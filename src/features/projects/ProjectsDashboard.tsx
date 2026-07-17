@@ -1,9 +1,30 @@
+import { useState } from 'react';
+import { ProjectCreationModal } from './ProjectCreationModal';
 import { ProjectsEmptyState } from './ProjectsEmptyState';
 import { ProjectCard } from './ProjectCard';
 import { mockProjects } from './mockProjects';
+import type { ProjectDraft, ProjectSummary } from './types';
 
 export function ProjectsDashboard() {
-  const projects = mockProjects;
+  const [projects, setProjects] = useState<ProjectSummary[]>(() => mockProjects);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const createProject = (draft: ProjectDraft) => {
+    if (!draft.deckType) return;
+
+    const project: ProjectSummary = {
+      id: crypto.randomUUID(),
+      name: draft.name,
+      client: draft.client,
+      deckType: draft.deckType,
+      status: 'draft',
+      lastModified: new Date().toISOString(),
+      description: draft.description || 'No description yet.',
+    };
+
+    setProjects((current) => [project, ...current]);
+    setIsCreateModalOpen(false);
+  };
 
   return (
     <section className="mx-auto flex w-full max-w-7xl flex-col" aria-labelledby="recent-projects-title">
@@ -20,6 +41,7 @@ export function ProjectsDashboard() {
         <button
           className="inline-flex shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-action-primary px-4 py-2.5 text-sm font-semibold text-content-inverse shadow-[var(--shadow-xs)] transition-opacity hover:opacity-90"
           type="button"
+          onClick={() => setIsCreateModalOpen(true)}
         >
           New Project
         </button>
@@ -27,7 +49,7 @@ export function ProjectsDashboard() {
 
       <div className="pt-8">
         {projects.length === 0 ? (
-          <ProjectsEmptyState />
+          <ProjectsEmptyState onCreateProject={() => setIsCreateModalOpen(true)} />
         ) : (
           <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {projects.map((project, index) => (
@@ -36,6 +58,11 @@ export function ProjectsDashboard() {
           </div>
         )}
       </div>
+      <ProjectCreationModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreate={createProject}
+      />
     </section>
   );
 }
