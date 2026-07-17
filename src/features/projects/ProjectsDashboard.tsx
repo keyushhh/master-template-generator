@@ -3,28 +3,11 @@ import { ProjectCreationModal } from './ProjectCreationModal';
 import { ProjectsEmptyState } from './ProjectsEmptyState';
 import { ProjectCard } from './ProjectCard';
 import { mockProjects } from './mockProjects';
-import type { ProjectDraft, ProjectSummary } from './types';
+import { useProjects } from './ProjectsProvider';
 
 export function ProjectsDashboard() {
-  const [projects, setProjects] = useState<ProjectSummary[]>(() => mockProjects);
+  const { projects, createProject } = useProjects();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-
-  const createProject = (draft: ProjectDraft) => {
-    if (!draft.deckType) return;
-
-    const project: ProjectSummary = {
-      id: crypto.randomUUID(),
-      name: draft.name,
-      client: draft.client,
-      deckType: draft.deckType,
-      status: 'draft',
-      lastModified: new Date().toISOString(),
-      description: draft.description || 'No description yet.',
-    };
-
-    setProjects((current) => [project, ...current]);
-    setIsCreateModalOpen(false);
-  };
 
   return (
     <section className="mx-auto flex w-full max-w-7xl flex-col" aria-labelledby="recent-projects-title">

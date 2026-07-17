@@ -24,6 +24,7 @@ export interface ProjectSummary {
   client: string;
   deckType: DeckType;
   status: ProjectStatus;
+  createdAt: string;
   lastModified: string;
   description: string;
 }
