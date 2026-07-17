@@ -111,7 +111,7 @@ export function GeneratorSidebar({
   return (
     <aside className="sidenav">
       {/* Sidenav Brand container with token-aligned visual spacing */}
-      <div className="sidenav-brand flex items-center justify-center py-6 border-b border-neutral-150">
+      <div className="sidenav-brand flex items-center justify-start pl-[28px] py-6 border-b border-neutral-150">
         <img src={logoBlack} alt="Wozku" className="w-[110px] h-auto" />
       </div>
 
