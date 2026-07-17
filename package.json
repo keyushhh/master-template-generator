@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/index.mjs",
+    "dev:all": "concurrently -n web,pdf -c cyan,magenta \"vite\" \"node server/index.mjs\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "latest",
+    "concurrently": "^9.1.2",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "typescript": "latest"

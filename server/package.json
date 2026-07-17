@@ -1,0 +1,14 @@
+{
+  "name": "master-template-pdf-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local headless-Chrome service that renders decks to true vector PDFs.",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "puppeteer-core": "^23.11.1"
+  }
+}

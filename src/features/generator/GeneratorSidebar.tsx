@@ -8,6 +8,8 @@ import logoBlack from '../../assets/Logo_Black_Transparent.png';
 
 interface GeneratorSidebarProps {
   hasPresentation: boolean;
+  /** Parsed document — carried into PDF export so the client logo renders. */
+  ast: DocumentNode | null;
   deck: Deck;
   /** True once the committed deck was produced by Generate (guards regenerate). */
   deckGenerated: boolean;
@@ -36,6 +38,7 @@ function useArmedConfirm(timeoutMs = 3000): [boolean, (armed: boolean) => void] 
 
 export function GeneratorSidebar({
   hasPresentation,
+  ast,
   deck,
   deckGenerated,
   editing,
@@ -52,6 +55,7 @@ export function GeneratorSidebar({
 
   // Export states
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [pdfError, setPdfError] = useState(false);
   const [isExportingPPTX, setIsExportingPPTX] = useState(false);
   const [pptxProgress, setPptxProgress] = useState({ current: 0, total: 0 });
   const [linkCopied, setLinkCopied] = useState(false);
@@ -73,12 +77,22 @@ export function GeneratorSidebar({
     onGenerate();
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    if (visibleSlideIds.length === 0) return;
+    setPdfError(false);
     setIsExportingPDF(true);
-    setTimeout(() => {
-      window.print();
+    try {
+      const { exportToPDF } = await import('./exportHelper');
+      const presentationTitle =
+        deck.slides[0]?.content.heading || deck.slides[0]?.title || 'Presentation';
+      await exportToPDF({ ast, deck }, presentationTitle);
+    } catch (err) {
+      console.error('PDF export error:', err);
+      setPdfError(true);
+      setTimeout(() => setPdfError(false), 4000);
+    } finally {
       setIsExportingPDF(false);
-    }, 150);
+    }
   };
 
   const handleExportPPTX = async () => {
@@ -186,7 +200,7 @@ export function GeneratorSidebar({
                 className="w-full flex items-center gap-2.5 h-[40px] px-3.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-[var(--radius-sharp)]"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                {isExportingPDF ? 'Preparing PDF…' : 'Export PDF'}
+                {pdfError ? 'PDF export failed' : isExportingPDF ? 'Generating PDF…' : 'Export PDF'}
               </button>
               <button
                 disabled={isExportingPDF || isExportingPPTX}

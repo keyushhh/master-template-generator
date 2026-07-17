@@ -22,7 +22,7 @@ Master Template turns structured business documents into polished, on-brand pres
 * Duplicate, rename, or delete slides directly from the navigation sidebar.
 
 ### 💾 Export & Sharing
-* **Export PDF:** Triggers a vector print layout tailored via print stylesheets to render slides at their exact 1920x1080 resolution, complete with slide-by-slide page breaks.
+* **Export PDF:** Generates a true **vector** PDF (real, selectable text) via a local headless-Chrome service that renders the deck at its exact 1920×1080 resolution — one file, one click, no print dialog. Requires the PDF server (see [PDF export server](#pdf-export-server)).
 * **Export PPTX:** Captures slides as high-definition images and compiles them into a standard 16:9 widescreen PowerPoint deck.
 * **Copy Share Link:** Instantly copies the active deck's URL to your clipboard.
 
@@ -34,6 +34,7 @@ Master Template turns structured business documents into polished, on-brand pres
 * **Styling:** CSS variables + Tailwind CSS v4
 * **Motion & Interactions:** Framer Motion
 * **Libraries:** `html2canvas` (slide capturing), `pptxgenjs` (PowerPoint compilation)
+* **PDF service:** Node + Express + `puppeteer-core` driving system Chrome (in `server/`)
 
 ---
 
@@ -53,3 +54,25 @@ Build the application for production:
 ```sh
 npm run build
 ```
+
+### PDF export server
+
+PDF export renders the deck through headless Chrome, so it needs the local PDF
+service (in `server/`) running alongside the web app.
+
+One-time setup:
+```sh
+cd server && npm install && cd ..
+```
+
+Run the web app **and** the PDF server together:
+```sh
+npm run dev:all
+```
+(or run them separately: `npm run dev` and `npm run dev:server`.)
+
+The service uses **`puppeteer-core` + your system Chrome** (no bundled Chromium
+download). It auto-detects Google Chrome on macOS/Linux; override the binary
+with the `CHROME_PATH` env var if needed. Other env vars: `PORT` (default
+`3001`) and `APP_URL` (default `http://localhost:5173`) — the frontend origin
+the service renders. In dev, Vite proxies `/api` to the service automatically.

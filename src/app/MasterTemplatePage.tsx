@@ -204,6 +204,7 @@ export function MasterTemplatePage() {
     <div className="wg-doc">
       <GeneratorSidebar
         hasPresentation={!!ast}
+        ast={ast}
         deck={displayDeck}
         deckGenerated={deck.generated}
         editing={editing}
