@@ -5,14 +5,20 @@ import type { Deck, SlideContent } from '../deck/types';
 interface PresentationCanvasProps {
   ast: DocumentNode | null;
   deck: Deck;
+  /** Edit mode: text slots become contentEditable and commit via onEditSlide. */
+  editing: boolean;
+  onEditSlide: (instanceId: string, updater: (content: SlideContent) => SlideContent) => void;
 }
 
-/** Props every slide renderer receives: parsed document (for the logo),
- *  the instance's content slots, and its visible slide number ("04"). */
+/** Props every slide renderer receives: parsed document (for the logo), the
+ *  instance's content slots, its visible slide number ("04"), and edit-mode
+ *  wiring (onEdit routes a content patch back to this slide instance). */
 interface SlideRenderProps {
   ast: DocumentNode | null;
   content: SlideContent;
   num: string;
+  editing: boolean;
+  onEdit: (updater: (content: SlideContent) => SlideContent) => void;
 }
 
 const PLACEHOLDER =
@@ -27,6 +33,54 @@ const DISPLAY_HEADING_BASE: React.CSSProperties = {
   lineHeight: 0.85,
   letterSpacing: '-0.05em',
 };
+
+// ---------------------------------------------------------------------------
+// Editable slot primitive
+// ---------------------------------------------------------------------------
+
+interface EditableProps {
+  value: string;
+  editing: boolean;
+  onCommit: (value: string) => void;
+  /** Allow Enter to create new lines (headings/bodies that support \n). */
+  multiline?: boolean;
+}
+
+/** Renders plain text normally; in edit mode becomes a contentEditable span
+ *  that commits on blur. Committing an empty string signals "revert to the
+ *  template placeholder" (callers map '' → undefined). */
+function E({ value, editing, onCommit, multiline }: EditableProps) {
+  if (!editing) return <>{value}</>;
+  return (
+    <span
+      data-editable
+      contentEditable
+      suppressContentEditableWarning
+      spellCheck={false}
+      onKeyDown={(e) => {
+        if (!multiline && e.key === 'Enter') {
+          e.preventDefault();
+          (e.target as HTMLElement).blur();
+        }
+        if (e.key === 'Escape') {
+          (e.target as HTMLElement).innerText = value;
+          (e.target as HTMLElement).blur();
+        }
+      }}
+      onPaste={(e) => {
+        // Keep pasted content plain-text so slide markup stays clean.
+        e.preventDefault();
+        document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+      }}
+      onBlur={(e) => {
+        const text = (e.target as HTMLElement).innerText.replace(/ /g, ' ').trim();
+        if (text !== value) onCommit(text);
+      }}
+    >
+      {value}
+    </span>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Shared micro-components (slide-internal only, not exported)
@@ -74,7 +128,7 @@ function Glow({ style }: { style?: React.CSSProperties }) {
 /** Top HUD bar: slide label left, slide number right.
  *  Always stacked nicely above background layers.
  */
-function HudTop({ label, num }: { label: string; num: string }) {
+function HudTop({ label, num }: { label: React.ReactNode; num: React.ReactNode }) {
   return (
     <div
       style={{
@@ -205,37 +259,72 @@ function Logo({ ast, style }: { ast: DocumentNode | null; style?: React.CSSPrope
 // Individual slide renderers
 // ---------------------------------------------------------------------------
 
-function SlideCover({ ast, content }: SlideRenderProps) {
+function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
   const lines = content.headingLines ?? ['Master Primary', 'Heading', 'Variable.'];
   return (
     <>
       <SlideGrid />
       <Glow style={{ top: -300, right: -300 }} />
       <HudTop
-        label={content.projectLabel ?? 'Project Name Placeholder'}
-        num={content.versionLabel ?? 'YYYY // Version 0.0'}
+        label={
+          <E
+            value={content.projectLabel ?? 'Project Name Placeholder'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, projectLabel: v || undefined }))}
+          />
+        }
+        num={
+          <E
+            value={content.versionLabel ?? 'YYYY // Version 0.0'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, versionLabel: v || undefined }))}
+          />
+        }
       />
       {/* Shifted padding-top from 380px to 280px to prevent bottom edge vertical clipping of placeholder/footer text */}
       <div style={{ padding: '280px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>{content.eyebrow ?? 'Presentation Subtitle'}</EditorialLabel>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Presentation Subtitle'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <h1
           style={{
             ...DISPLAY_HEADING_BASE,
             fontSize: 180,
             fontWeight: 700,
             color: 'var(--neutral-900)',
+            whiteSpace: 'pre-line',
           }}
         >
-          {lines.map((line, i) => (
-            <span key={i}>
-              {i === lines.length - 1 && lines.length > 1 ? (
-                <span style={{ color: 'var(--neutral-300)' }}>{line}</span>
-              ) : (
-                line
-              )}
-              {i < lines.length - 1 && <br />}
-            </span>
-          ))}
+          {editing ? (
+            <E
+              value={lines.join('\n')}
+              editing
+              multiline
+              onCommit={(v) =>
+                onEdit((c) => ({
+                  ...c,
+                  headingLines: v
+                    ? v.split('\n').map((l) => l.trim()).filter(Boolean)
+                    : undefined,
+                }))
+              }
+            />
+          ) : (
+            lines.map((line, i) => (
+              <span key={i}>
+                {i === lines.length - 1 && lines.length > 1 ? (
+                  <span style={{ color: 'var(--neutral-300)' }}>{line}</span>
+                ) : (
+                  line
+                )}
+                {i < lines.length - 1 && <br />}
+              </span>
+            ))
+          )}
         </h1>
         <div style={{ marginTop: 100, display: 'flex', alignItems: 'center', gap: 40 }}>
           <div style={{ width: 120, height: 1, background: 'var(--indigo-500)' }} />
@@ -248,7 +337,12 @@ function SlideCover({ ast, content }: SlideRenderProps) {
               color: 'var(--neutral-500)',
             }}
           >
-            {content.tagline ?? PLACEHOLDER}
+            <E
+              value={content.tagline ?? PLACEHOLDER}
+              editing={editing}
+              multiline
+              onCommit={(v) => onEdit((c) => ({ ...c, tagline: v || undefined }))}
+            />
           </p>
         </div>
       </div>
@@ -281,12 +375,28 @@ const DEFAULT_INDEX_PARTS = [
   { title: 'Strategy', description: PLACEHOLDER },
 ];
 
-function SlideIndex({ content, num }: SlideRenderProps) {
+function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
   const parts = content.parts ?? DEFAULT_INDEX_PARTS;
+  const editPart = (i: number, patch: Partial<(typeof parts)[number]>) =>
+    onEdit((c) => {
+      const arr = (c.parts ?? DEFAULT_INDEX_PARTS).map((p, j) =>
+        j === i ? { ...p, ...patch } : p
+      );
+      return { ...c, parts: arr };
+    });
   return (
     <>
       <SlideGrid />
-      <HudTop label={content.hudLabel ?? 'Agenda'} num={num} />
+      <HudTop
+        label={
+          <E
+            value={content.hudLabel ?? 'Agenda'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div style={{ padding: '160px 140px', display: 'flex', gap: 140, position: 'relative', zIndex: 10 }}>
         <div style={{ flex: 1 }}>
           <EditorialLabel>Navigation</EditorialLabel>
@@ -297,11 +407,15 @@ function SlideIndex({ content, num }: SlideRenderProps) {
               fontWeight: 600,
               marginBottom: 60,
               color: 'var(--neutral-900)',
+              whiteSpace: 'pre-line',
             }}
           >
-            Presentation
-            <br />
-            Structure.
+            <E
+              value={content.heading ?? 'Presentation\nStructure.'}
+              editing={editing}
+              multiline
+              onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+            />
           </h2>
         </div>
         <div style={{ flex: 1.5, paddingTop: 20 }}>
@@ -310,7 +424,7 @@ function SlideIndex({ content, num }: SlideRenderProps) {
           >
             {parts.slice(0, 4).map((part, i) => (
               <div
-                key={part.title}
+                key={i}
                 style={{
                   borderLeft: `2px solid ${i === 0 ? 'var(--indigo-500)' : 'var(--neutral-200)'}`,
                   paddingLeft: 30,
@@ -327,10 +441,19 @@ function SlideIndex({ content, num }: SlideRenderProps) {
                     color: 'var(--neutral-900)',
                   }}
                 >
-                  {part.title}
+                  <E
+                    value={part.title}
+                    editing={editing}
+                    onCommit={(v) => editPart(i, { title: v || part.title })}
+                  />
                 </h4>
                 <p style={{ fontSize: 18, color: 'var(--neutral-500)', lineHeight: 1.5 }}>
-                  {part.description}
+                  <E
+                    value={part.description}
+                    editing={editing}
+                    multiline
+                    onCommit={(v) => editPart(i, { description: v || PLACEHOLDER })}
+                  />
                 </p>
               </div>
             ))}
@@ -341,11 +464,20 @@ function SlideIndex({ content, num }: SlideRenderProps) {
   );
 }
 
-function SlideExecutiveSummary({ content, num }: SlideRenderProps) {
+function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderProps) {
   return (
     <>
       <SlideGrid />
-      <HudTop label={content.hudLabel ?? 'Executive Summary'} num={num} />
+      <HudTop
+        label={
+          <E
+            value={content.hudLabel ?? 'Executive Summary'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
         <h2
           style={{
@@ -354,19 +486,24 @@ function SlideExecutiveSummary({ content, num }: SlideRenderProps) {
             fontWeight: 600,
             marginBottom: 80,
             color: 'var(--neutral-900)',
+            whiteSpace: 'pre-line',
           }}
         >
-          {content.heading ?? (
-            <>
-              Core Strategic
-              <br />
-              Objective.
-            </>
-          )}
+          <E
+            value={content.heading ?? 'Core Strategic\nObjective.'}
+            editing={editing}
+            multiline
+            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+          />
         </h2>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 120 }}>
           <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
-            {content.body ?? PLACEHOLDER}
+            <E
+              value={content.body ?? PLACEHOLDER}
+              editing={editing}
+              multiline
+              onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
+            />
           </p>
           <div
             style={{
@@ -375,9 +512,20 @@ function SlideExecutiveSummary({ content, num }: SlideRenderProps) {
               padding: 60,
             }}
           >
-            <EditorialLabel>{content.metricLabel ?? 'Variable Metric'}</EditorialLabel>
+            <EditorialLabel>
+              <E
+                value={content.metricLabel ?? 'Variable Metric'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, metricLabel: v || undefined }))}
+              />
+            </EditorialLabel>
             <p style={{ color: 'var(--neutral-900)', fontSize: 32, fontWeight: 500, lineHeight: 1.5 }}>
-              {content.metricText ?? PLACEHOLDER}
+              <E
+                value={content.metricText ?? PLACEHOLDER}
+                editing={editing}
+                multiline
+                onCommit={(v) => onEdit((c) => ({ ...c, metricText: v || undefined }))}
+              />
             </p>
           </div>
         </div>
@@ -386,7 +534,7 @@ function SlideExecutiveSummary({ content, num }: SlideRenderProps) {
   );
 }
 
-function SlideSectionDivider({ ast, content, num }: SlideRenderProps) {
+function SlideSectionDivider({ ast, content, num, editing, onEdit }: SlideRenderProps) {
   return (
     <>
       {/* Clean, flat design layout for SlideSectionDivider — no shadows or glow blurs */}
@@ -420,7 +568,11 @@ function SlideSectionDivider({ ast, content, num }: SlideRenderProps) {
         }}
       >
         <EditorialLabel style={{ justifyContent: 'center' }}>
-          {content.eyebrow ?? 'Section Marker'}
+          <E
+            value={content.eyebrow ?? 'Section Marker'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
         </EditorialLabel>
         <h1
           style={{
@@ -430,7 +582,11 @@ function SlideSectionDivider({ ast, content, num }: SlideRenderProps) {
             color: '#ffffff',
           }}
         >
-          {content.heading ?? 'Section Title.'}
+          <E
+            value={content.heading ?? 'Section Title.'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+          />
         </h1>
         <p
           style={{
@@ -443,7 +599,12 @@ function SlideSectionDivider({ ast, content, num }: SlideRenderProps) {
             maxWidth: 1400,
           }}
         >
-          {content.subtitle ?? PLACEHOLDER}
+          <E
+            value={content.subtitle ?? PLACEHOLDER}
+            editing={editing}
+            multiline
+            onCommit={(v) => onEdit((c) => ({ ...c, subtitle: v || undefined }))}
+          />
         </p>
       </div>
       <GhostNumeral num={num} dark />
@@ -451,16 +612,28 @@ function SlideSectionDivider({ ast, content, num }: SlideRenderProps) {
   );
 }
 
-function SlideTwoColumnContext({ content, num }: SlideRenderProps) {
-  const attributes = content.leftAttributes ?? [
-    'Placeholder Attribute',
-    'Placeholder Attribute',
-    'Placeholder Attribute',
-  ];
+const DEFAULT_ATTRIBUTES = ['Placeholder Attribute', 'Placeholder Attribute', 'Placeholder Attribute'];
+
+function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderProps) {
+  const attributes = content.leftAttributes ?? DEFAULT_ATTRIBUTES;
+  const editAttribute = (i: number, v: string) =>
+    onEdit((c) => {
+      const arr = (c.leftAttributes ?? DEFAULT_ATTRIBUTES).map((a, j) => (j === i ? v || a : a));
+      return { ...c, leftAttributes: arr };
+    });
   return (
     <>
       <SlideGrid />
-      <HudTop label={content.hudLabel ?? 'Strategic Context'} num={num} />
+      <HudTop
+        label={
+          <E
+            value={content.hudLabel ?? 'Strategic Context'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div style={{ display: 'flex', height: '100%', position: 'relative', zIndex: 10 }}>
         <div
           style={{
@@ -472,7 +645,13 @@ function SlideTwoColumnContext({ content, num }: SlideRenderProps) {
             justifyContent: 'center',
           }}
         >
-          <EditorialLabel>{content.leftLabel ?? 'Condition A'}</EditorialLabel>
+          <EditorialLabel>
+            <E
+              value={content.leftLabel ?? 'Condition A'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, leftLabel: v || undefined }))}
+            />
+          </EditorialLabel>
           <h2
             style={{
               ...DISPLAY_HEADING_BASE,
@@ -480,18 +659,23 @@ function SlideTwoColumnContext({ content, num }: SlideRenderProps) {
               fontWeight: 600,
               marginBottom: 40,
               color: 'var(--neutral-900)',
+              whiteSpace: 'pre-line',
             }}
           >
-            {content.leftHeading ?? (
-              <>
-                Current State
-                <br />
-                Environment.
-              </>
-            )}
+            <E
+              value={content.leftHeading ?? 'Current State\nEnvironment.'}
+              editing={editing}
+              multiline
+              onCommit={(v) => onEdit((c) => ({ ...c, leftHeading: v || undefined }))}
+            />
           </h2>
-          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', marginBottom: 40 }}>
-            {content.leftBody ?? PLACEHOLDER}
+          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', marginBottom: 40, whiteSpace: 'pre-line' }}>
+            <E
+              value={content.leftBody ?? PLACEHOLDER}
+              editing={editing}
+              multiline
+              onCommit={(v) => onEdit((c) => ({ ...c, leftBody: v || undefined }))}
+            />
           </p>
           <ul
             style={{
@@ -503,7 +687,8 @@ function SlideTwoColumnContext({ content, num }: SlideRenderProps) {
           >
             {attributes.map((attr, i) => (
               <li key={i} style={{ marginBottom: 10 }}>
-                [{String(i + 1).padStart(2, '0')}] {attr}
+                [{String(i + 1).padStart(2, '0')}]{' '}
+                <E value={attr} editing={editing} onCommit={(v) => editAttribute(i, v)} />
               </li>
             ))}
           </ul>
@@ -518,7 +703,13 @@ function SlideTwoColumnContext({ content, num }: SlideRenderProps) {
             background: 'var(--neutral-50)',
           }}
         >
-          <EditorialLabel>{content.rightLabel ?? 'Condition B'}</EditorialLabel>
+          <EditorialLabel>
+            <E
+              value={content.rightLabel ?? 'Condition B'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, rightLabel: v || undefined }))}
+            />
+          </EditorialLabel>
           <h2
             style={{
               ...DISPLAY_HEADING_BASE,
@@ -526,18 +717,23 @@ function SlideTwoColumnContext({ content, num }: SlideRenderProps) {
               fontWeight: 600,
               marginBottom: 40,
               color: 'var(--neutral-900)',
+              whiteSpace: 'pre-line',
             }}
           >
-            {content.rightHeading ?? (
-              <>
-                Strategic Pivot
-                <br />
-                Target State.
-              </>
-            )}
+            <E
+              value={content.rightHeading ?? 'Strategic Pivot\nTarget State.'}
+              editing={editing}
+              multiline
+              onCommit={(v) => onEdit((c) => ({ ...c, rightHeading: v || undefined }))}
+            />
           </h2>
-          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-900)' }}>
-            {content.rightBody ?? PLACEHOLDER}
+          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-900)', whiteSpace: 'pre-line' }}>
+            <E
+              value={content.rightBody ?? PLACEHOLDER}
+              editing={editing}
+              multiline
+              onCommit={(v) => onEdit((c) => ({ ...c, rightBody: v || undefined }))}
+            />
           </p>
         </div>
       </div>
@@ -545,7 +741,7 @@ function SlideTwoColumnContext({ content, num }: SlideRenderProps) {
   );
 }
 
-function SlideDataMonument({ content, num }: SlideRenderProps) {
+function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) {
   return (
     <>
       <SlideGrid />
@@ -561,7 +757,13 @@ function SlideDataMonument({ content, num }: SlideRenderProps) {
           zIndex: 10,
         }}
       >
-        <EditorialLabel>{content.eyebrow ?? 'Performance Metric'}</EditorialLabel>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Performance Metric'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <div
           style={{
             fontFamily: 'var(--font-display)',
@@ -574,9 +776,17 @@ function SlideDataMonument({ content, num }: SlideRenderProps) {
             color: 'var(--neutral-900)',
           }}
         >
-          {content.value ?? '000.0'}
+          <E
+            value={content.value ?? '000.0'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, value: v || undefined }))}
+          />
           <span style={{ color: 'var(--indigo-500)', fontSize: '0.3em', marginLeft: 10 }}>
-            {content.unit ?? 'M'}
+            <E
+              value={content.unit ?? 'M'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, unit: v || undefined }))}
+            />
           </span>
         </div>
         <h3
@@ -588,10 +798,19 @@ function SlideDataMonument({ content, num }: SlideRenderProps) {
             color: 'var(--neutral-900)',
           }}
         >
-          {content.heading ?? 'Primary Performance Variable Title.'}
+          <E
+            value={content.heading ?? 'Primary Performance Variable Title.'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+          />
         </h3>
-        <p style={{ marginTop: 60, maxWidth: 800, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)' }}>
-          {content.body ?? PLACEHOLDER}
+        <p style={{ marginTop: 60, maxWidth: 800, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
+          <E
+            value={content.body ?? PLACEHOLDER}
+            editing={editing}
+            multiline
+            onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
+          />
         </p>
       </div>
       <GhostNumeral num={num} />
@@ -611,15 +830,40 @@ const DEFAULT_KPIS = [
   { label: 'Metric Gamma', value: '-00%' },
 ];
 
-function SlideMetricsDashboard({ content, num }: SlideRenderProps) {
+function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderProps) {
   const bars = content.bars ?? DEFAULT_BARS;
   const kpis = content.kpis ?? DEFAULT_KPIS;
+  const editBar = (i: number, label: string) =>
+    onEdit((c) => {
+      const arr = (c.bars ?? DEFAULT_BARS).map((b, j) => (j === i ? { ...b, label: label || b.label } : b));
+      return { ...c, bars: arr };
+    });
+  const editKpi = (i: number, patch: Partial<(typeof kpis)[number]>) =>
+    onEdit((c) => {
+      const arr = (c.kpis ?? DEFAULT_KPIS).map((k, j) => (j === i ? { ...k, ...patch } : k));
+      return { ...c, kpis: arr };
+    });
   return (
     <>
       <SlideGrid />
-      <HudTop label={content.hudLabel ?? 'Metrics Dashboard'} num={num} />
+      <HudTop
+        label={
+          <E
+            value={content.hudLabel ?? 'Metrics Dashboard'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>{content.eyebrow ?? 'Temporal Performance'}</EditorialLabel>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Temporal Performance'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <div
           style={{
             display: 'flex',
@@ -630,9 +874,9 @@ function SlideMetricsDashboard({ content, num }: SlideRenderProps) {
             marginTop: 60,
           }}
         >
-          {bars.map((b) => (
+          {bars.map((b, i) => (
             <div
-              key={b.label}
+              key={i}
               style={{
                 flex: 1,
                 background: b.active ? 'var(--indigo-500)' : 'var(--neutral-200)',
@@ -652,7 +896,7 @@ function SlideMetricsDashboard({ content, num }: SlideRenderProps) {
                   color: 'var(--neutral-500)',
                 }}
               >
-                {b.label}
+                <E value={b.label} editing={editing} onCommit={(v) => editBar(i, v)} />
               </span>
             </div>
           ))}
@@ -665,9 +909,15 @@ function SlideMetricsDashboard({ content, num }: SlideRenderProps) {
             gap: 40,
           }}
         >
-          {kpis.map((k) => (
-            <div key={k.label}>
-              <EditorialLabel style={{ fontSize: 10 }}>{k.label}</EditorialLabel>
+          {kpis.map((k, i) => (
+            <div key={i}>
+              <EditorialLabel style={{ fontSize: 10 }}>
+                <E
+                  value={k.label}
+                  editing={editing}
+                  onCommit={(v) => editKpi(i, { label: v || k.label })}
+                />
+              </EditorialLabel>
               <h3
                 style={{
                   ...DISPLAY_HEADING_BASE,
@@ -676,7 +926,11 @@ function SlideMetricsDashboard({ content, num }: SlideRenderProps) {
                   color: 'var(--neutral-900)',
                 }}
               >
-                {k.value}
+                <E
+                  value={k.value}
+                  editing={editing}
+                  onCommit={(v) => editKpi(i, { value: v || k.value })}
+                />
               </h3>
             </div>
           ))}
@@ -693,14 +947,40 @@ const DEFAULT_ROWS = [
   { dim: 'Dimension 04', cur: 'XXX.X', tgt: 'XXX.X', delta: '+00.0%' },
 ];
 
-function SlideComparativeTable({ content, num }: SlideRenderProps) {
+function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderProps) {
   const rows = content.rows ?? DEFAULT_ROWS;
+  const editRow = (i: number, patch: Partial<(typeof rows)[number]>) =>
+    onEdit((c) => {
+      const arr = (c.rows ?? DEFAULT_ROWS).map((r, j) => (j === i ? { ...r, ...patch } : r));
+      return { ...c, rows: arr };
+    });
+  const cellStyle: React.CSSProperties = {
+    padding: '35px 0',
+    borderBottom: '1px solid var(--neutral-200)',
+    fontSize: 28,
+    color: 'var(--neutral-900)',
+  };
   return (
     <>
       <SlideGrid />
-      <HudTop label={content.hudLabel ?? 'Comparative Framework'} num={num} />
+      <HudTop
+        label={
+          <E
+            value={content.hudLabel ?? 'Comparative Framework'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>{content.eyebrow ?? 'Benchmark Comparison'}</EditorialLabel>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Benchmark Comparison'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -726,12 +1006,20 @@ function SlideComparativeTable({ content, num }: SlideRenderProps) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.dim}>
-                <td style={{ padding: '35px 0', borderBottom: '1px solid var(--neutral-200)', fontSize: 28, color: 'var(--neutral-900)' }}>{r.dim}</td>
-                <td style={{ padding: '35px 0', borderBottom: '1px solid var(--neutral-200)', fontSize: 28, color: 'var(--neutral-900)' }}>{r.cur}</td>
-                <td style={{ padding: '35px 0', borderBottom: '1px solid var(--neutral-200)', fontSize: 28, color: 'var(--neutral-900)' }}>{r.tgt}</td>
-                <td style={{ padding: '35px 0', borderBottom: '1px solid var(--neutral-200)', fontSize: 28, color: 'var(--indigo-600)' }}>{r.delta}</td>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td style={cellStyle}>
+                  <E value={r.dim} editing={editing} onCommit={(v) => editRow(i, { dim: v || r.dim })} />
+                </td>
+                <td style={cellStyle}>
+                  <E value={r.cur} editing={editing} onCommit={(v) => editRow(i, { cur: v || r.cur })} />
+                </td>
+                <td style={cellStyle}>
+                  <E value={r.tgt} editing={editing} onCommit={(v) => editRow(i, { tgt: v || r.tgt })} />
+                </td>
+                <td style={{ ...cellStyle, color: 'var(--indigo-600)' }}>
+                  <E value={r.delta} editing={editing} onCommit={(v) => editRow(i, { delta: v || r.delta })} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -747,14 +1035,34 @@ const DEFAULT_PHASES = [
   { title: 'Optimization', description: PLACEHOLDER, completed: false },
 ];
 
-function SlideStrategicRoadmap({ content, num }: SlideRenderProps) {
+function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderProps) {
   const phases = content.phases ?? DEFAULT_PHASES;
+  const editPhase = (i: number, patch: Partial<(typeof phases)[number]>) =>
+    onEdit((c) => {
+      const arr = (c.phases ?? DEFAULT_PHASES).map((p, j) => (j === i ? { ...p, ...patch } : p));
+      return { ...c, phases: arr };
+    });
   return (
     <>
       <SlideGrid />
-      <HudTop label={content.hudLabel ?? 'Execution Timeline'} num={num} />
+      <HudTop
+        label={
+          <E
+            value={content.hudLabel ?? 'Execution Timeline'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>{content.eyebrow ?? 'Milestone Projection'}</EditorialLabel>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Milestone Projection'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <h2
           style={{
             ...DISPLAY_HEADING_BASE,
@@ -764,7 +1072,11 @@ function SlideStrategicRoadmap({ content, num }: SlideRenderProps) {
             color: 'var(--neutral-900)',
           }}
         >
-          {content.heading ?? 'Pathway to Execution.'}
+          <E
+            value={content.heading ?? 'Pathway to Execution.'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+          />
         </h2>
         <div style={{ position: 'relative', paddingTop: 60 }}>
           {/* timeline rail */}
@@ -805,10 +1117,19 @@ function SlideStrategicRoadmap({ content, num }: SlideRenderProps) {
                       color: 'var(--neutral-900)',
                     }}
                   >
-                    {p.title}
+                    <E
+                      value={p.title}
+                      editing={editing}
+                      onCommit={(v) => editPhase(i, { title: v || p.title })}
+                    />
                   </h4>
                   <p style={{ fontSize: 18, lineHeight: 1.5, color: 'var(--neutral-500)' }}>
-                    {p.description || PLACEHOLDER}
+                    <E
+                      value={p.description || PLACEHOLDER}
+                      editing={editing}
+                      multiline
+                      onCommit={(v) => editPhase(i, { description: v })}
+                    />
                   </p>
                 </div>
               </div>
@@ -820,7 +1141,7 @@ function SlideStrategicRoadmap({ content, num }: SlideRenderProps) {
   );
 }
 
-function SlideImageEditorial({ content }: SlideRenderProps) {
+function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
   return (
     <>
       <SlideGrid />
@@ -834,7 +1155,13 @@ function SlideImageEditorial({ content }: SlideRenderProps) {
             justifyContent: 'center',
           }}
         >
-          <EditorialLabel>{content.eyebrow ?? 'Visual Narrative'}</EditorialLabel>
+          <EditorialLabel>
+            <E
+              value={content.eyebrow ?? 'Visual Narrative'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+            />
+          </EditorialLabel>
           <h2
             style={{
               ...DISPLAY_HEADING_BASE,
@@ -843,10 +1170,19 @@ function SlideImageEditorial({ content }: SlideRenderProps) {
               color: 'var(--neutral-900)',
             }}
           >
-            {content.heading ?? 'Primary Insight Statement.'}
+            <E
+              value={content.heading ?? 'Primary Insight Statement.'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+            />
           </h2>
           <p style={{ marginTop: 40, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
-            {content.body ?? PLACEHOLDER}
+            <E
+              value={content.body ?? PLACEHOLDER}
+              editing={editing}
+              multiline
+              onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
+            />
           </p>
         </div>
         <div
@@ -889,14 +1225,34 @@ const DEFAULT_STEPS = [
   { title: 'Output',  description: PLACEHOLDER },
 ];
 
-function SlideProcessArchitecture({ content, num }: SlideRenderProps) {
+function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRenderProps) {
   const steps = content.steps ?? DEFAULT_STEPS;
+  const editStep = (i: number, patch: Partial<(typeof steps)[number]>) =>
+    onEdit((c) => {
+      const arr = (c.steps ?? DEFAULT_STEPS).map((s, j) => (j === i ? { ...s, ...patch } : s));
+      return { ...c, steps: arr };
+    });
   return (
     <>
       <SlideGrid />
-      <HudTop label={content.hudLabel ?? 'System Logic'} num={num} />
+      <HudTop
+        label={
+          <E
+            value={content.hudLabel ?? 'System Logic'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>{content.eyebrow ?? 'Architectural Protocol'}</EditorialLabel>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Architectural Protocol'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <h2
           style={{
             ...DISPLAY_HEADING_BASE,
@@ -906,7 +1262,11 @@ function SlideProcessArchitecture({ content, num }: SlideRenderProps) {
             color: 'var(--neutral-900)',
           }}
         >
-          {content.heading ?? 'Operational Flow.'}
+          <E
+            value={content.heading ?? 'Operational Flow.'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+          />
         </h2>
         <div style={{ display: 'flex', gap: 40, alignItems: 'flex-start' }}>
           {steps.map((s, i) => (
@@ -938,10 +1298,19 @@ function SlideProcessArchitecture({ content, num }: SlideRenderProps) {
                   color: 'var(--neutral-900)',
                 }}
               >
-                {s.title}
+                <E
+                  value={s.title}
+                  editing={editing}
+                  onCommit={(v) => editStep(i, { title: v || s.title })}
+                />
               </h4>
               <p style={{ fontSize: 18, lineHeight: 1.5, color: 'var(--neutral-500)' }}>
-                {s.description || PLACEHOLDER}
+                <E
+                  value={s.description || PLACEHOLDER}
+                  editing={editing}
+                  multiline
+                  onCommit={(v) => editStep(i, { description: v })}
+                />
               </p>
             </div>
           ))}
@@ -958,12 +1327,26 @@ const DEFAULT_SECTORS = [
 ];
 
 // Map slide: inherits DISPLAY_HEADING_BASE for visual alignment
-function SlideGlobalMap({ content, num }: SlideRenderProps) {
+function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
   const sectors = content.sectors ?? DEFAULT_SECTORS;
+  const editSector = (i: number, patch: Partial<(typeof sectors)[number]>) =>
+    onEdit((c) => {
+      const arr = (c.sectors ?? DEFAULT_SECTORS).map((s, j) => (j === i ? { ...s, ...patch } : s));
+      return { ...c, sectors: arr };
+    });
   return (
     <>
       <SlideGrid />
-      <HudTop label={content.hudLabel ?? 'Reach Distribution'} num={num} />
+      <HudTop
+        label={
+          <E
+            value={content.hudLabel ?? 'Reach Distribution'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div
         style={{
           padding: '160px 140px',
@@ -983,7 +1366,11 @@ function SlideGlobalMap({ content, num }: SlideRenderProps) {
             color: 'var(--neutral-900)',
           }}
         >
-          {content.heading ?? 'Regional Impact.'}
+          <E
+            value={content.heading ?? 'Regional Impact.'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+          />
         </h2>
         <div
           style={{
@@ -1025,9 +1412,15 @@ function SlideGlobalMap({ content, num }: SlideRenderProps) {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 100, marginTop: 40 }}>
-          {sectors.map((s) => (
-            <div key={s.label}>
-              <EditorialLabel style={{ fontSize: 10 }}>{s.label}</EditorialLabel>
+          {sectors.map((s, i) => (
+            <div key={i}>
+              <EditorialLabel style={{ fontSize: 10 }}>
+                <E
+                  value={s.label}
+                  editing={editing}
+                  onCommit={(v) => editSector(i, { label: v || s.label })}
+                />
+              </EditorialLabel>
               <h4
                 style={{
                   ...DISPLAY_HEADING_BASE,
@@ -1036,7 +1429,11 @@ function SlideGlobalMap({ content, num }: SlideRenderProps) {
                   color: 'var(--neutral-900)',
                 }}
               >
-                {s.value}
+                <E
+                  value={s.value}
+                  editing={editing}
+                  onCommit={(v) => editSector(i, { value: v || s.value })}
+                />
               </h4>
             </div>
           ))}
@@ -1047,7 +1444,7 @@ function SlideGlobalMap({ content, num }: SlideRenderProps) {
 }
 
 // Quote slide: inherits DISPLAY_HEADING_BASE for large-scale typography alignment
-function SlideFeaturedQuote({ content }: SlideRenderProps) {
+function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
   return (
     <>
       <SlideGrid />
@@ -1063,7 +1460,13 @@ function SlideFeaturedQuote({ content }: SlideRenderProps) {
           zIndex: 10,
         }}
       >
-        <EditorialLabel>{content.eyebrow ?? 'Key Insight'}</EditorialLabel>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Key Insight'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <h1
           style={{
             ...DISPLAY_HEADING_BASE,
@@ -1073,7 +1476,14 @@ function SlideFeaturedQuote({ content }: SlideRenderProps) {
             color: 'var(--neutral-900)',
           }}
         >
-          "{content.quote ?? PLACEHOLDER}"
+          "
+          <E
+            value={content.quote ?? PLACEHOLDER}
+            editing={editing}
+            multiline
+            onCommit={(v) => onEdit((c) => ({ ...c, quote: v || undefined }))}
+          />
+          "
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
           <div
@@ -1093,7 +1503,11 @@ function SlideFeaturedQuote({ content }: SlideRenderProps) {
                 color: 'var(--neutral-900)',
               }}
             >
-              {content.author ?? 'Author Name'}
+              <E
+                value={content.author ?? 'Author Name'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, author: v || undefined }))}
+              />
             </h4>
             <p
               style={{
@@ -1102,7 +1516,11 @@ function SlideFeaturedQuote({ content }: SlideRenderProps) {
                 color: 'var(--neutral-500)',
               }}
             >
-              {content.role ?? 'Author Title Placeholder'}
+              <E
+                value={content.role ?? 'Author Title Placeholder'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, role: v || undefined }))}
+              />
             </p>
           </div>
         </div>
@@ -1114,8 +1532,14 @@ function SlideFeaturedQuote({ content }: SlideRenderProps) {
 const DEFAULT_CONTACTS = ['email@placeholder.com', '@social_handle', 'www.domain.com'];
 
 // Exit slide: inherits DISPLAY_HEADING_BASE for unified presentation style
-function SlideExit({ ast, content }: SlideRenderProps) {
+function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
   const contacts = content.contacts && content.contacts.length ? content.contacts : DEFAULT_CONTACTS;
+  const editContact = (i: number, v: string) =>
+    onEdit((c) => {
+      const base = c.contacts && c.contacts.length ? c.contacts : DEFAULT_CONTACTS;
+      const arr = base.map((x, j) => (j === i ? v || x : x));
+      return { ...c, contacts: arr };
+    });
   return (
     <>
       {/* Clean, flat design layout for SlideExit — no shadows or glow blurs */}
@@ -1147,7 +1571,13 @@ function SlideExit({ ast, content }: SlideRenderProps) {
           zIndex: 10,
         }}
       >
-        <EditorialLabel>{content.eyebrow ?? 'Conclusion'}</EditorialLabel>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Conclusion'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <h1
           style={{
             ...DISPLAY_HEADING_BASE,
@@ -1157,7 +1587,11 @@ function SlideExit({ ast, content }: SlideRenderProps) {
             marginBottom: 40,
           }}
         >
-          {content.heading ?? 'Thank You.'}
+          <E
+            value={content.heading ?? 'Thank You.'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+          />
         </h1>
         <p
           style={{
@@ -1165,9 +1599,15 @@ function SlideExit({ ast, content }: SlideRenderProps) {
             fontSize: 32,
             maxWidth: 800,
             lineHeight: 1.5,
+            whiteSpace: 'pre-line',
           }}
         >
-          {content.body ?? PLACEHOLDER}
+          <E
+            value={content.body ?? PLACEHOLDER}
+            editing={editing}
+            multiline
+            onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
+          />
         </p>
         <div
           style={{
@@ -1179,8 +1619,10 @@ function SlideExit({ ast, content }: SlideRenderProps) {
             color: 'var(--indigo-400)',
           }}
         >
-          {contacts.map((c) => (
-            <span key={c}>{c}</span>
+          {contacts.map((c, i) => (
+            <span key={i}>
+              <E value={c} editing={editing} onCommit={(v) => editContact(i, v)} />
+            </span>
           ))}
         </div>
       </div>
@@ -1213,7 +1655,7 @@ const DARK_TEMPLATES = new Set(['s4', 's14']);
 // ---------------------------------------------------------------------------
 // PresentationCanvas
 // ---------------------------------------------------------------------------
-export function PresentationCanvas({ ast, deck }: PresentationCanvasProps) {
+export function PresentationCanvas({ ast, deck, editing, onEditSlide }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
 
   const visibleSlides = deck.slides.filter((s) => !s.hidden);
@@ -1284,9 +1726,19 @@ export function PresentationCanvas({ ast, deck }: PresentationCanvasProps) {
               color: isDark ? '#ffffff' : 'var(--neutral-900)',
               // Standard design system shadow used for all slides instead of custom heavy shadow
               boxShadow: 'var(--shadow-soft)',
+              // Subtle affordance that the slide is live for editing
+              outline: editing ? '2px solid color-mix(in srgb, var(--indigo-500) 35%, transparent)' : 'none',
             }}
           >
-            {Renderer && <Renderer ast={ast} content={slide.content} num={num} />}
+            {Renderer && (
+              <Renderer
+                ast={ast}
+                content={slide.content}
+                num={num}
+                editing={editing}
+                onEdit={(updater) => onEditSlide(slide.instanceId, updater)}
+              />
+            )}
 
             {/* Footer row — preserved from original shell */}
             <div className="footer-row" style={{ zIndex: 10 }}>

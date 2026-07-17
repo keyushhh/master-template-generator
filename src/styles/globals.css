@@ -1,2 +1,25 @@
 @import "../theme/tokens.css";
 @import "../theme/BrandGuidelines.css";
+
+/* -------------------------------------------------------------------------
+   Editable slide slots (edit mode)
+   Applied to contentEditable spans rendered by PresentationCanvas.
+   ------------------------------------------------------------------------- */
+[data-editable] {
+  cursor: text;
+  outline: 2px dashed transparent;
+  outline-offset: 6px;
+  border-radius: var(--radius-sharp);
+  transition: outline-color 0.15s ease, background-color 0.15s ease;
+  min-width: 1ch;
+  display: inline-block;
+}
+
+[data-editable]:hover {
+  outline-color: color-mix(in srgb, var(--indigo-500) 45%, transparent);
+}
+
+[data-editable]:focus {
+  outline-color: var(--indigo-500);
+  background: color-mix(in srgb, var(--indigo-500) 6%, transparent);
+}

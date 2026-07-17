@@ -112,3 +112,57 @@
 }
 .wg-doc .upload-zone:hover { border-color: var(--indigo-500); background: var(--indigo-50); }
 .wg-doc .upload-zone.dragging { border-color: var(--indigo-500); background: var(--indigo-50); }
+
+/* ================= PRINT / PDF EXPORT ================= */
+@media print {
+  @page {
+    size: 1920px 1080px;
+    margin: 0;
+  }
+  
+  html, body, #root, .wg-doc {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    width: 1920px !important;
+    height: 1080px !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide UI elements during print */
+  .wg-doc .sidenav,
+  .wg-doc #btn-edit-content,
+  .wg-doc #btn-reset-deck,
+  .wg-doc div[style*="position: fixed"],
+  .wg-doc div[style*="position:fixed"] {
+    display: none !important;
+  }
+
+  .wg-doc .book {
+    margin: 0 !important;
+    padding: 0 !important;
+    margin-left: 0 !important;
+    max-width: none !important;
+    width: 1920px !important;
+    height: auto !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .wg-doc .page {
+    width: 1920px !important;
+    height: 1080px !important;
+    transform: none !important;
+    margin: 0 !important;
+    margin-bottom: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

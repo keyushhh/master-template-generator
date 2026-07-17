@@ -6,6 +6,7 @@ interface SlideNavListProps {
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
   onDelete: (instanceId: string) => void;
+  onRename: (instanceId: string, title: string) => void;
 }
 
 interface NavGroup {
@@ -67,8 +68,18 @@ function TrashIcon() {
   );
 }
 
-export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete }: SlideNavListProps) {
+export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, onRename }: SlideNavListProps) {
   const [activeId, setActiveId] = useState<string>(slides[0]?.instanceId ?? '');
+  // Double-click-to-rename state: which row is being renamed + its draft text.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  const commitRename = () => {
+    if (renamingId && renameValue.trim()) {
+      onRename(renamingId, renameValue);
+    }
+    setRenamingId(null);
+  };
 
   // Visible-slide numbering — must match the canvas footer numbering.
   const numbering = new Map<string, string>();
@@ -162,14 +173,36 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete }: 
                       >
                         {slide.hidden ? '—' : numbering.get(slide.instanceId)}
                       </span>
-                      {/* Slide Title: clean weights, struck through when hidden */}
-                      <span
-                        className={`font-sans text-[13px] tracking-normal truncate ${
-                          slide.hidden ? 'line-through' : ''
-                        }`}
-                      >
-                        {slide.title}
-                      </span>
+                      {/* Slide Title: clean weights, struck through when hidden.
+                          Double-click to rename inline. */}
+                      {renamingId === slide.instanceId ? (
+                        <input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitRename();
+                            if (e.key === 'Escape') setRenamingId(null);
+                          }}
+                          onClick={(e) => e.preventDefault()}
+                          className="font-sans text-[13px] tracking-normal flex-1 min-w-0 bg-white border border-indigo-300 rounded-[var(--radius-sharp)] px-1 py-0 outline-none text-neutral-900"
+                        />
+                      ) : (
+                        <span
+                          onDoubleClick={(e) => {
+                            e.preventDefault();
+                            setRenamingId(slide.instanceId);
+                            setRenameValue(slide.title);
+                          }}
+                          title="Double-click to rename"
+                          className={`font-sans text-[13px] tracking-normal truncate ${
+                            slide.hidden ? 'line-through' : ''
+                          }`}
+                        >
+                          {slide.title}
+                        </span>
+                      )}
                     </a>
 
                     {/* Hover actions: hide/show + duplicate. Absolutely
