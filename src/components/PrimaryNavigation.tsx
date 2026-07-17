@@ -1,11 +1,11 @@
 const navigationItems = [
-  { label: 'Workspace', current: true },
+  { label: 'Projects', current: true },
   { label: 'Library', current: false },
 ];
 
 export function PrimaryNavigation() {
   return (
-    <aside className="flex min-h-screen flex-col border-r border-border-subtle bg-surface-panel px-3 py-4" aria-label="Primary navigation">
+    <aside className="hidden min-h-screen flex-col border-r border-border-subtle bg-surface-panel px-3 py-4 md:flex" aria-label="Primary navigation">
       <div className="mb-9 flex items-center gap-3 px-2">
         <div className="grid size-8 place-items-center rounded-[var(--radius-md)] bg-action-primary font-display text-sm font-bold text-content-inverse">
           M
