@@ -71,8 +71,9 @@ export function UploadPanel({ onDocumentParsed }: UploadPanelProps) {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Upload zone: includes rounded-[var(--radius-sharp)] for consistent, premium appearance */}
       <div 
-        className={`upload-zone${isDragging ? ' dragging' : ''}`}
+        className={`upload-zone rounded-[var(--radius-sharp)] ${isDragging ? ' dragging' : ''}`}
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
