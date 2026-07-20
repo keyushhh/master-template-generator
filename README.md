@@ -1,6 +1,6 @@
 # Master Template Generator
 
-Master Template turns structured business documents into polished, on-brand presentations. It parses structured Markdown files, dynamically compiles a slide deck using predefined visual templates, and allows interactive slide editing, duplication, reordering, and exporting.
+Master Template turns structured business documents into polished, on-brand presentations. It parses structured Markdown files, compiles a slide deck using 14 predefined visual templates, and supports interactive editing, duplication, reordering, and exporting - all client-side, no backend required.
 
 ---
 
@@ -12,19 +12,24 @@ Master Template turns structured business documents into polished, on-brand pres
 * The Presentation Compiler maps document sections (e.g. *Executive Summary*, *Key Metric*, *Comparative Table*, *Process*) to custom-designed slide layouts.
 
 ### ✍️ Interactive Slide Editing
-* Click the **Edit Content** button to toggle editing mode.
-* Slide slots become directly editable inline (`contentEditable` spans).
+* Click **Edit Content** to toggle editing mode; slide slots become directly editable inline.
 * A floating session bar lets you save or discard in-progress edits.
-* Click the **Reset** button (armed with a confirmation safeguard) to revert the deck back to its generated state.
+* **Reset** (armed with a confirmation safeguard) reverts the deck to its generated state.
+* Undo/redo for committed changes, persisted across page reloads.
+* Image containers (uploaded photos, maps) can be deleted entirely, not just cleared - the layout falls back to a text-only variant.
 
 ### 📋 Slide Thumbnails & Deck Operations
-* Dim / hide slides to exclude them from the presentation view.
-* Duplicate, rename, or delete slides directly from the navigation sidebar.
+* Dim / hide slides to exclude them from export and present mode.
+* Duplicate, rename, reorder, or delete slides from the navigation sidebar.
+* Manage multiple named decks side by side, each with its own source, slides, and edit history.
 
 ### 💾 Export & Sharing
-* **Export PDF:** Generates a true **vector** PDF (real, selectable text) via a local headless-Chrome service that renders the deck at its exact 1920×1080 resolution - one file, one click, no print dialog. Requires the PDF server (see [PDF export server](#pdf-export-server)).
-* **Export PPTX:** Captures slides as high-definition images and compiles them into a standard 16:9 widescreen PowerPoint deck.
-* **Copy Share Link:** Instantly copies the active deck's URL to your clipboard.
+* **Export PPTX:** Builds a native PowerPoint file via `pptxgenjs` - real, editable text boxes, shapes, and tables per template, not a flattened image. Only genuine raster content (photos, logos, maps) is embedded as an image; decorative backgrounds (grid/glow) are baked into the slide's actual (non-editable) background fill.
+* **Export PDF:** Captures each slide's live DOM at native 1920x1080 resolution and assembles a landscape PDF via `jsPDF`.
+* **Download PNGs:** Captures each slide as a PNG and bundles them into a zip via `jszip`.
+* **Copy Share Link:** Copies the active deck's URL to your clipboard.
+
+All exports run entirely in the browser - no server involved.
 
 ---
 
@@ -33,8 +38,8 @@ Master Template turns structured business documents into polished, on-brand pres
 * **Core Framework:** React, TypeScript, Vite
 * **Styling:** CSS variables + Tailwind CSS v4
 * **Motion & Interactions:** Framer Motion
-* **Libraries:** `html2canvas` (slide capturing), `pptxgenjs` (PowerPoint compilation)
-* **PDF service:** Node + Express + `puppeteer-core` driving system Chrome (in `server/`)
+* **Export:** `pptxgenjs` (native PPTX), `jspdf` + `html2canvas` (PDF), `jszip` (PNG bundling)
+* **Persistence:** `localStorage`, multi-deck aware
 
 ---
 
@@ -55,24 +60,4 @@ Build the application for production:
 npm run build
 ```
 
-### PDF export server
-
-PDF export renders the deck through headless Chrome, so it needs the local PDF
-service (in `server/`) running alongside the web app.
-
-One-time setup:
-```sh
-cd server && npm install && cd ..
-```
-
-Run the web app **and** the PDF server together:
-```sh
-npm run dev:all
-```
-(or run them separately: `npm run dev` and `npm run dev:server`.)
-
-The service uses **`puppeteer-core` + your system Chrome** (no bundled Chromium
-download). It auto-detects Google Chrome on macOS/Linux; override the binary
-with the `CHROME_PATH` env var if needed. Other env vars: `PORT` (default
-`3001`) and `APP_URL` (default `http://localhost:5173`) - the frontend origin
-the service renders. In dev, Vite proxies `/api` to the service automatically.
+No additional services are required - export, persistence, and editing are all client-side.

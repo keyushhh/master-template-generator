@@ -113,9 +113,8 @@ export function GeneratorSidebar({
       </div>
 
       {/* Tools Section at the bottom with premium vertical layout rhythm */}
-      <div className="sidenav-tools flex flex-col gap-5 p-4 border-t border-neutral-150 bg-neutral-50/50">
-        {/* Single entry point - opens the 3-tab Source Material modal
-            (Conversion Prompt · Paste · Upload). */}
+      <div className="sidenav-tools flex flex-col gap-3 p-4 border-t border-neutral-150 bg-neutral-50/50">
+        {/* Opens the 3-tab Source Material modal (Conversion Prompt / Paste / Upload). */}
         <button
           onClick={() => setSourceOpen(true)}
           className="w-full flex items-center justify-center gap-2 h-[44px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[14px] bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white transition-colors cursor-pointer"
@@ -127,46 +126,41 @@ export function GeneratorSidebar({
           )}
         </button>
 
-        {/* CTA Actions container */}
-        <div className="flex flex-col gap-2">
-          {/* Generate Deck - "Import & Load" in the Source Material modal now builds
-              the deck automatically, so this is only the fallback for a source that
-              was loaded but not yet built. Once a deck exists it locks to a done
-              state to prevent accidental re-generation (which would discard edits).
-              To rebuild, use Reset then Source Material again. */}
-          <button
-            disabled={!hasPresentation || deckGenerated}
-            onClick={() => hasPresentation && !deckGenerated && onGenerate()}
-            className={`w-full flex items-center justify-center gap-2 h-[44px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[14px] transition-colors ${
-              !hasPresentation
-                ? 'border-none bg-neutral-200 text-neutral-400 cursor-not-allowed'
-                : deckGenerated
-                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 cursor-default'
-                  : 'border-none bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white cursor-pointer'
-            }`}
-          >
-            {deckGenerated && (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-            )}
-            {deckGenerated ? 'Deck Generated' : 'Generate Deck'}
-          </button>
+        {/* "Import & Load" in the Source Material modal auto-builds the deck, so this
+            is only the fallback once a source loaded without building. Locks once
+            generated to prevent discarding edits; Reset + Source Material to rebuild. */}
+        <button
+          disabled={!hasPresentation || deckGenerated}
+          onClick={() => hasPresentation && !deckGenerated && onGenerate()}
+          className={`w-full flex items-center justify-center gap-2 h-[44px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[14px] transition-colors ${
+            !hasPresentation
+              ? 'border-none bg-neutral-200 text-neutral-400 cursor-not-allowed'
+              : deckGenerated
+                ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 cursor-default'
+                : 'border-none bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white cursor-pointer'
+          }`}
+        >
+          {deckGenerated && (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+          )}
+          {deckGenerated ? 'Deck Generated' : 'Generate Deck'}
+        </button>
 
-          {/* Review & Export - opens the preview screen; all export/share runs there. */}
-          <button
-            disabled={!hasVisibleSlides}
-            onClick={() => hasVisibleSlides && onOpenReview()}
-            className={`w-full flex items-center justify-center gap-2 h-[44px] px-4 text-[14px] rounded-[var(--radius-sharp)] font-bold transition-all ${
-              hasVisibleSlides
-                ? 'text-neutral-900 bg-neutral-100 hover:bg-neutral-200 cursor-pointer border border-neutral-200'
-                : 'text-neutral-400 bg-neutral-50 cursor-not-allowed opacity-60 border border-neutral-150'
-            }`}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" />
-            </svg>
-            Review &amp; Export
-          </button>
-        </div>
+        {/* Opens the preview screen; all export/share runs there. */}
+        <button
+          disabled={!hasVisibleSlides}
+          onClick={() => hasVisibleSlides && onOpenReview()}
+          className={`w-full flex items-center justify-center gap-2 h-[44px] px-4 text-[14px] rounded-[var(--radius-sharp)] font-bold transition-all ${
+            hasVisibleSlides
+              ? 'text-neutral-900 bg-neutral-100 hover:bg-neutral-200 cursor-pointer border border-neutral-200'
+              : 'text-neutral-400 bg-neutral-50 cursor-not-allowed opacity-60 border border-neutral-150'
+          }`}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" />
+          </svg>
+          Review &amp; Export
+        </button>
       </div>
 
       <SourceMaterialModal

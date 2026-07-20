@@ -26,6 +26,10 @@ export interface StoredSession {
   deck: Deck;
   draft?: Deck | null;
   dirty?: boolean;
+  /** Undo/redo history, capped to a small window so it survives a reload
+   *  without blowing up storage. */
+  historyPast?: Deck[];
+  historyFuture?: Deck[];
 }
 
 interface ProjectIndex {
@@ -88,16 +92,18 @@ export function loadProjectSession(id: string): StoredSession | null {
   }
 }
 
-/** Persist a deck's session and bump its updatedAt in the index. */
-export function saveProjectSession(id: string, session: StoredSession): void {
+/** Persist a deck's session and bump its updatedAt. Returns false (rather
+ *  than silently dropping the write) on storage failure, e.g. quota exceeded. */
+export function saveProjectSession(id: string, session: StoredSession): boolean {
   try {
     localStorage.setItem(sessionKey(id), JSON.stringify(session));
   } catch {
-    return;
+    return false;
   }
   const index = readIndex();
   const projects = index.projects.map((p) => (p.id === id ? { ...p, updatedAt: Date.now() } : p));
   writeIndex({ ...index, projects });
+  return true;
 }
 
 /** Add a new deck to the index, save its session, and make it active. */

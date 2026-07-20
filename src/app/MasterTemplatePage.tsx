@@ -3,7 +3,7 @@ import { GeneratorSidebar } from '../features/generator/GeneratorSidebar';
 import { PresentationCanvas } from '../features/generator/PresentationCanvas';
 import { ReviewModal } from '../features/generator/ReviewModal';
 import { PresentMode } from '../features/generator/PresentMode';
-// Import types for document parsing and deck configuration
+import { useToast } from '../features/toast/Toast';
 import type { DocumentNode } from '../features/business-record/parser/ast';
 import type { Deck, SlideContent } from '../features/deck/types';
 import {
@@ -25,10 +25,12 @@ import {
   type StoredSession,
 } from '../features/deck/deckStore';
 
-// ── Undo/redo history for the committed deck ──────────────────────────────
-// Edit-mode drafts have their own Save/Discard, so history tracks only
-// committed changes (generate, import, reorder, add/remove, toggle, save-edits).
+// Undo/redo history for the committed deck.
 const HISTORY_LIMIT = 50;
+/** Smaller cap for what gets written to localStorage - each entry is a full
+ *  deck snapshot (images included), so persisting all 50 would balloon
+ *  storage fast. A reload only needs to recover a few recent steps. */
+const PERSISTED_HISTORY_LIMIT = 10;
 
 interface DeckHistory {
   past: Deck[];
@@ -37,8 +39,8 @@ interface DeckHistory {
 }
 
 type HistoryAction =
-  | { type: 'commit'; deck: Deck } // record a new committed state
-  | { type: 'set'; deck: Deck } // replace present without touching history (e.g. hydrate)
+  | { type: 'commit'; deck: Deck }
+  | { type: 'set'; deck: Deck; past?: Deck[]; future?: Deck[] }
   | { type: 'undo' }
   | { type: 'redo' };
 
@@ -50,7 +52,7 @@ function historyReducer(state: DeckHistory, action: HistoryAction): DeckHistory 
       return { past, present: action.deck, future: [] };
     }
     case 'set':
-      return { past: [], present: action.deck, future: [] };
+      return { past: action.past ?? [], present: action.deck, future: action.future ?? [] };
     case 'undo': {
       if (state.past.length === 0) return state;
       const previous = state.past[state.past.length - 1];
@@ -75,6 +77,8 @@ function historyReducer(state: DeckHistory, action: HistoryAction): DeckHistory 
 }
 
 export function MasterTemplatePage() {
+  const { showToast } = useToast();
+
   // Bootstrap the active deck once (migrates any legacy session into a project).
   const bootstrapRef = useRef<{ id: string; session: StoredSession } | null>(null);
   if (bootstrapRef.current === null) bootstrapRef.current = ensureInitialized(createTemplateDeck);
@@ -85,9 +89,9 @@ export function MasterTemplatePage() {
 
   const [ast, setAst] = useState<DocumentNode | null>(boot.session.ast);
   const [history, dispatchHistory] = useReducer(historyReducer, undefined, () => ({
-    past: [],
+    past: boot.session.historyPast ?? [],
     present: boot.session.deck,
-    future: [],
+    future: boot.session.historyFuture ?? [],
   }));
   const deck = history.present;
   const commitDeck = useCallback((next: Deck) => dispatchHistory({ type: 'commit', deck: next }), []);
@@ -137,12 +141,26 @@ export function MasterTemplatePage() {
     return () => ro.disconnect();
   }, [displayDeck]);
 
-  // Persist the working session (including an unsaved draft) into the active
-  // deck's slot so a refresh doesn't lose generated content or in-progress edits.
+  // Persist the working session (including an unsaved draft and a capped
+  // undo/redo window) into the active deck's slot on every change.
+  const saveFailedRef = useRef(false);
   useEffect(() => {
-    saveProjectSession(activeId, { ast, deck, draft, dirty });
+    const ok = saveProjectSession(activeId, {
+      ast,
+      deck,
+      draft,
+      dirty,
+      historyPast: history.past.slice(-PERSISTED_HISTORY_LIMIT),
+      historyFuture: history.future.slice(0, PERSISTED_HISTORY_LIMIT),
+    });
+    if (!ok && !saveFailedRef.current) {
+      saveFailedRef.current = true;
+      showToast("Couldn't save your changes - browser storage is full. Remove some images or free up space.", 'error');
+    } else if (ok) {
+      saveFailedRef.current = false;
+    }
     setProjects(listProjects()); // keep updatedAt ordering fresh in the switcher
-  }, [activeId, ast, deck, draft, dirty]);
+  }, [activeId, ast, deck, draft, dirty, history.past, history.future, showToast]);
 
   /** Route a deck mutation to the draft while editing, else commit directly. */
   const mutateDeck = useCallback(
@@ -350,34 +368,45 @@ export function MasterTemplatePage() {
   }, [mutateDeck]);
 
   // ── Multiple saved decks ────────────────────────────────────────────────
-  /** Replace all in-memory state from a stored session (with cleared history). */
+  /** Replace all in-memory state (including undo/redo history) from a stored session. */
   const hydrate = useCallback((session: StoredSession) => {
     setAst(session.ast);
-    dispatchHistory({ type: 'set', deck: session.deck });
+    dispatchHistory({ type: 'set', deck: session.deck, past: session.historyPast, future: session.historyFuture });
     setDraft(session.draft ?? null);
     setDirty(session.draft ? session.dirty ?? false : false);
   }, []);
 
+  const flushCurrent = useCallback(() => {
+    saveProjectSession(activeId, {
+      ast,
+      deck,
+      draft,
+      dirty,
+      historyPast: history.past.slice(-PERSISTED_HISTORY_LIMIT),
+      historyFuture: history.future.slice(0, PERSISTED_HISTORY_LIMIT),
+    });
+  }, [activeId, ast, deck, draft, dirty, history.past, history.future]);
+
   const handleSwitchDeck = useCallback(
     (id: string) => {
       if (id === activeId) return;
-      saveProjectSession(activeId, { ast, deck, draft, dirty }); // flush current
+      flushCurrent();
       setStoreActiveId(id);
       setActiveIdState(id);
       hydrate(loadProjectSession(id) ?? { ast: null, deck: createTemplateDeck() });
       setProjects(listProjects());
     },
-    [activeId, ast, deck, draft, dirty, hydrate]
+    [activeId, flushCurrent, hydrate]
   );
 
   const handleNewDeck = useCallback(() => {
-    saveProjectSession(activeId, { ast, deck, draft, dirty }); // flush current
+    flushCurrent();
     const session: StoredSession = { ast: null, deck: createTemplateDeck() };
     const meta = createProject('Untitled deck', session); // also sets store-active
     setActiveIdState(meta.id);
     hydrate(session);
     setProjects(listProjects());
-  }, [activeId, ast, deck, draft, dirty, hydrate]);
+  }, [flushCurrent, hydrate]);
 
   const handleRenameDeck = useCallback((id: string, name: string) => {
     renameProject(id, name);
@@ -582,19 +611,20 @@ export function MasterTemplatePage() {
               textTransform: 'uppercase',
               letterSpacing: '0.12em',
               color: dirty ? '#fff' : 'rgba(255,255,255,0.55)',
+              whiteSpace: 'nowrap',
             }}
           >
             {dirty ? 'Unsaved changes' : 'Editing mode - click any text on a slide'}
           </span>
           <button
             onClick={handleSaveEdits}
-            className="h-[34px] px-4 text-[12px] font-bold bg-white text-neutral-900 hover:bg-neutral-200 border-none cursor-pointer transition-colors rounded-[var(--radius-sharp)]"
+            className="h-[34px] px-4 text-[12px] font-bold whitespace-nowrap bg-white text-neutral-900 hover:bg-neutral-200 border-none cursor-pointer transition-colors rounded-[var(--radius-sharp)]"
           >
             Save Changes
           </button>
           <button
             onClick={handleDiscardEdits}
-            className="h-[34px] px-4 text-[12px] font-bold bg-transparent text-white hover:bg-white/10 border border-white/30 cursor-pointer transition-colors rounded-[var(--radius-sharp)]"
+            className="h-[34px] px-4 text-[12px] font-bold whitespace-nowrap bg-transparent text-white hover:bg-white/10 border border-white/30 cursor-pointer transition-colors rounded-[var(--radius-sharp)]"
           >
             {dirty ? 'Discard' : 'Cancel'}
           </button>

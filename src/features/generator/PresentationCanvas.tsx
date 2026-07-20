@@ -168,11 +168,12 @@ function AddBtn({ label, onClick, style }: { label: string; onClick: () => void;
 }
 
 /** Circular remove control shown on each editable list item. */
-function RemoveBtn({ onClick, style }: { onClick: () => void; style?: React.CSSProperties }) {
+function RemoveBtn({ onClick, style, label = 'Remove' }: { onClick: () => void; style?: React.CSSProperties; label?: string }) {
   return (
     <button
       onClick={onClick}
-      title="Remove"
+      title={label}
+      aria-label={label}
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 40, height: 40, flexShrink: 0, padding: 0,
@@ -188,13 +189,16 @@ function RemoveBtn({ onClick, style }: { onClick: () => void; style?: React.CSSP
 }
 
 /** Image slot: renders the image (or placeholder) in both modes so it captures
- *  cleanly, and overlays Upload / Replace / Remove controls in edit mode. */
-function ImageSlot({ src, editing, onChange, placeholder, style }: {
+ *  cleanly, and overlays Upload / Replace / Remove controls in edit mode.
+ *  `onDeleteContainer`, if given, adds a control that removes the whole slot
+ *  (not just its image) - the template falls back to a text-only layout. */
+function ImageSlot({ src, editing, onChange, placeholder, style, onDeleteContainer }: {
   src?: string;
   editing: boolean;
   onChange: (dataUrl: string | undefined) => void;
   placeholder?: string;
   style?: React.CSSProperties;
+  onDeleteContainer?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -225,6 +229,21 @@ function ImageSlot({ src, editing, onChange, placeholder, style }: {
           }}
         >
           {editing ? (placeholder ?? 'Click to add image') : (placeholder ?? 'Image Asset Placeholder')}
+        </div>
+      )}
+
+      {editing && onDeleteContainer && (
+        <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 20 }}>
+          <button
+            onClick={onDeleteContainer}
+            title="Remove this image area entirely"
+            style={{ ...btn, background: 'rgba(220,38,38,0.92)', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            Delete Container
+          </button>
         </div>
       )}
 
@@ -261,7 +280,7 @@ function SlideGrid() {
         backgroundImage:
           'linear-gradient(var(--border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px)',
         backgroundSize: '120px 120px',
-        opacity: 0.65,
+        opacity: 1.0,
         pointerEvents: 'none',
         zIndex: 0,
       }}
@@ -450,6 +469,7 @@ function Logo({
         <button
           onClick={(e) => { e.stopPropagation(); onChange?.(undefined); }}
           title="Remove logo"
+          aria-label="Remove logo"
           style={{ position: 'absolute', top: -12, right: -12, width: 26, height: 26, borderRadius: '50%', background: '#fff', color: '#dc2626', border: '1.5px solid #fecaca', cursor: 'pointer', fontSize: 18, lineHeight: 1, boxShadow: '0 2px 6px rgba(0,0,0,0.14)' }}
         >
           ×
@@ -1445,6 +1465,7 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
 }
 
 function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
+  const showImage = !content.hideImage;
   return (
     <>
       <SlideGrid />
@@ -1452,7 +1473,8 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
         <div
           style={{
             flex: 1,
-            padding: 140,
+            padding: showImage ? 140 : '140px 200px',
+            maxWidth: showImage ? undefined : 1200,
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',
@@ -1487,24 +1509,32 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
               onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
             />
           </p>
+          {!showImage && editing && (
+            <div style={{ marginTop: 40 }}>
+              <AddBtn label="Add image area back" onClick={() => onEdit((c) => ({ ...c, hideImage: false }))} />
+            </div>
+          )}
         </div>
-        <div style={{ flex: 1.2, position: 'relative' }}>
-          <ImageSlot
-            src={content.imageUrl}
-            editing={editing}
-            onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
-          />
-          {/* Left-edge blend into the text column (kept above the image, below edit controls). */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'linear-gradient(90deg, #fff 0%, transparent 20%)',
-              pointerEvents: 'none',
-              zIndex: 15,
-            }}
-          />
-        </div>
+        {showImage && (
+          <div style={{ flex: 1.2, position: 'relative' }}>
+            <ImageSlot
+              src={content.imageUrl}
+              editing={editing}
+              onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+              onDeleteContainer={() => onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))}
+            />
+            {/* Left-edge blend into the text column (kept above the image, below edit controls). */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(90deg, #fff 0%, transparent 20%)',
+                pointerEvents: 'none',
+                zIndex: 15,
+              }}
+            />
+          </div>
+        )}
       </div>
     </>
   );
@@ -1674,38 +1704,47 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
         </h2>
-        <div
-          style={{
-            flex: 1,
-            position: 'relative',
-            border: '1px solid var(--neutral-200)',
-            overflow: 'hidden',
-          }}
-        >
-          <ImageSlot
-            src={content.imageUrl}
-            editing={editing}
-            onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
-            placeholder={editing ? 'Click to add a map / visual' : 'Geographic Visualisation Placeholder'}
-          />
-          {/* accent hotspots - only over the empty placeholder, not a real image */}
-          {!content.imageUrl &&
-            [{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
-              <div
-                key={i}
-                style={{
-                  position: 'absolute',
-                  ...pos,
-                  width: 20,
-                  height: 20,
-                  background: 'var(--emerald-500)',
-                  borderRadius: '50%',
-                  boxShadow: '0 0 40px var(--emerald-500)',
-                  pointerEvents: 'none',
-                }}
-              />
-            ))}
-        </div>
+        {content.hideImage ? (
+          editing && (
+            <div style={{ marginBottom: 10 }}>
+              <AddBtn label="Add map / visual back" onClick={() => onEdit((c) => ({ ...c, hideImage: false }))} />
+            </div>
+          )
+        ) : (
+          <div
+            style={{
+              flex: 1,
+              position: 'relative',
+              border: '1px solid var(--neutral-200)',
+              overflow: 'hidden',
+            }}
+          >
+            <ImageSlot
+              src={content.imageUrl}
+              editing={editing}
+              onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+              placeholder={editing ? 'Click to add a map / visual' : 'Geographic Visualisation Placeholder'}
+              onDeleteContainer={() => onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))}
+            />
+            {/* accent hotspots - only over the empty placeholder, not a real image */}
+            {!content.imageUrl &&
+              [{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    ...pos,
+                    width: 20,
+                    height: 20,
+                    background: 'var(--emerald-500)',
+                    borderRadius: '50%',
+                    boxShadow: '0 0 40px var(--emerald-500)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              ))}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 100, marginTop: 40, alignItems: 'flex-start' }}>
           {sectors.map((s, i) => (
             <div key={i} style={{ position: 'relative' }}>
@@ -1845,11 +1884,11 @@ function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
                 )
               )}
             </div>
-            {/* Remove button — only shown in edit mode when a photo exists */}
             {editing && avatarSrc && (
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit((c) => ({ ...c, avatarUrl: undefined })); }}
                 title="Remove photo"
+                aria-label="Remove photo"
                 style={{
                   position: 'absolute',
                   top: -6,
@@ -2137,15 +2176,19 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
       />
     </p>
   );
-  const image = (placeholder: string, style?: React.CSSProperties) => (
+  const image = (placeholder: string, style?: React.CSSProperties, onDeleteContainer?: () => void) => (
     <ImageSlot
       src={content.imageUrl}
       editing={editing}
       onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
       placeholder={editing ? placeholder : ''}
       style={style}
+      onDeleteContainer={onDeleteContainer}
     />
   );
+  /** Two-column/full-bleed have no "optional" image slot - the layout IS the
+   *  image area - so "deleting" it means dropping back to the Standard layout. */
+  const dropToStandard = () => onEdit((c) => ({ ...c, blankLayout: 'standard', imageUrl: undefined }));
   const hudLabel = (
     <E
       value={content.hudLabel ?? 'Custom Slide'}
@@ -2157,7 +2200,7 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
   if (layout === 'full-bleed') {
     return (
       <>
-        <div style={{ position: 'absolute', inset: 0 }}>{image('Click to add a background image', { width: '100%', height: '100%' })}</div>
+        <div style={{ position: 'absolute', inset: 0 }}>{image('Click to add a background image', { width: '100%', height: '100%' }, dropToStandard)}</div>
         <div
           style={{
             position: 'absolute',
@@ -2190,7 +2233,7 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
             {body()}
           </div>
           <div style={{ flex: '0 0 50%', paddingBottom: 160 }}>
-            {image('Click to add an image')}
+            {image('Click to add an image', undefined, dropToStandard)}
           </div>
         </div>
       </>
@@ -2206,9 +2249,16 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
         {eyebrow}
         <div style={{ color: 'var(--neutral-900)' }}>{heading(88)}</div>
         {body(1200)}
-        {(content.imageUrl || editing) && (
+        {(content.imageUrl || editing) && !content.hideImage && (
           <div style={{ marginTop: 48, flex: 1, minHeight: 0 }}>
-            {image('Click to add an image (optional)')}
+            {image('Click to add an image (optional)', undefined, () =>
+              onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))
+            )}
+          </div>
+        )}
+        {content.hideImage && editing && (
+          <div style={{ marginTop: 32 }}>
+            <AddBtn label="Add image area back" onClick={() => onEdit((c) => ({ ...c, hideImage: false }))} />
           </div>
         )}
       </div>
@@ -2389,14 +2439,15 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
                   top: 0,
                   left: 0,
                   zIndex: 20,
-                  padding: '4px 10px',
+                  padding: '12px 26px',
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
+                  fontSize: 22,
                   fontWeight: 700,
-                  letterSpacing: '0.08em',
+                  letterSpacing: '0.1em',
                   textTransform: 'uppercase',
                   color: '#fff',
                   background: 'var(--emerald-500)',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
                   opacity: isActiveEdit ? 1 : 0,
                   pointerEvents: 'none',
                   transition: 'opacity .15s ease',

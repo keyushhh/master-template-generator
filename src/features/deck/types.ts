@@ -108,6 +108,10 @@ export interface SlideContent {
 
   // s10 Image Editorial - uploaded image as a (downscaled) data URL
   imageUrl?: string;
+  /** User dismissed the image area entirely (s10/s12, and blank's 'standard'
+   *  layout) - the template falls back to a text-only layout instead of
+   *  showing an empty upload placeholder. Re-adding an image clears this. */
+  hideImage?: boolean;
 
   // s13 Featured Quote
   quote?: string;

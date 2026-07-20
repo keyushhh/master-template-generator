@@ -1,6 +1,9 @@
 import html2canvas from 'html2canvas';
 import pptxgen from 'pptxgenjs';
 import { jsPDF } from 'jspdf';
+import JSZip from 'jszip';
+import { addNativeSlide } from './pptxNative';
+import type { SlideInstance } from '../deck/types';
 
 /**
  * html2canvas's CSS parser doesn't understand `color-mix()` (or the `color()`
@@ -133,31 +136,28 @@ function sanitize(title: string): string {
 }
 
 /**
- * Capture each slide as a high-resolution image and build a PPTX, one full-bleed
- * image per slide. Runs entirely client-side (no server needed).
+ * Build a PPTX from the deck's data model, one native (fully editable) slide
+ * per template - real text boxes, shapes, and tables via pptxgenjs, not a
+ * flattened screenshot. Only genuine raster content (photos, logos, maps) is
+ * placed as an image. Runs entirely client-side (no server needed).
  */
 export async function exportToPPTX(
-  slideIds: string[],
+  slides: SlideInstance[],
   deckTitle: string,
+  logoUrl: string | undefined,
   onProgress?: (current: number, total: number) => void
 ) {
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_16x9';
 
-  const total = slideIds.length;
+  const total = slides.length;
   if (total === 0) return;
 
   for (let i = 0; i < total; i++) {
     onProgress?.(i, total);
-    const canvas = await captureSlide(slideIds[i]);
-    if (!canvas) continue;
-    pptx.addSlide().addImage({
-      data: canvas.toDataURL('image/png'),
-      x: 0,
-      y: 0,
-      w: 10,
-      h: 5.625, // 16:9 in pptxgenjs inches
-    });
+    const num = String(i + 1).padStart(2, '0');
+    const slide = pptx.addSlide();
+    await addNativeSlide(slide, slides[i], num, logoUrl, `${i + 1} / ${total}`);
   }
 
   onProgress?.(total, total);
@@ -190,6 +190,41 @@ export async function exportToPDF(
 
   onProgress?.(total, total);
   if (placed > 0) pdf.save(`${sanitize(title)}.pdf`);
+}
+
+/**
+ * Capture each slide as a PNG and bundle them into a single downloadable zip.
+ */
+export async function exportSlidesAsPngZip(
+  slideIds: string[],
+  title: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<void> {
+  const total = slideIds.length;
+  if (total === 0) return;
+
+  const zip = new JSZip();
+  let placed = 0;
+  for (let i = 0; i < total; i++) {
+    onProgress?.(i, total);
+    const canvas = await captureSlide(slideIds[i]);
+    if (!canvas) continue;
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    zip.file(`slide-${String(i + 1).padStart(2, '0')}.png`, base64, { base64: true });
+    placed++;
+  }
+
+  onProgress?.(total, total);
+  if (placed === 0) return;
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${sanitize(title)}-slides.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /**
