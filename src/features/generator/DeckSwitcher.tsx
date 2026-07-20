@@ -86,7 +86,7 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
                         if (e.key === 'Escape') setEditingId(null);
                       }}
                       onBlur={commitRename}
-                      className="w-full h-[30px] px-2 text-[13px] border border-indigo-300 rounded-[var(--radius-sharp)] outline-none focus:border-indigo-500"
+                      className="w-full h-[30px] px-2 text-[13px] border border-emerald-300 rounded-[var(--radius-sharp)] outline-none focus:border-emerald-500"
                     />
                   </div>
                 );
@@ -94,7 +94,7 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
               return (
                 <div
                   key={p.id}
-                  className={`group flex items-center gap-1 px-2 py-1.5 ${isActive ? 'bg-indigo-50' : 'hover:bg-neutral-50'}`}
+                  className={`group flex items-center gap-1 px-2 py-1.5 ${isActive ? 'bg-emerald-50' : 'hover:bg-neutral-50'}`}
                 >
                   <button
                     onClick={() => { onSwitch(p.id); setOpen(false); }}
@@ -102,10 +102,10 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
                   >
                     <span className="w-3.5 shrink-0">
                       {isActive && (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--emerald-600)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                       )}
                     </span>
-                    <span className={`truncate text-[13px] ${isActive ? 'font-bold text-indigo-700' : 'text-neutral-700'}`}>{p.name}</span>
+                    <span className={`truncate text-[13px] ${isActive ? 'font-bold text-emerald-700' : 'text-neutral-700'}`}>{p.name}</span>
                   </button>
                   <button
                     onClick={() => startRename(p)}

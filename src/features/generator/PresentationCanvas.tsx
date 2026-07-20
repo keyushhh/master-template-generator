@@ -135,8 +135,8 @@ function AddBtn({ label, onClick, style }: { label: string; onClick: () => void;
         height: 52, padding: '0 24px',
         fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600,
         letterSpacing: '0.06em', textTransform: 'uppercase',
-        color: 'var(--indigo-600)', background: 'var(--indigo-50)',
-        border: '1.5px dashed var(--indigo-400)', cursor: 'pointer',
+        color: 'var(--emerald-600)', background: 'var(--emerald-50)',
+        border: '1.5px dashed var(--emerald-400)', cursor: 'pointer',
         borderRadius: 'var(--radius-sharp)', ...style,
       }}
     >
@@ -258,7 +258,7 @@ function Glow({ style }: { style?: React.CSSProperties }) {
         width: 1400,
         height: 1400,
         background:
-          'radial-gradient(circle, color-mix(in srgb, var(--indigo-500) 8%, transparent) 0%, transparent 70%)',
+          'radial-gradient(circle, color-mix(in srgb, var(--emerald-500) 8%, transparent) 0%, transparent 70%)',
         zIndex: 0,
         pointerEvents: 'none',
         ...style,
@@ -310,7 +310,7 @@ function EditorialLabel({
         fontFamily: 'var(--font-mono)',
         fontSize: 14,
         textTransform: 'uppercase',
-        color: 'var(--indigo-600)',
+        color: 'var(--emerald-600)',
         letterSpacing: '0.25em',
         marginBottom: 30,
         display: 'flex',
@@ -325,7 +325,7 @@ function EditorialLabel({
           display: 'inline-block',
           width: 40,
           height: 1,
-          background: 'var(--indigo-500)',
+          background: 'var(--emerald-500)',
           flexShrink: 0,
         }}
       />
@@ -379,19 +379,29 @@ function Logo({
     e.target.value = '';
   };
 
+  const uploadIcon = (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+
+  // Resting placeholder (not editing): a clear, readable "add your logo" hint
+  // rather than a faint whisper that gets missed.
   const placeholder: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    height: 36, padding: '0 16px',
-    border: '1px dashed rgba(140,140,150,0.4)', borderRadius: 'var(--radius-sharp)',
-    fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.15em',
-    textTransform: 'uppercase', color: 'rgba(140,140,150,0.7)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 44, padding: '0 18px',
+    border: '1.5px dashed rgba(120,120,135,0.6)', borderRadius: 'var(--radius-sharp)',
+    fontFamily: 'var(--font-mono)', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.14em',
+    textTransform: 'uppercase', color: 'rgba(90,90,105,0.9)', whiteSpace: 'nowrap',
   };
 
   if (!editing) {
     return src ? (
-      <img src={src} alt="Client logo" style={{ height: 36, width: 'auto', objectFit: 'contain', zIndex: 10, ...style }} />
+      <img src={src} alt="Client logo" style={{ height: 40, width: 'auto', objectFit: 'contain', zIndex: 10, ...style }} />
     ) : (
-      <div style={{ zIndex: 10, ...placeholder, ...style }}>Client Logo</div>
+      <div style={{ zIndex: 10, ...placeholder, ...style }}>{uploadIcon}Client Logo</div>
     );
   }
 
@@ -400,9 +410,19 @@ function Logo({
       <div
         onClick={() => inputRef.current?.click()}
         title={src ? 'Replace logo' : 'Upload logo'}
-        style={{ cursor: 'pointer', ...placeholder, border: '1px dashed rgba(80,80,220,0.55)', padding: src ? 0 : '0 16px', color: 'var(--indigo-600)' }}
+        style={{
+          cursor: 'pointer',
+          ...placeholder,
+          padding: src ? 4 : '0 18px',
+          border: '2px solid var(--emerald-500, #10b981)',
+          background: src ? 'transparent' : 'rgba(16,185,129,0.10)',
+          color: 'var(--emerald-600, #059669)',
+          boxShadow: src ? 'none' : '0 1px 4px rgba(5,150,105,0.18)',
+        }}
       >
-        {src ? <img src={src} alt="Client logo" style={{ height: 36, width: 'auto', objectFit: 'contain' }} /> : 'Upload Logo'}
+        {src
+          ? <img src={src} alt="Client logo" style={{ height: 40, width: 'auto', objectFit: 'contain' }} />
+          : <>{uploadIcon}Upload Logo</>}
       </div>
       {src && (
         <button
@@ -498,7 +518,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sl
           )}
         </h1>
         <div style={{ marginTop: 100, display: 'flex', alignItems: 'center', gap: 40 }}>
-          <div style={{ width: 120, height: 1, background: 'var(--indigo-500)' }} />
+          <div style={{ width: 120, height: 1, background: 'var(--emerald-500)' }} />
           <p
             style={{
               fontFamily: 'var(--font-mono)',
@@ -597,7 +617,7 @@ function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
               <div
                 key={i}
                 style={{
-                  borderLeft: `2px solid ${i === 0 ? 'var(--indigo-500)' : 'var(--neutral-200)'}`,
+                  borderLeft: `2px solid ${i === 0 ? 'var(--emerald-500)' : 'var(--neutral-200)'}`,
                   paddingLeft: 30,
                   marginBottom: 40,
                 }}
@@ -954,7 +974,7 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, value: v || undefined }))}
           />
-          <span style={{ color: 'var(--indigo-500)', fontSize: '0.3em', marginLeft: 10 }}>
+          <span style={{ color: 'var(--emerald-500)', fontSize: '0.3em', marginLeft: 10 }}>
             <E
               value={content.unit ?? 'M'}
               editing={editing}
@@ -1059,7 +1079,7 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
               key={i}
               style={{
                 flex: 1,
-                background: b.active ? 'var(--indigo-500)' : 'var(--neutral-200)',
+                background: b.active ? 'var(--emerald-500)' : 'var(--neutral-200)',
                 height: `${b.pct}%`,
                 position: 'relative',
               }}
@@ -1094,9 +1114,9 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
                   style={{
                     fontFamily: 'var(--font-mono)', fontSize: 13, padding: '6px 12px', cursor: 'pointer',
                     textTransform: 'uppercase', letterSpacing: '0.08em',
-                    background: b.active ? 'var(--indigo-500)' : '#fff',
+                    background: b.active ? 'var(--emerald-500)' : '#fff',
                     color: b.active ? '#fff' : 'var(--neutral-500)',
-                    border: `1px solid ${b.active ? 'var(--indigo-500)' : 'var(--neutral-300)'}`,
+                    border: `1px solid ${b.active ? 'var(--emerald-500)' : 'var(--neutral-300)'}`,
                     borderRadius: 'var(--radius-sharp)',
                   }}
                 >
@@ -1254,7 +1274,7 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
                 <td style={cellStyle}>
                   <E value={r.tgt} editing={editing} onCommit={(v) => editRow(i, { tgt: v || r.tgt })} />
                 </td>
-                <td style={{ ...cellStyle, color: 'var(--indigo-600)' }}>
+                <td style={{ ...cellStyle, color: 'var(--emerald-600)' }}>
                   <E value={r.delta} editing={editing} onCommit={(v) => editRow(i, { delta: v || r.delta })} />
                 </td>
                 {editing && (
@@ -1352,7 +1372,7 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
                   style={{
                     width: 24,
                     height: 24,
-                    background: p.completed ? 'var(--indigo-500)' : 'var(--neutral-300)',
+                    background: p.completed ? 'var(--emerald-500)' : 'var(--neutral-300)',
                     borderRadius: '50%',
                     position: 'relative',
                     zIndex: 2,
@@ -1524,7 +1544,7 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
               key={i}
               style={{
                 flex: 1,
-                border: `1px solid ${i === 1 ? 'var(--indigo-500)' : 'var(--neutral-200)'}`,
+                border: `1px solid ${i === 1 ? 'var(--emerald-500)' : 'var(--neutral-200)'}`,
                 padding: 40,
                 marginTop: i * 40,
                 position: 'relative',
@@ -1537,7 +1557,7 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
                 style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: 48,
-                  color: 'var(--indigo-500)',
+                  color: 'var(--emerald-500)',
                   marginBottom: 20,
                 }}
               >
@@ -1656,9 +1676,9 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
                   ...pos,
                   width: 20,
                   height: 20,
-                  background: 'var(--indigo-500)',
+                  background: 'var(--emerald-500)',
                   borderRadius: '50%',
-                  boxShadow: '0 0 40px var(--indigo-500)',
+                  boxShadow: '0 0 40px var(--emerald-500)',
                   pointerEvents: 'none',
                 }}
               />
@@ -1875,7 +1895,7 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
             gap: 60,
             fontFamily: 'var(--font-mono)',
             fontSize: 16,
-            color: 'var(--indigo-400)',
+            color: 'var(--emerald-400)',
           }}
         >
           {contacts.map((c, i) => (
@@ -2087,7 +2107,7 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
               // Standard design system shadow used for all slides instead of custom heavy shadow
               boxShadow: 'var(--shadow-soft)',
               // Subtle affordance that the slide is live for editing
-              outline: editing ? '2px solid color-mix(in srgb, var(--indigo-500) 35%, transparent)' : 'none',
+              outline: editing ? '2px solid color-mix(in srgb, var(--emerald-500) 35%, transparent)' : 'none',
             }}
           >
             {Renderer && (

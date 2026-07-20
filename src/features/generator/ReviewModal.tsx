@@ -153,7 +153,7 @@ export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, on
                     >
                       <div
                         className={`relative border bg-white overflow-hidden shadow-sm transition-all ${
-                          isOver ? 'border-indigo-500 ring-2 ring-indigo-300' : 'border-neutral-200'
+                          isOver ? 'border-emerald-500 ring-2 ring-emerald-300' : 'border-neutral-200'
                         } ${slide.hidden ? 'opacity-45' : ''}`}
                         style={{ width: 1920 * THUMB_SCALE, height: 1080 * THUMB_SCALE, maxWidth: '100%' }}
                       >

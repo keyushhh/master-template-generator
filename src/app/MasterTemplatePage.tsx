@@ -434,9 +434,9 @@ export function MasterTemplatePage() {
             borderRadius: 0,
             cursor: editing ? 'default' : 'pointer',
             transition: 'background .15s, color .15s, border-color .15s',
-            borderColor: editing ? '#c7d2fe' : '#d1d5db',
-            background: editing ? '#eef2ff' : '#ffffff',
-            color: editing ? '#4f46e5' : '#374151',
+            borderColor: editing ? 'var(--emerald-200)' : '#d1d5db',
+            background: editing ? 'var(--emerald-50)' : '#ffffff',
+            color: editing ? 'var(--emerald-600)' : '#374151',
             boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
           }}
         >

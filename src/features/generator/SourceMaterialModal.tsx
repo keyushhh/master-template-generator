@@ -296,7 +296,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                 onClick={() => fileInputRef.current?.click()}
               >
                 <input type="file" ref={fileInputRef} className="hidden" accept=".md,.markdown" onChange={handleFileChange} />
-                <svg className={`w-6 h-6 mb-3 transition-colors ${isDragging ? 'text-indigo-500' : 'text-neutral-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <svg className={`w-6 h-6 mb-3 transition-colors ${isDragging ? 'text-emerald-500' : 'text-neutral-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
                 <div className="text-[13px] font-bold text-neutral-900 mb-1.5">
                   {isValidating ? 'Parsing Document…' : 'Drop or click to upload'}
                 </div>

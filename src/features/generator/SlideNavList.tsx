@@ -170,11 +170,11 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
                       dragId === slide.instanceId ? 'opacity-40' : ''
                     } ${
                       overId === slide.instanceId && dragId && dragId !== slide.instanceId
-                        ? 'border-t-2 border-indigo-500'
+                        ? 'border-t-2 border-emerald-500'
                         : 'border-t-2 border-transparent'
                     } ${
                       isActive
-                        ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                        ? 'bg-emerald-50 text-emerald-700 font-semibold'
                         : slide.hidden
                           ? 'text-neutral-300 hover:bg-neutral-50'
                           : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
@@ -195,7 +195,7 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
                       <span
                         className={`font-mono text-[11px] tracking-[0.1em] min-w-[24px] ${
                           isActive
-                            ? 'text-indigo-600 font-medium'
+                            ? 'text-emerald-600 font-medium'
                             : slide.hidden
                               ? 'text-neutral-300'
                               : 'text-neutral-400'
@@ -216,7 +216,7 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
                             if (e.key === 'Escape') setRenamingId(null);
                           }}
                           onClick={(e) => e.preventDefault()}
-                          className="font-sans text-[13px] tracking-normal flex-1 min-w-0 bg-white border border-indigo-300 rounded-[var(--radius-sharp)] px-1 py-0 outline-none text-neutral-900"
+                          className="font-sans text-[13px] tracking-normal flex-1 min-w-0 bg-white border border-emerald-300 rounded-[var(--radius-sharp)] px-1 py-0 outline-none text-neutral-900"
                         />
                       ) : (
                         <span
@@ -245,7 +245,7 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
                         slide.hidden
                           ? 'opacity-100'
                           : `opacity-0 group-hover/item:opacity-100 ${
-                              isActive ? 'bg-indigo-50' : 'bg-neutral-100'
+                              isActive ? 'bg-emerald-50' : 'bg-neutral-100'
                             }`
                       }`}
                     >

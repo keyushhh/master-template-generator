@@ -16,10 +16,10 @@
 }
 
 [data-editable]:hover {
-  outline-color: color-mix(in srgb, var(--indigo-500) 45%, transparent);
+  outline-color: color-mix(in srgb, var(--emerald-500) 45%, transparent);
 }
 
 [data-editable]:focus {
-  outline-color: var(--indigo-500);
-  background: color-mix(in srgb, var(--indigo-500) 6%, transparent);
+  outline-color: var(--emerald-500);
+  background: color-mix(in srgb, var(--emerald-500) 6%, transparent);
 }

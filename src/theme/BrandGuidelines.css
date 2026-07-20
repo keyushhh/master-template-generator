@@ -38,9 +38,9 @@
   padding-left: var(--sidenav-w);
 }
 
-/* ---------- Theme preset scales ---------- */
-.wg-doc.theme-emerald {
-  --indigo-50:#ecfdf5; --indigo-100:#d1fae5; --indigo-200:#a7f3d0; --indigo-300:#6ee7b7; --indigo-400:#34d399; --indigo-500:#10b981; --indigo-600:#059669; --indigo-700:#047857; --indigo-800:#065f46; --indigo-900:#064e3b;
+/* ---------- Brand primary scale (emerald green) ---------- */
+.wg-doc {
+  --emerald-50:#ecfdf5; --emerald-100:#d1fae5; --emerald-200:#a7f3d0; --emerald-300:#6ee7b7; --emerald-400:#34d399; --emerald-500:#10b981; --emerald-600:#059669; --emerald-700:#047857; --emerald-800:#065f46; --emerald-900:#064e3b;
   --accent-50:#f0fdf4; --accent-100:#dcfce7; --accent-200:#bbf7d0; --accent-300:#86efac; --accent-400:#4ade80; --accent-500:#22c55e; --accent-600:#16a34a; --accent-700:#15803d; --accent-800:#166534; --accent-900:#14532d;
 }
 
@@ -85,10 +85,10 @@
 }
 .wg-doc .eyebrow {
   font-family: var(--font-mono); font-size: 11px; font-weight: 500;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--indigo-600);
+  letter-spacing: .09em; text-transform: uppercase; color: var(--emerald-600);
   margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
 }
-.wg-doc .eyebrow::before { content: ""; width: 14px; height: 1.5px; background: var(--indigo-500); display: inline-block; }
+.wg-doc .eyebrow::before { content: ""; width: 14px; height: 1.5px; background: var(--emerald-500); display: inline-block; }
 .wg-doc h1.page-title { font-family: var(--font-display); font-weight: 700; font-size: 40px; letter-spacing: -0.02em; line-height: 1.05; margin-bottom: 18px; color: var(--neutral-950); }
 .wg-doc .page-body { font-size: 15px; line-height: 1.65; color: var(--neutral-600); max-width: 480px; }
 .wg-doc .footer-row {
@@ -118,8 +118,8 @@
   cursor: pointer;
   transition: border-color .15s ease, background .15s ease;
 }
-.wg-doc .upload-zone:hover { border-color: var(--indigo-500); background: var(--indigo-50); }
-.wg-doc .upload-zone.dragging { border-color: var(--indigo-500); background: var(--indigo-50); }
+.wg-doc .upload-zone:hover { border-color: var(--emerald-500); background: var(--emerald-50); }
+.wg-doc .upload-zone.dragging { border-color: var(--emerald-500); background: var(--emerald-50); }
 
 /* ================= PRINT / PDF EXPORT ================= */
 @media print {
