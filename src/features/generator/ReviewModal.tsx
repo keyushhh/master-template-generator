@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { SlideStage } from './PresentationCanvas';
 import { analyzeCoverage } from '../deck/deckBuilder';
 import { useToast } from '../toast/Toast';
+import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, SlideInstance } from '../deck/types';
 
@@ -16,6 +17,10 @@ interface ReviewModalProps {
   onReorder: (fromId: string, toId: string) => void;
   /** Show/hide a slide (hidden slides are excluded from export/present). */
   onToggleHidden: (instanceId: string) => void;
+  /** Force hidden state for a batch of slides (multi-select bulk action). */
+  onBulkSetHidden: (instanceIds: string[], hidden: boolean) => void;
+  /** Delete a batch of slides (multi-select bulk action). */
+  onBulkDelete: (instanceIds: string[]) => void;
   /** Close the modal and scroll the main canvas to this slide. */
   onJumpTo: (instanceId: string) => void;
 }
@@ -67,7 +72,18 @@ function ScaledSlideStage({
  * export actions. Gives the "check everything before it goes to the client" step
  * the team asked for. Export runs client-side (no server).
  */
-export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, onToggleHidden, onJumpTo }: ReviewModalProps) {
+export function ReviewModal({
+  open,
+  onClose,
+  deck,
+  ast,
+  onPresent,
+  onReorder,
+  onToggleHidden,
+  onBulkSetHidden,
+  onBulkDelete,
+  onJumpTo,
+}: ReviewModalProps) {
   const { showToast } = useToast();
   const [busy, setBusy] = useState<null | 'pdf' | 'pptx' | 'png'>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -75,6 +91,10 @@ export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, on
   // Native drag-reorder state (mirrors SlideNavList).
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -83,7 +103,36 @@ export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, on
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose, busy]);
 
+  useEffect(() => {
+    if (!open) setSelected(new Set());
+  }, [open]);
+
   if (!open) return null;
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelected(new Set());
+
+  const bulkHide = () => {
+    onBulkSetHidden([...selected], true);
+    clearSelection();
+  };
+  const bulkShow = () => {
+    onBulkSetHidden([...selected], false);
+    clearSelection();
+  };
+  const bulkDelete = () => {
+    if (!window.confirm(`Delete ${selected.size} slide${selected.size === 1 ? '' : 's'}? This can be undone with Cmd/Ctrl+Z.`)) return;
+    onBulkDelete([...selected]);
+    clearSelection();
+  };
 
   const visible = deck.slides.filter((s) => !s.hidden);
   const title = deck.slides[0]?.content.heading || deck.slides[0]?.title || 'Presentation';
@@ -122,7 +171,7 @@ export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, on
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-neutral-900/60 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto" onClick={() => !busy && onClose()}>
-      <div className="flex flex-col w-full max-w-6xl max-h-[92vh] sm:max-h-[90vh] bg-white rounded-[var(--radius-sharp)] shadow-2xl overflow-hidden my-auto" onClick={(e) => e.stopPropagation()}>
+      <div ref={panelRef} className="flex flex-col w-full max-w-6xl max-h-[92vh] sm:max-h-[90vh] bg-white rounded-[var(--radius-sharp)] shadow-2xl overflow-hidden my-auto" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-5 py-4 sm:px-6 sm:py-5 border-b border-neutral-150 shrink-0">
           <div className="flex flex-col gap-1">
@@ -135,6 +184,27 @@ export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, on
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
+
+        {/* Bulk action bar - replaces the drag hint once slides are selected */}
+        {selected.size > 0 && (
+          <div className="flex items-center justify-between gap-3 px-5 py-2.5 sm:px-6 border-b border-emerald-200 bg-emerald-50 shrink-0">
+            <span className="text-[12.5px] font-bold text-emerald-800">{selected.size} selected</span>
+            <div className="flex items-center gap-2">
+              <button onClick={bulkShow} className="h-[32px] px-3 text-[12px] font-bold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] cursor-pointer transition-colors">
+                Show
+              </button>
+              <button onClick={bulkHide} className="h-[32px] px-3 text-[12px] font-bold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] cursor-pointer transition-colors">
+                Hide
+              </button>
+              <button onClick={bulkDelete} className="h-[32px] px-3 text-[12px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-[var(--radius-sharp)] cursor-pointer transition-colors">
+                Delete
+              </button>
+              <button onClick={clearSelection} className="h-[32px] px-3 text-[12px] font-bold text-neutral-500 hover:text-neutral-800 cursor-pointer transition-colors">
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Thumbnail grid */}
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 bg-neutral-50">
@@ -171,9 +241,11 @@ export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, on
             <div className="text-center text-[13px] text-neutral-500 py-16">No slides. Add slides to export.</div>
           ) : (
             <>
-              <div className="mb-3 text-[11.5px] text-neutral-500">
-                Drag to reorder. Toggle the eye to include or exclude a slide from export &amp; present.
-              </div>
+              {selected.size === 0 && (
+                <div className="mb-3 text-[11.5px] text-neutral-500">
+                  Drag to reorder. Toggle the eye to include or exclude a slide. Use the checkbox to select multiple.
+                </div>
+              )}
               <div className="grid gap-4 sm:gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
                 {deck.slides.map((slide) => {
                   const pos = visibleIds.indexOf(slide.instanceId); // -1 if hidden
@@ -206,6 +278,18 @@ export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, on
                         } ${slide.hidden ? 'opacity-45' : ''}`}
                       >
                         <ScaledSlideStage slide={slide} ast={ast} num={num} logoUrl={deck.logoUrl} />
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleSelect(slide.instanceId); }}
+                          aria-label={selected.has(slide.instanceId) ? 'Deselect slide' : 'Select slide'}
+                          aria-pressed={selected.has(slide.instanceId)}
+                          className={`absolute top-2 left-2 z-10 w-6 h-6 flex items-center justify-center rounded-[var(--radius-sharp)] border-2 transition-colors cursor-pointer ${
+                            selected.has(slide.instanceId)
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'bg-white/90 border-neutral-300 text-transparent hover:border-neutral-400'
+                          }`}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        </button>
                         {/* Include/exclude toggle */}
                         <button
                           onClick={(e) => { e.stopPropagation(); onToggleHidden(slide.instanceId); }}

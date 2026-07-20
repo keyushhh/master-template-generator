@@ -3,6 +3,7 @@ import { GeneratorSidebar } from '../features/generator/GeneratorSidebar';
 import { PresentationCanvas } from '../features/generator/PresentationCanvas';
 import { ReviewModal } from '../features/generator/ReviewModal';
 import { PresentMode } from '../features/generator/PresentMode';
+import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
 import { useToast } from '../features/toast/Toast';
 import type { DocumentNode } from '../features/business-record/parser/ast';
 import type { Deck, SlideContent } from '../features/deck/types';
@@ -107,6 +108,7 @@ export function MasterTemplatePage() {
   // Review & Present overlays.
   const [reviewOpen, setReviewOpen] = useState(false);
   const [presentOpen, setPresentOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Two-step confirm for Reset (disarms after 3 s)
   const [resetArmed, setResetArmed] = useState(false);
@@ -267,6 +269,25 @@ export function MasterTemplatePage() {
     [mutateDeck]
   );
 
+  const handleBulkSetHidden = useCallback(
+    (instanceIds: string[], hidden: boolean) => {
+      const ids = new Set(instanceIds);
+      mutateDeck((prev) => ({
+        ...prev,
+        slides: prev.slides.map((s) => (ids.has(s.instanceId) ? { ...s, hidden } : s)),
+      }));
+    },
+    [mutateDeck]
+  );
+
+  const handleBulkDelete = useCallback(
+    (instanceIds: string[]) => {
+      const ids = new Set(instanceIds);
+      mutateDeck((prev) => ({ ...prev, slides: prev.slides.filter((s) => !ids.has(s.instanceId)) }));
+    },
+    [mutateDeck]
+  );
+
   const handleDuplicate = useCallback(
     (instanceId: string) => {
       mutateDeck((prev) => {
@@ -343,6 +364,19 @@ export function MasterTemplatePage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [editing]);
+
+  // "?" opens the keyboard shortcuts overlay, unless the user is typing somewhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '?') return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
+      e.preventDefault();
+      setShortcutsOpen((v) => !v);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const handleAddBlank = useCallback(() => {
     const blank = createBlankSlide();
@@ -639,6 +673,8 @@ export function MasterTemplatePage() {
         onPresent={() => { setReviewOpen(false); setPresentOpen(true); }}
         onReorder={handleReorder}
         onToggleHidden={handleToggleHidden}
+        onBulkSetHidden={handleBulkSetHidden}
+        onBulkDelete={handleBulkDelete}
         onJumpTo={(instanceId) => {
           setReviewOpen(false);
           setTimeout(() => {
@@ -652,6 +688,7 @@ export function MasterTemplatePage() {
         deck={displayDeck}
         ast={ast}
       />
+      <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }

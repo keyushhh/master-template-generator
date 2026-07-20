@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'r
 import { CONVERSION_PROMPT } from '../business-record/conversionPrompt';
 import { ImportService } from '../business-record/ImportService';
 import { SAMPLE_DECKS } from '../business-record/sampleDecks';
+import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { ValidationResult } from '../business-record/parser/types';
 
@@ -54,6 +55,8 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   const [isDragging, setIsDragging] = useState(false);
   const [rawTranscriptHint, setRawTranscriptHint] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, open);
 
   // Reset transient state each time the modal opens.
   useEffect(() => {
@@ -153,6 +156,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
       onClick={onClose}
     >
       <div
+        ref={panelRef}
         className="flex flex-col w-full max-w-2xl max-h-[86vh] bg-white rounded-[var(--radius-sharp)] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
