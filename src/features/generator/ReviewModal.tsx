@@ -15,6 +15,8 @@ interface ReviewModalProps {
   onReorder: (fromId: string, toId: string) => void;
   /** Show/hide a slide (hidden slides are excluded from export/present). */
   onToggleHidden: (instanceId: string) => void;
+  /** Close the modal and scroll the main canvas to this slide. */
+  onJumpTo: (instanceId: string) => void;
 }
 
 const THUMB_SCALE = 0.16; // 1920×1080 → ~307×173 thumbnails
@@ -24,7 +26,7 @@ const THUMB_SCALE = 0.16; // 1920×1080 → ~307×173 thumbnails
  * export actions. Gives the "check everything before it goes to the client" step
  * the team asked for. Export runs client-side (no server).
  */
-export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, onToggleHidden }: ReviewModalProps) {
+export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, onToggleHidden, onJumpTo }: ReviewModalProps) {
   const [busy, setBusy] = useState<null | 'pdf' | 'pptx'>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [linkCopied, setLinkCopied] = useState(false);
@@ -149,7 +151,12 @@ export function ReviewModal({ open, onClose, deck, ast, onPresent, onReorder, on
                         setOverId(null);
                       }}
                       onDragEnd={() => { setDragId(null); setOverId(null); }}
-                      className={`flex flex-col gap-2 cursor-grab active:cursor-grabbing transition-opacity ${isDragging ? 'opacity-40' : ''}`}
+                      onClick={() => {
+                        // Only jump when not finishing a drag.
+                        if (!dragId) onJumpTo(slide.instanceId);
+                      }}
+                      title={slide.hidden ? undefined : 'Click to jump to this slide'}
+                      className={`flex flex-col gap-2 transition-opacity ${isDragging ? 'opacity-40 cursor-grabbing' : slide.hidden ? 'cursor-grab' : 'cursor-pointer'}`}
                     >
                       <div
                         className={`relative border bg-white overflow-hidden shadow-sm transition-all ${

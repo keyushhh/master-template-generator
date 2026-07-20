@@ -27,6 +27,8 @@ interface GeneratorSidebarProps {
   onRename: (instanceId: string, title: string) => void;
   onReorder: (fromId: string, toId: string) => void;
   onAddBlank: () => void;
+  /** Insert a blank slide immediately after the given slide. */
+  onInsertAfter: (instanceId: string) => void;
   /** Open the Review & Export screen (preview all slides before sharing). */
   onOpenReview: () => void;
   // Multiple saved decks.
@@ -67,6 +69,7 @@ export function GeneratorSidebar({
   onRename,
   onReorder,
   onAddBlank,
+  onInsertAfter,
   onOpenReview,
   projects,
   activeId,
@@ -105,6 +108,7 @@ export function GeneratorSidebar({
           onRename={onRename}
           onReorder={onReorder}
           onAddBlank={onAddBlank}
+          onInsertAfter={onInsertAfter}
         />
       </div>
 

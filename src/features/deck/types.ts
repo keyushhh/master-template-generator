@@ -113,6 +113,8 @@ export interface SlideContent {
   quote?: string;
   author?: string;
   role?: string;
+  /** Uploaded author headshot (downscaled data URL). */
+  avatarUrl?: string;
 
   // s14 Exit
   contacts?: string[];

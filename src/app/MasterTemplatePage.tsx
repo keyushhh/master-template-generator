@@ -335,6 +335,20 @@ export function MasterTemplatePage() {
     }, 50);
   }, [mutateDeck]);
 
+  const handleInsertAfter = useCallback((instanceId: string) => {
+    const blank = createBlankSlide();
+    mutateDeck((prev) => {
+      const idx = prev.slides.findIndex((s) => s.instanceId === instanceId);
+      const next = idx === -1
+        ? [...prev.slides, blank]
+        : [...prev.slides.slice(0, idx + 1), blank, ...prev.slides.slice(idx + 1)];
+      return { ...prev, slides: next };
+    });
+    setTimeout(() => {
+      document.getElementById(blank.instanceId)?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  }, [mutateDeck]);
+
   // ── Multiple saved decks ────────────────────────────────────────────────
   /** Replace all in-memory state from a stored session (with cleared history). */
   const hydrate = useCallback((session: StoredSession) => {
@@ -406,6 +420,7 @@ export function MasterTemplatePage() {
         onRename={handleRename}
         onReorder={handleReorder}
         onAddBlank={handleAddBlank}
+        onInsertAfter={handleInsertAfter}
         onOpenReview={() => setReviewOpen(true)}
         projects={projects}
         activeId={activeId}
@@ -594,6 +609,12 @@ export function MasterTemplatePage() {
         onPresent={() => { setReviewOpen(false); setPresentOpen(true); }}
         onReorder={handleReorder}
         onToggleHidden={handleToggleHidden}
+        onJumpTo={(instanceId) => {
+          setReviewOpen(false);
+          setTimeout(() => {
+            document.getElementById(instanceId)?.scrollIntoView({ behavior: 'smooth' });
+          }, 80);
+        }}
       />
       <PresentMode
         open={presentOpen}

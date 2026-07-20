@@ -1744,6 +1744,23 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
 
 // Quote slide: inherits DISPLAY_HEADING_BASE for large-scale typography alignment
 function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      // PNG preserves transparency; 400px is plenty for a circular avatar at 2× export.
+      const dataUrl = await fileToDataUrl(file, 400, 'image/png');
+      onEdit((c) => ({ ...c, avatarUrl: dataUrl }));
+    } catch {
+      // ignore bad files
+    }
+    e.target.value = '';
+  };
+
+  const avatarSrc = content.avatarUrl;
+
   return (
     <>
       <SlideGrid />
@@ -1785,14 +1802,86 @@ function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
           "
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
+          {/* Circular avatar - static in view mode, uploadable in edit mode */}
           <div
-            style={{
-              width: 80,
-              height: 80,
-              background: 'var(--neutral-200)',
-              borderRadius: '50%',
-            }}
-          />
+            style={{ position: 'relative', flexShrink: 0, width: 80, height: 80 }}
+          >
+            {/* The circle itself */}
+            <div
+              onClick={() => editing && avatarInputRef.current?.click()}
+              title={editing ? (avatarSrc ? 'Replace photo' : 'Upload author photo') : undefined}
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                background: avatarSrc ? 'transparent' : 'var(--neutral-200)',
+                cursor: editing ? 'pointer' : 'default',
+                border: editing && !avatarSrc ? '2px dashed var(--emerald-400)' : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'border-color 0.15s',
+              }}
+            >
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt="Author"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                editing && (
+                  /* Upload hint icon shown only in edit mode when empty */
+                  <svg
+                    width="28" height="28" viewBox="0 0 24 24"
+                    fill="none" stroke="var(--emerald-500)" strokeWidth="1.8"
+                    strokeLinecap="round" strokeLinejoin="round"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                )
+              )}
+            </div>
+            {/* Remove button — only shown in edit mode when a photo exists */}
+            {editing && avatarSrc && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit((c) => ({ ...c, avatarUrl: undefined })); }}
+                title="Remove photo"
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  color: '#dc2626',
+                  border: '1.5px solid #fecaca',
+                  cursor: 'pointer',
+                  fontSize: 18,
+                  lineHeight: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.14)',
+                  zIndex: 10,
+                }}
+              >
+                ×
+              </button>
+            )}
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarFile}
+              style={{ display: 'none' }}
+            />
+          </div>
+
           <div>
             <h4
               style={{
