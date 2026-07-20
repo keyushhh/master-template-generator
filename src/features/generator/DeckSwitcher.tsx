@@ -57,7 +57,7 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
   };
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative w-full">
       <button
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center justify-between gap-2 h-[36px] px-3 rounded-[var(--radius-sharp)] border border-neutral-200 bg-white hover:bg-neutral-50 transition-colors cursor-pointer text-left"
@@ -70,7 +70,7 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-lg overflow-hidden">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 w-full bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-lg overflow-hidden">
           <div className="max-h-[240px] overflow-y-auto py-1">
             {projects.map((p) => {
               const isActive = p.id === activeId;
