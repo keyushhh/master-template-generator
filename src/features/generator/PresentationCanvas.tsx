@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { DocumentNode } from '../business-record/parser/ast';
-import type { Deck, SlideContent } from '../deck/types';
+import type { Deck, SlideContent, SlideInstance } from '../deck/types';
 
 interface PresentationCanvasProps {
   ast: DocumentNode | null;
@@ -8,6 +8,8 @@ interface PresentationCanvasProps {
   /** Edit mode: text slots become contentEditable and commit via onEditSlide. */
   editing: boolean;
   onEditSlide: (instanceId: string, updater: (content: SlideContent) => SlideContent) => void;
+  /** Set/clear the deck-level client logo (edit mode). */
+  onLogoChange?: (dataUrl: string | undefined) => void;
 }
 
 /** Props every slide renderer receives: parsed document (for the logo), the
@@ -19,6 +21,9 @@ interface SlideRenderProps {
   num: string;
   editing: boolean;
   onEdit: (updater: (content: SlideContent) => SlideContent) => void;
+  /** Deck-level client logo + its setter (edit mode). */
+  logoUrl?: string;
+  onLogoChange?: (dataUrl: string | undefined) => void;
 }
 
 const PLACEHOLDER =
@@ -83,14 +88,14 @@ function E({ value, editing, onCommit, multiline }: EditableProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Media-editing primitives — all affordances render only in edit mode, so the
+// Media-editing primitives - all affordances render only in edit mode, so the
 // exported (view-mode) DOM captured by html2canvas / print stays clean.
 // Sized in the slide's native 1920px coordinate space (scaled with the slide).
 // ---------------------------------------------------------------------------
 
 /** Downscale an uploaded image to a JPEG data URL so decks stay light in
  *  localStorage and on export. Falls back to the raw data URL if canvas fails. */
-async function fileToDataUrl(file: File, maxDim = 1600): Promise<string> {
+async function fileToDataUrl(file: File, maxDim = 1600, mime: 'image/jpeg' | 'image/png' = 'image/jpeg'): Promise<string> {
   const raw = await new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result as string);
@@ -113,7 +118,8 @@ async function fileToDataUrl(file: File, maxDim = 1600): Promise<string> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return raw;
     ctx.drawImage(img, 0, 0, w, h);
-    return canvas.toDataURL('image/jpeg', 0.85);
+    // PNG preserves transparency (used for logos); JPEG keeps photos small.
+    return mime === 'image/png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85);
   } catch {
     return raw;
   }
@@ -233,6 +239,7 @@ function SlideGrid() {
         backgroundImage:
           'linear-gradient(var(--border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px)',
         backgroundSize: '120px 120px',
+        opacity: 0.65,
         pointerEvents: 'none',
         zIndex: 0,
       }}
@@ -240,7 +247,7 @@ function SlideGrid() {
   );
 }
 
-/** Radial glow for light slides — uses accent colour.
+/** Radial glow for light slides - uses accent colour.
  *  Uses explicit z-index to avoid overlaying text.
  */
 function Glow({ style }: { style?: React.CSSProperties }) {
@@ -349,43 +356,64 @@ function GhostNumeral({ num, dark }: { num: string; dark?: boolean }) {
   );
 }
 
-/** Client logo slot — sourced from the Business Record's optional `logo`
- *  frontmatter key (a URL). Renders a dashed placeholder mark when absent,
- *  matching the sidebar's upload-slot styling so it reads as swappable.
- */
-function Logo({ ast, style }: { ast: DocumentNode | null; style?: React.CSSProperties }) {
-  const src = ast?.metadata.values.logo;
+/** Client logo slot — deck-level `logoUrl` (seeded from the Business Record's
+ *  optional `logo` frontmatter). In edit mode the slot becomes click-to-upload
+ *  with a remove control, so users can set the brand logo without a URL. */
+function Logo({
+  src,
+  editing,
+  onChange,
+  style,
+}: {
+  src?: string;
+  editing?: boolean;
+  onChange?: (dataUrl: string | undefined) => void;
+  style?: React.CSSProperties;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      try { onChange?.(await fileToDataUrl(f, 600, 'image/png')); } catch { /* ignore */ }
+    }
+    e.target.value = '';
+  };
 
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt="Client logo"
-        style={{ height: 36, width: 'auto', objectFit: 'contain', zIndex: 10, ...style }}
-      />
+  const placeholder: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    height: 36, padding: '0 16px',
+    border: '1px dashed rgba(140,140,150,0.4)', borderRadius: 'var(--radius-sharp)',
+    fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.15em',
+    textTransform: 'uppercase', color: 'rgba(140,140,150,0.7)',
+  };
+
+  if (!editing) {
+    return src ? (
+      <img src={src} alt="Client logo" style={{ height: 36, width: 'auto', objectFit: 'contain', zIndex: 10, ...style }} />
+    ) : (
+      <div style={{ zIndex: 10, ...placeholder, ...style }}>Client Logo</div>
     );
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: 36,
-        padding: '0 16px',
-        border: '1px dashed rgba(140,140,150,0.4)',
-        borderRadius: 'var(--radius-sharp)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        letterSpacing: '0.15em',
-        textTransform: 'uppercase',
-        color: 'rgba(140,140,150,0.7)',
-        zIndex: 10,
-        ...style,
-      }}
-    >
-      Client Logo
+    <div style={{ position: 'relative', display: 'inline-flex', zIndex: 20, ...style }}>
+      <div
+        onClick={() => inputRef.current?.click()}
+        title={src ? 'Replace logo' : 'Upload logo'}
+        style={{ cursor: 'pointer', ...placeholder, border: '1px dashed rgba(80,80,220,0.55)', padding: src ? 0 : '0 16px', color: 'var(--indigo-600)' }}
+      >
+        {src ? <img src={src} alt="Client logo" style={{ height: 36, width: 'auto', objectFit: 'contain' }} /> : 'Upload Logo'}
+      </div>
+      {src && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onChange?.(undefined); }}
+          title="Remove logo"
+          style={{ position: 'absolute', top: -12, right: -12, width: 26, height: 26, borderRadius: '50%', background: '#fff', color: '#dc2626', border: '1.5px solid #fecaca', cursor: 'pointer', fontSize: 18, lineHeight: 1, boxShadow: '0 2px 6px rgba(0,0,0,0.14)' }}
+        >
+          ×
+        </button>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" onChange={onFile} style={{ display: 'none' }} />
     </div>
   );
 }
@@ -394,7 +422,7 @@ function Logo({ ast, style }: { ast: DocumentNode | null; style?: React.CSSPrope
 // Individual slide renderers
 // ---------------------------------------------------------------------------
 
-function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
+function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
   const lines = content.headingLines ?? ['Master Primary', 'Heading', 'Variable.'];
   // Auto-fit the hero: shrink the font and tighten the top padding for longer
   // titles so the headline never overflows the fixed 1080px slide and keeps a
@@ -505,7 +533,7 @@ function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
         }}
       >
         <span>PROPRIETARY AND CONFIDENTIAL</span>
-        <Logo ast={ast} />
+        <Logo src={logoUrl} editing={editing} onChange={onLogoChange} />
       </div>
     </>
   );
@@ -677,10 +705,10 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
   );
 }
 
-function SlideSectionDivider({ ast, content, num, editing, onEdit }: SlideRenderProps) {
+function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
   return (
     <>
-      {/* Clean, flat design layout for SlideSectionDivider — no shadows or glow blurs */}
+      {/* Clean, flat design layout for SlideSectionDivider - no shadows or glow blurs */}
       <div
         style={{
           position: 'absolute',
@@ -690,9 +718,11 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit }: SlideRender
         }}
       >
         <Logo
-          ast={ast}
+          src={logoUrl}
+          editing={editing}
+          onChange={onLogoChange}
           style={
-            ast?.metadata.values.logo
+            logoUrl
               ? undefined
               : { borderColor: 'rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.6)' }
           }
@@ -969,7 +999,7 @@ const DEFAULT_BARS = [
 ];
 const DEFAULT_KPIS = [
   { label: 'Metric Alpha', value: '00.0%' },
-  { label: 'Metric Beta',  value: '00.0x' },
+  { label: 'Metric Beta', value: '00.0x' },
   { label: 'Metric Gamma', value: '-00%' },
 ];
 
@@ -1130,7 +1160,7 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
 }
 
 const DEFAULT_ROWS = [
-  { dim: 'Dimension 01', cur: '00.0',  tgt: '00.0',  delta: '+00.0%' },
+  { dim: 'Dimension 01', cur: '00.0', tgt: '00.0', delta: '+00.0%' },
   { dim: 'Dimension 02', cur: '0.00%', tgt: '0.00%', delta: '+00.0%' },
   { dim: 'Dimension 03', cur: '0,000', tgt: '0,000', delta: '+00.0%' },
   { dim: 'Dimension 04', cur: 'XXX.X', tgt: 'XXX.X', delta: '+00.0%' },
@@ -1144,7 +1174,7 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
       return { ...c, rows: arr };
     });
   const addRow = () =>
-    onEdit((c) => ({ ...c, rows: [...(c.rows ?? DEFAULT_ROWS), { dim: 'New Dimension', cur: '—', tgt: '—', delta: '—' }] }));
+    onEdit((c) => ({ ...c, rows: [...(c.rows ?? DEFAULT_ROWS), { dim: 'New Dimension', cur: '-', tgt: '-', delta: '-' }] }));
   const removeRow = (i: number) =>
     onEdit((c) => ({ ...c, rows: (c.rows ?? DEFAULT_ROWS).filter((_, j) => j !== i) }));
   // Scale type + row padding down as rows grow so content stays on-slide and clean.
@@ -1247,8 +1277,8 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
 }
 
 const DEFAULT_PHASES = [
-  { title: 'Initiation',   description: PLACEHOLDER, completed: true },
-  { title: 'Integration',  description: PLACEHOLDER, completed: true },
+  { title: 'Initiation', description: PLACEHOLDER, completed: true },
+  { title: 'Integration', description: PLACEHOLDER, completed: true },
   { title: 'Optimization', description: PLACEHOLDER, completed: false },
 ];
 
@@ -1439,9 +1469,9 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
 }
 
 const DEFAULT_STEPS = [
-  { title: 'Input',   description: PLACEHOLDER },
+  { title: 'Input', description: PLACEHOLDER },
   { title: 'Process', description: PLACEHOLDER },
-  { title: 'Output',  description: PLACEHOLDER },
+  { title: 'Output', description: PLACEHOLDER },
 ];
 
 function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRenderProps) {
@@ -1616,7 +1646,7 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
             onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
             placeholder={editing ? 'Click to add a map / visual' : 'Geographic Visualisation Placeholder'}
           />
-          {/* accent hotspots — only over the empty placeholder, not a real image */}
+          {/* accent hotspots - only over the empty placeholder, not a real image */}
           {!content.imageUrl &&
             [{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
               <div
@@ -1759,7 +1789,7 @@ function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
 const DEFAULT_CONTACTS = ['email@placeholder.com', '@social_handle', 'www.domain.com'];
 
 // Exit slide: inherits DISPLAY_HEADING_BASE for unified presentation style
-function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
+function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
   const contacts = content.contacts && content.contacts.length ? content.contacts : DEFAULT_CONTACTS;
   const editContact = (i: number, v: string) =>
     onEdit((c) => {
@@ -1769,7 +1799,7 @@ function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
     });
   return (
     <>
-      {/* Clean, flat design layout for SlideExit — no shadows or glow blurs */}
+      {/* Clean, flat design layout for SlideExit - no shadows or glow blurs */}
       <div
         style={{
           position: 'absolute',
@@ -1779,9 +1809,11 @@ function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
         }}
       >
         <Logo
-          ast={ast}
+          src={logoUrl}
+          editing={editing}
+          onChange={onLogoChange}
           style={
-            ast?.metadata.values.logo
+            logoUrl
               ? undefined
               : { borderColor: 'rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.6)' }
           }
@@ -1857,38 +1889,139 @@ function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
   );
 }
 
+/** Freeform user slide - editable eyebrow, heading, body, and an optional image. */
+function SlideBlank({ content, num, editing, onEdit }: SlideRenderProps) {
+  return (
+    <>
+      <SlideGrid />
+      <HudTop
+        label={
+          <E
+            value={content.hudLabel ?? 'Custom Slide'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+          />
+        }
+        num={num}
+      />
+      <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Section'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
+        <h2 style={{ ...DISPLAY_HEADING_BASE, fontSize: 88, fontWeight: 600, color: 'var(--neutral-900)', marginBottom: 40 }}>
+          <E
+            value={content.heading ?? 'Blank Slide.'}
+            editing={editing}
+            multiline
+            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+          />
+        </h2>
+        <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth: 1200 }}>
+          <E
+            value={content.body ?? 'Click to add your content…'}
+            editing={editing}
+            multiline
+            onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
+          />
+        </p>
+        {(content.imageUrl || editing) && (
+          <div style={{ marginTop: 48, flex: 1, minHeight: 0 }}>
+            <ImageSlot
+              src={content.imageUrl}
+              editing={editing}
+              onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+              placeholder={editing ? 'Click to add an image (optional)' : ''}
+            />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Slide type registry — maps template id → renderer
+// Slide type registry - maps template id → renderer
 // ---------------------------------------------------------------------------
 const SLIDE_RENDERERS: Record<string, (props: SlideRenderProps) => React.ReactElement> = {
-  s1:  SlideCover,
-  s2:  SlideIndex,
-  s3:  SlideExecutiveSummary,
-  s4:  SlideSectionDivider,
-  s5:  SlideTwoColumnContext,
-  s6:  SlideDataMonument,
-  s7:  SlideMetricsDashboard,
-  s8:  SlideComparativeTable,
-  s9:  SlideStrategicRoadmap,
+  s1: SlideCover,
+  s2: SlideIndex,
+  s3: SlideExecutiveSummary,
+  s4: SlideSectionDivider,
+  s5: SlideTwoColumnContext,
+  s6: SlideDataMonument,
+  s7: SlideMetricsDashboard,
+  s8: SlideComparativeTable,
+  s9: SlideStrategicRoadmap,
   s10: SlideImageEditorial,
   s11: SlideProcessArchitecture,
   s12: SlideGlobalMap,
   s13: SlideFeaturedQuote,
   s14: SlideExit,
+  blank: SlideBlank,
 };
 
 const DARK_TEMPLATES = new Set(['s4', 's14']);
 
+/**
+ * Renders a single slide at an arbitrary scale, read-only. Shared by the Review
+ * grid (thumbnails) and Present mode (full-screen). The 1920×1080 slide is scaled
+ * from its top-left into a box sized to the scaled dimensions.
+ */
+export function SlideStage({
+  slide,
+  ast,
+  num,
+  scale,
+  logoUrl,
+}: {
+  slide: SlideInstance;
+  ast: DocumentNode | null;
+  num: string;
+  scale: number;
+  logoUrl?: string;
+}) {
+  const Renderer = SLIDE_RENDERERS[slide.templateId];
+  const isDark = DARK_TEMPLATES.has(slide.templateId);
+  return (
+    <div style={{ width: 1920 * scale, height: 1080 * scale, flexShrink: 0, overflow: 'hidden' }}>
+      <div
+        className="wg-doc"
+        style={{
+          width: 1920,
+          height: 1080,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          position: 'relative',
+          overflow: 'hidden',
+          padding: 0,
+          background: isDark ? '#000000' : 'var(--pure-white)',
+          color: isDark ? '#ffffff' : 'var(--neutral-900)',
+        }}
+      >
+        {Renderer && <Renderer ast={ast} content={slide.content} num={num} editing={false} onEdit={() => { }} logoUrl={logoUrl} />}
+        <div className="footer-row" style={{ zIndex: 10 }}>
+          <span>{slide.title}</span>
+          <span>{num}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // PresentationCanvas
 // ---------------------------------------------------------------------------
-export function PresentationCanvas({ ast, deck, editing, onEditSlide }: PresentationCanvasProps) {
+export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
 
   const visibleSlides = deck.slides.filter((s) => !s.hidden);
 
   /**
-   * 16:9 scaling engine — mirrors the original HTML's scaleSlides() logic.
+   * 16:9 scaling engine - mirrors the original HTML's scaleSlides() logic.
    * Fits the 1920px-wide canvas to the available stage width, capped at 0.6
    * to preserve readability at typical viewport sizes.
    * Re-runs whenever the deck changes so new/duplicated slides get scaled.
@@ -1942,7 +2075,7 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide }: Presenta
             data-slide
             className="page"
             style={{
-              /* 1920 × 1080 base — scaled by the engine above */
+              /* 1920 × 1080 base - scaled by the engine above */
               width: 1920,
               height: 1080,
               transformOrigin: 'top center',
@@ -1964,10 +2097,12 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide }: Presenta
                 num={num}
                 editing={editing}
                 onEdit={(updater) => onEditSlide(slide.instanceId, updater)}
+                logoUrl={deck.logoUrl}
+                onLogoChange={onLogoChange}
               />
             )}
 
-            {/* Footer row — preserved from original shell */}
+            {/* Footer row - preserved from original shell */}
             <div className="footer-row" style={{ zIndex: 10 }}>
               <span>{slide.title}</span>
               <span>

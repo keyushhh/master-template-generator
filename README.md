@@ -22,7 +22,7 @@ Master Template turns structured business documents into polished, on-brand pres
 * Duplicate, rename, or delete slides directly from the navigation sidebar.
 
 ### 💾 Export & Sharing
-* **Export PDF:** Generates a true **vector** PDF (real, selectable text) via a local headless-Chrome service that renders the deck at its exact 1920×1080 resolution — one file, one click, no print dialog. Requires the PDF server (see [PDF export server](#pdf-export-server)).
+* **Export PDF:** Generates a true **vector** PDF (real, selectable text) via a local headless-Chrome service that renders the deck at its exact 1920×1080 resolution - one file, one click, no print dialog. Requires the PDF server (see [PDF export server](#pdf-export-server)).
 * **Export PPTX:** Captures slides as high-definition images and compiles them into a standard 16:9 widescreen PowerPoint deck.
 * **Copy Share Link:** Instantly copies the active deck's URL to your clipboard.
 
@@ -74,5 +74,5 @@ npm run dev:all
 The service uses **`puppeteer-core` + your system Chrome** (no bundled Chromium
 download). It auto-detects Google Chrome on macOS/Linux; override the binary
 with the `CHROME_PATH` env var if needed. Other env vars: `PORT` (default
-`3001`) and `APP_URL` (default `http://localhost:5173`) — the frontend origin
+`3001`) and `APP_URL` (default `http://localhost:5173`) - the frontend origin
 the service renders. In dev, Vite proxies `/api` to the service automatically.

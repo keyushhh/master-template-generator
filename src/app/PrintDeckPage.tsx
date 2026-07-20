@@ -20,7 +20,7 @@ declare global {
 /**
  * Chrome-only route the PDF backend loads. Renders just the deck canvas (no
  * sidebar/toolbars) inside `.wg-doc` so the existing `@media print` rules apply,
- * then raises `data-print-ready` once fonts + layout have settled — the signal
+ * then raises `data-print-ready` once fonts + layout have settled - the signal
  * the backend waits on before calling `page.pdf()`.
  */
 function readSession(): PrintSession | null {

@@ -8,7 +8,10 @@ export const ImportService = {
    * Orchestrates the import of a Business Record.
    * Runs envelope validation, tokenizes, and parses content into an AST.
    */
-  async importRecord(content: string, filename: string): Promise<ValidationResult> {
+  async importRecord(rawContent: string, filename: string): Promise<ValidationResult> {
+    // Normalize away em dashes (and en dashes) on the way in, so no uploaded or
+    // AI-generated markdown can ever put one on a slide. Replaced with a hyphen.
+    const content = rawContent.replace(/[\u2013\u2014]/g, '-');
     return new Promise((resolve) => {
       // Simulate light parser latency for premium UI states (e.g., validations/checklists)
       setTimeout(() => {

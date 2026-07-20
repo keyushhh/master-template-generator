@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { CONVERSION_PROMPT } from '../business-record/conversionPrompt';
 import { ImportService } from '../business-record/ImportService';
+import { SAMPLE_DECKS } from '../business-record/sampleDecks';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { ValidationResult } from '../business-record/parser/types';
 
@@ -10,13 +11,14 @@ interface SourceMaterialModalProps {
   onDocumentParsed: (ast: DocumentNode | null) => void;
   /** Import a source AND build the deck in one step (so Import & Load = Generate). */
   onImport: (ast: DocumentNode) => void;
-  /** True when a Business Record is currently loaded — enables "Clear source". */
+  /** True when a Business Record is currently loaded - enables "Clear source". */
   hasSource: boolean;
 }
 
-type Tab = 'prompt' | 'paste' | 'upload';
+type Tab = 'samples' | 'prompt' | 'paste' | 'upload';
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: 'samples', label: 'Samples' },
   { id: 'prompt', label: 'Conversion Prompt' },
   { id: 'paste', label: 'Paste .md' },
   { id: 'upload', label: 'Upload .md' },
@@ -40,7 +42,7 @@ function stripCodeFence(text: string): string {
  * One home for getting content into the generator. Three tabs:
  *  - Conversion Prompt: copy the claude.ai prompt that turns a call transcript into a
  *    Business Record, then jump to Paste.
- *  - Paste .md: drop Claude's markdown straight in — no file needed.
+ *  - Paste .md: drop Claude's markdown straight in - no file needed.
  *  - Upload .md: pick or drag a .md file.
  */
 export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport, hasSource }: SourceMaterialModalProps) {
@@ -55,7 +57,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   // Reset transient state each time the modal opens.
   useEffect(() => {
     if (open) {
-      setTab('prompt');
+      setTab('samples');
       setCopied(false);
       setError(null);
     }
@@ -195,12 +197,38 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
+          {tab === 'samples' && (
+            <div className="flex flex-col gap-3">
+              <p className="text-[12.5px] text-neutral-600 leading-relaxed">
+                Start from a ready-made deck instead of a blank page. Loading one builds the deck immediately — then edit anything.
+              </p>
+              <div className="flex flex-col gap-2.5">
+                {SAMPLE_DECKS.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => importText(s.markdown, s.name)}
+                    disabled={isValidating}
+                    className="text-left flex items-start justify-between gap-4 p-4 border border-neutral-200 hover:border-neutral-900 hover:bg-neutral-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="flex flex-col gap-1 min-w-0">
+                      <span className="text-[14px] font-bold text-neutral-900">{s.name}</span>
+                      <span className="text-[12px] text-neutral-500 leading-relaxed">{s.description}</span>
+                    </span>
+                    <span className="shrink-0 mt-0.5 text-neutral-400">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {tab === 'prompt' && (
             <div className="flex flex-col gap-3">
               <ol className="flex flex-col gap-1.5 text-[12.5px] text-neutral-600 leading-relaxed list-decimal pl-4">
                 <li>Copy this prompt into a <span className="font-semibold text-neutral-900">new</span> chat at <span className="font-semibold text-neutral-900">claude.ai</span>.</li>
                 <li>Paste your raw call transcript at the bottom, where it says <span className="font-mono text-[11px] text-neutral-900">TRANSCRIPT:</span></li>
-                <li>Claude replies with a code block — hit its <span className="font-semibold text-neutral-900">Copy</span> button, then come back to the <span className="font-semibold text-neutral-900">Paste .md</span> tab.</li>
+                <li>Claude replies with a code block - hit its <span className="font-semibold text-neutral-900">Copy</span> button, then come back to the <span className="font-semibold text-neutral-900">Paste .md</span> tab.</li>
               </ol>
               <textarea
                 id="sm-prompt-text"
@@ -226,7 +254,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                   onClick={() => { setTab('paste'); setError(null); }}
                   className="h-[40px] px-4 flex items-center gap-1.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
                 >
-                  I’ve copied it — Paste result
+                  I’ve copied it - Paste result
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
                 </button>
               </div>
@@ -236,7 +264,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
           {tab === 'paste' && (
             <div className="flex flex-col gap-3">
               <p className="text-[12.5px] text-neutral-600 leading-relaxed">
-                Paste the Business Record markdown Claude gave you. A leading <span className="font-mono text-[11px]">```markdown</span> fence is fine — it’s stripped automatically.
+                Paste the Business Record markdown Claude gave you. A leading <span className="font-mono text-[11px]">```markdown</span> fence is fine - it’s stripped automatically.
               </p>
               <textarea
                 value={pasteText}

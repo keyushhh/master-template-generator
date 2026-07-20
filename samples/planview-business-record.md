@@ -10,7 +10,7 @@ tagline: Activating the PlanView partner ecosystem across APAC through structure
 
 ## Executive Summary
 
-Events across APAC are point-in-time and consume limited credits, while the PlanView partner ecosystem remains an untapped amplification channel. This proposal shifts investment toward a partner advocacy campaign: partner-specific content, mapped per organisation, shared by partner employees to their own networks — with events retained as an ad-hoc add-on.
+Events across APAC are point-in-time and consume limited credits, while the PlanView partner ecosystem remains an untapped amplification channel. This proposal shifts investment toward a partner advocacy campaign: partner-specific content, mapped per organisation, shared by partner employees to their own networks - with events retained as an ad-hoc add-on.
 
 - A comparable Veeam partner-network campaign generated 2M potential reach in seven days.
 
@@ -20,9 +20,9 @@ Leveraging the partner ecosystem to carry the PlanView narrative into every ICP 
 
 ## Context
 
-Today, APAC marketing runs a small events calendar — two confirmed Australian events, one tentative Middle East slot — and internal employee advocacy is already covered company-wide by Oktopost. Reach depends on point-in-time moments and a stretched three-person regional team.
+Today, APAC marketing runs a small events calendar - two confirmed Australian events, one tentative Middle East slot - and internal employee advocacy is already covered company-wide by Oktopost. Reach depends on point-in-time moments and a stretched three-person regional team.
 
-With Wozku partner advocacy, every channel partner becomes a persistent amplification channel. Each partner logs in with their company domain, sees only the PlanView posts created for their organisation, and shares to LinkedIn — tracked on global and per-partner leaderboards.
+With Wozku partner advocacy, every channel partner becomes a persistent amplification channel. Each partner logs in with their company domain, sees only the PlanView posts created for their organisation, and shares to LinkedIn - tracked on global and per-partner leaderboards.
 
 - Two confirmed AU events; Middle East tentative (IDC or GITEX)
 - Internal advocacy owned by Oktopost company-wide
@@ -63,7 +63,7 @@ Campaign momentum compounds across the week as partners join.
 
 ## Process
 
-- step: Import | Upload the partner CSV — names, email domains, and the partner mapping for each organisation.
+- step: Import | Upload the partner CSV - names, email domains, and the partner mapping for each organisation.
 - step: Map | Each partner logs in with their company email and sees only the posts created for them, including embedded PlanView posts, shorts, and podcast assets.
 - step: Amplify | Partners share to LinkedIn; global and per-partner leaderboards track shares, clicks, and engagement, with redirection to the APAC showcase page.
 
@@ -77,11 +77,11 @@ Confirmed and tentative activity across the region.
 
 ## Objectives
 
-Two-fold objective for the APAC showcase page: amplify the PlanView message through partner networks, and grow the follower base of the newly launched APAC LinkedIn showcase page — with post-share redirection enabled so every share drives page follows.
+Two-fold objective for the APAC showcase page: amplify the PlanView message through partner networks, and grow the follower base of the newly launched APAC LinkedIn showcase page - with post-share redirection enabled so every share drives page follows.
 
 ## Quote
 
-The partner ecosystem approach has more legs than events — leveraging the networks of our partners to get the PlanView name out there.
+The partner ecosystem approach has more legs than events - leveraging the networks of our partners to get the PlanView name out there.
 
 - author: Violet Yeo
 - role: Marketing Lead, PlanView APAC

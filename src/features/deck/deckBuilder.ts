@@ -14,7 +14,7 @@ import type {
 } from './types';
 
 // ---------------------------------------------------------------------------
-// Template registry — canonical 14-slide skeleton (order, groups, titles)
+// Template registry - canonical 14-slide skeleton (order, groups, titles)
 // ---------------------------------------------------------------------------
 
 interface TemplateEntry {
@@ -46,7 +46,19 @@ export function mintInstanceId(templateId: string): string {
   return `${templateId}-${uidCounter}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** The pristine master template — all 14 slides, no content, nothing hidden. */
+/** A fresh, empty freeform slide the user can drop anywhere and fill in. */
+export function createBlankSlide(): SlideInstance {
+  return {
+    instanceId: mintInstanceId('blank'),
+    templateId: 'blank',
+    group: 'Custom',
+    title: 'Blank Slide',
+    hidden: false,
+    content: {},
+  };
+}
+
+/** The pristine master template - all 14 slides, no content, nothing hidden. */
 export function createTemplateDeck(): Deck {
   return {
     generated: false,
@@ -158,7 +170,62 @@ function classifySection(section: SectionNode): SectionKind {
 }
 
 // ---------------------------------------------------------------------------
-// Deck builder — Business Record AST → populated Deck
+// Coverage analysis - surfaces what the deck builder did and did NOT capture,
+// so users can catch silently-dropped content before exporting.
+// ---------------------------------------------------------------------------
+
+/** Typed-bullet prefixes each section family understands. Bullets with a
+ *  `prefix:` that isn't in this set for their section are silently ignored by
+ *  the builder — the coverage report flags them as potentially lost data. */
+const TYPED_PREFIXES: Partial<Record<SectionKind, string[]>> = {
+  metrics: ['bar', 'kpi'],
+  comparison: ['row'],
+  roadmap: ['phase'],
+  process: ['step'],
+  regions: ['sector'],
+  monument: ['value', 'unit', 'title'],
+  quote: ['author', 'role'],
+  closing: ['email', 'social', 'web'],
+};
+
+export interface CoverageReport {
+  filled: number;
+  total: number;
+  emptySlides: string[];
+  insightSections: string[];
+  unmatchedBullets: { section: string; text: string }[];
+}
+
+/** Compare the parsed document against the built deck to report coverage gaps. */
+export function analyzeCoverage(ast: DocumentNode, deck: Deck): CoverageReport {
+  const emptySlides = deck.slides.filter((s) => s.hidden).map((s) => s.title);
+  const filled = deck.slides.filter((s) => !s.hidden).length;
+
+  const insightSections: string[] = [];
+  const unmatchedBullets: { section: string; text: string }[] = [];
+
+  for (const section of ast.sections) {
+    const kind = classifySection(section);
+    const heading = section.heading.text.trim();
+    if (kind === 'insight' && heading) insightSections.push(heading);
+
+    const allowed = TYPED_PREFIXES[kind];
+    if (!allowed) continue;
+    for (const bullet of bulletsOf(section)) {
+      const idx = bullet.indexOf(':');
+      if (idx <= 0) continue;
+      const prefix = bullet.slice(0, idx).trim().toLowerCase();
+      if (!allowed.includes(prefix)) {
+        unmatchedBullets.push({ section: heading || '(intro)', text: bullet });
+      }
+    }
+  }
+
+  return { filled, total: deck.slides.length, emptySlides, insightSections, unmatchedBullets };
+}
+
+// ---------------------------------------------------------------------------
+// Deck builder - Business Record AST → populated Deck
 // ---------------------------------------------------------------------------
 
 export function buildDeckFromDocument(ast: DocumentNode): Deck {
@@ -340,7 +407,7 @@ export function buildDeckFromDocument(ast: DocumentNode): Deck {
     slides.push(make('s9', 'Strategic Roadmap', {}, true));
   }
 
-  // --- s10 Image Editorial — every unrecognized section becomes an insight
+  // --- s10 Image Editorial - every unrecognized section becomes an insight
   const insights = take('insight');
   if (insights.length === 0) {
     slides.push(make('s10', 'Image Editorial', {}, true));
@@ -437,5 +504,5 @@ export function buildDeckFromDocument(ast: DocumentNode): Deck {
   }
   indexSlide.content.parts = parts.length ? parts : undefined;
 
-  return { slides, generated: true };
+  return { slides, generated: true, logoUrl: meta.logo };
 }

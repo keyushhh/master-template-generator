@@ -1,11 +1,10 @@
 import html2canvas from 'html2canvas';
 import pptxgen from 'pptxgenjs';
-import type { DocumentNode } from '../business-record/parser/ast';
-import type { Deck } from '../deck/types';
+import { jsPDF } from 'jspdf';
 
 /**
  * html2canvas's CSS parser doesn't understand `color-mix()` (or the `color()`
- * function Chrome normalizes it to) and throws while parsing it — whether it
+ * function Chrome normalizes it to) and throws while parsing it - whether it
  * appears in a stylesheet rule or, as with the slide background glow, inline
  * on the element itself. Rewrite both to plain `rgba()` on html2canvas's
  * *cloned* document right before capture; production styles are untouched.
@@ -38,7 +37,7 @@ function findColorMixCalls(text: string): string[] {
 
 /**
  * Resolves a standalone `color-mix(...)` expression to a concrete color by
- * assigning it to a custom property on a live probe element — `getComputedStyle`
+ * assigning it to a custom property on a live probe element - `getComputedStyle`
  * resolves both `var()` references and the mix itself, just into Chrome's
  * `color(srgb ...)` form, which we then convert to `rgba()`.
  */
@@ -68,14 +67,14 @@ function resolveColorMixForHtml2Canvas(clonedDoc: Document) {
     if (raw) el.setAttribute('style', replaceColorMixInText(clonedDoc, probe, raw));
   });
 
-  // Stylesheet rules (dark-mode/edit-mode chrome) — rewritten in place so any
+  // Stylesheet rules (dark-mode/edit-mode chrome) - rewritten in place so any
   // future rule keeps working even though the slide renderers never use them.
   for (const sheet of Array.from(clonedDoc.styleSheets)) {
     let rules: CSSRuleList;
     try {
       rules = sheet.cssRules;
     } catch {
-      continue; // cross-origin stylesheet (CDN fonts) — inaccessible, and irrelevant here
+      continue; // cross-origin stylesheet (CDN fonts) - inaccessible, and irrelevant here
     }
     if (!rules) continue;
     for (let i = rules.length - 1; i >= 0; i--) {
@@ -95,9 +94,47 @@ function resolveColorMixForHtml2Canvas(clonedDoc: Document) {
   clonedDoc.body.removeChild(probe);
 }
 
+// Slides are rendered on-screen scaled-down (transform: scale) and pulled up with
+// a negative margin by the canvas's fit engine. Capturing that transformed element
+// directly makes html2canvas misplace layers (grid over text, grey strips). So we
+// neutralize the transform, capture at native 1920×1080, then restore.
+const SLIDE_W = 1920;
+const SLIDE_H = 1080;
+
+async function captureSlide(id: string): Promise<HTMLCanvasElement | null> {
+  const el = document.getElementById(id);
+  if (!el) return null;
+
+  const prevTransform = el.style.transform;
+  const prevMargin = el.style.marginBottom;
+  el.style.transform = 'none';
+  el.style.marginBottom = '0px';
+
+  try {
+    return await html2canvas(el, {
+      scale: 2, // 2× for crisp presentation-quality output
+      useCORS: true,
+      logging: false,
+      backgroundColor: null,
+      width: SLIDE_W,
+      height: SLIDE_H,
+      windowWidth: SLIDE_W,
+      windowHeight: SLIDE_H,
+      onclone: resolveColorMixForHtml2Canvas,
+    });
+  } finally {
+    el.style.transform = prevTransform;
+    el.style.marginBottom = prevMargin;
+  }
+}
+
+function sanitize(title: string): string {
+  return title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'presentation';
+}
+
 /**
- * Capture slide DOM elements as high-resolution images and build a PPTX file.
- * Each slide is rendered as a full-bleed background slide inside PPTX.
+ * Capture each slide as a high-resolution image and build a PPTX, one full-bleed
+ * image per slide. Runs entirely client-side (no server needed).
  */
 export async function exportToPPTX(
   slideIds: string[],
@@ -111,84 +148,48 @@ export async function exportToPPTX(
   if (total === 0) return;
 
   for (let i = 0; i < total; i++) {
-    const id = slideIds[i];
-    const element = document.getElementById(id);
-    if (!element) continue;
-
-    if (onProgress) {
-      onProgress(i, total);
-    }
-
-    // Capture the slide at 2x resolution for presentation quality
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: null,
-      onclone: resolveColorMixForHtml2Canvas,
-    });
-
-    const imgData = canvas.toDataURL('image/png');
-    const slide = pptx.addSlide();
-
-    // Fill slide canvas (Standard 16:9 aspect ratio sizing in pptxgenjs is 10 x 5.625 inches)
-    slide.addImage({
-      data: imgData,
+    onProgress?.(i, total);
+    const canvas = await captureSlide(slideIds[i]);
+    if (!canvas) continue;
+    pptx.addSlide().addImage({
+      data: canvas.toDataURL('image/png'),
       x: 0,
       y: 0,
       w: 10,
-      h: 5.625,
+      h: 5.625, // 16:9 in pptxgenjs inches
     });
   }
 
-  if (onProgress) {
-    onProgress(total, total);
-  }
-
-  const sanitizedTitle = deckTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'presentation';
-  await pptx.writeFile({ fileName: `${sanitizedTitle}.pptx` });
+  onProgress?.(total, total);
+  await pptx.writeFile({ fileName: `${sanitize(deckTitle)}.pptx` });
 }
 
 /**
- * Generate a true vector PDF via the local headless-Chrome service and trigger
- * a one-click download. The backend loads the app's `/print` route with the
- * deck injected, then prints it through Chrome's own PDF pipeline (real,
- * selectable text — not a raster capture).
- *
- * Requires the PDF server to be running (see `npm run dev:all`). The `/api`
- * path is proxied to it by the Vite dev server.
+ * Build a PDF client-side: capture each slide and place it full-bleed on a
+ * 1920×1080 landscape page. No server required - works with just `npm run dev`.
  */
 export async function exportToPDF(
-  session: { ast: DocumentNode | null; deck: Deck },
-  title: string
+  slideIds: string[],
+  title: string,
+  onProgress?: (current: number, total: number) => void
 ): Promise<void> {
-  const res = await fetch('/api/export/pdf', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session, title }),
-  });
+  const total = slideIds.length;
+  if (total === 0) return;
 
-  if (!res.ok) {
-    let detail = `${res.status} ${res.statusText}`;
-    try {
-      const body = await res.json();
-      if (body?.error) detail = body.error;
-    } catch {
-      // Non-JSON error body — keep the status line.
-    }
-    throw new Error(detail);
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [SLIDE_W, SLIDE_H] });
+
+  let placed = 0;
+  for (let i = 0; i < total; i++) {
+    onProgress?.(i, total);
+    const canvas = await captureSlide(slideIds[i]);
+    if (!canvas) continue;
+    if (placed > 0) pdf.addPage([SLIDE_W, SLIDE_H], 'landscape');
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, SLIDE_W, SLIDE_H);
+    placed++;
   }
 
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const sanitized = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'presentation';
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${sanitized}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  onProgress?.(total, total);
+  if (placed > 0) pdf.save(`${sanitize(title)}.pdf`);
 }
 
 /**

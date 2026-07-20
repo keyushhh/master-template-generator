@@ -1,5 +1,5 @@
 /**
- * Deck data model — the single source of truth for what the presentation
+ * Deck data model - the single source of truth for what the presentation
  * contains. The 14 slide templates (s1..s14) are renderers; a Deck is an
  * ordered list of SlideInstances, each pointing at a template and carrying
  * the content that fills that template's slots. Every content field is
@@ -9,7 +9,9 @@
 
 export type SlideTemplateId =
   | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7'
-  | 's8' | 's9' | 's10' | 's11' | 's12' | 's13' | 's14';
+  | 's8' | 's9' | 's10' | 's11' | 's12' | 's13' | 's14'
+  /** User-inserted freeform slide (heading + body + optional image). */
+  | 'blank';
 
 export interface IndexPart {
   title: string;
@@ -104,7 +106,7 @@ export interface SlideContent {
   // s12 Global Reach Map
   sectors?: RegionSector[];
 
-  // s10 Image Editorial — uploaded image as a (downscaled) data URL
+  // s10 Image Editorial - uploaded image as a (downscaled) data URL
   imageUrl?: string;
 
   // s13 Featured Quote
@@ -117,7 +119,7 @@ export interface SlideContent {
 }
 
 export interface SlideInstance {
-  /** Unique per instance — duplicating a slide mints a new instanceId while
+  /** Unique per instance - duplicating a slide mints a new instanceId while
    *  keeping the same templateId. Used as the DOM anchor id. */
   instanceId: string;
   templateId: SlideTemplateId;
@@ -135,4 +137,6 @@ export interface Deck {
   slides: SlideInstance[];
   /** True once "Generate Deck" has populated content from a Business Record. */
   generated: boolean;
+  /** Deck-level client logo (data URL or frontmatter URL); editable in edit mode. */
+  logoUrl?: string;
 }

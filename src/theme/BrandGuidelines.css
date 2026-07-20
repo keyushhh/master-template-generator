@@ -1,5 +1,5 @@
 /* ============================================================
-   WOZKU — MASTER TEMPLATE GENERATOR (Scoped Styles)
+   WOZKU - MASTER TEMPLATE GENERATOR (Scoped Styles)
    ============================================================ */
 
 /* This reset must live in @layer base: unlayered styles outrank every
@@ -105,7 +105,7 @@
   .wg-doc .page { padding: 36px 24px; }
 }
 
-/* Upload zone — explicit values to survive the * { padding:0 } reset */
+/* Upload zone - explicit values to survive the * { padding:0 } reset */
 .wg-doc .upload-zone {
   display: flex;
   flex-direction: column;
