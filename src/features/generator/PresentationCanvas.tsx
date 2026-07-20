@@ -10,6 +10,9 @@ interface PresentationCanvasProps {
   onEditSlide: (instanceId: string, updater: (content: SlideContent) => SlideContent) => void;
   /** Set/clear the deck-level client logo (edit mode). */
   onLogoChange?: (dataUrl: string | undefined) => void;
+  /** Enter edit mode (used so a click on an empty blank-slide field can jump
+   *  straight into editing instead of requiring a separate "Edit Content" click). */
+  onRequestEdit?: () => void;
 }
 
 /** Props every slide renderer receives: parsed document (for the logo), the
@@ -24,6 +27,10 @@ interface SlideRenderProps {
   /** Deck-level client logo + its setter (edit mode). */
   logoUrl?: string;
   onLogoChange?: (dataUrl: string | undefined) => void;
+  /** DOM id of this slide's wrapper - lets a renderer target its own fields. */
+  instanceId?: string;
+  /** Enter edit mode from a view-mode click (see SlideBlank). */
+  onRequestEdit?: () => void;
 }
 
 const PLACEHOLDER =
@@ -49,16 +56,30 @@ interface EditableProps {
   onCommit: (value: string) => void;
   /** Allow Enter to create new lines (headings/bodies that support \n). */
   multiline?: boolean;
+  /** Tags the contentEditable span so a caller can find + focus it by
+   *  selector after programmatically entering edit mode (see SlideBlank). */
+  dataField?: string;
+  /** Called when this field is clicked while still in view mode - lets a
+   *  slide jump straight into editing that exact field with one click. */
+  onActivate?: () => void;
 }
 
 /** Renders plain text normally; in edit mode becomes a contentEditable span
  *  that commits on blur. Committing an empty string signals "revert to the
  *  template placeholder" (callers map '' → undefined). */
-function E({ value, editing, onCommit, multiline }: EditableProps) {
-  if (!editing) return <>{value}</>;
+function E({ value, editing, onCommit, multiline, dataField, onActivate }: EditableProps) {
+  if (!editing) {
+    if (!onActivate) return <>{value}</>;
+    return (
+      <span onClick={onActivate} style={{ cursor: 'text' }}>
+        {value}
+      </span>
+    );
+  }
   return (
     <span
       data-editable
+      data-field={dataField}
       contentEditable
       suppressContentEditableWarning
       spellCheck={false}
@@ -1953,18 +1974,52 @@ function BlankLayoutPicker({
   );
 }
 
+type BlankField = 'eyebrow' | 'heading' | 'body';
+
 /** Freeform user slide - editable eyebrow, heading, body, and an optional image,
- *  in one of three layouts the author can switch between while editing. */
-function SlideBlank({ content, num, editing, onEdit }: SlideRenderProps) {
+ *  in one of three layouts the author can switch between while editing.
+ *
+ *  Clicking a field while still in view mode enters edit mode AND focuses
+ *  that exact field in one step - no separate "Edit Content" click needed to
+ *  start typing on a fresh blank slide. */
+function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }: SlideRenderProps) {
   const layout = content.blankLayout ?? 'standard';
   const setLayout = (v: 'standard' | 'two-column' | 'full-bleed') =>
     onEdit((c) => ({ ...c, blankLayout: v }));
+
+  const pendingFocusField = useRef<BlankField | null>(null);
+  useEffect(() => {
+    if (!editing || !instanceId || !pendingFocusField.current) return;
+    const field = pendingFocusField.current;
+    pendingFocusField.current = null;
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`#${instanceId} [data-field="${field}"]`);
+      if (!el) return;
+      el.focus();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    });
+  }, [editing, instanceId]);
+
+  const activate = (field: BlankField) => {
+    if (editing || !onRequestEdit) return undefined;
+    return () => {
+      pendingFocusField.current = field;
+      onRequestEdit();
+    };
+  };
 
   const eyebrow = (
     <EditorialLabel>
       <E
         value={content.eyebrow ?? 'Section'}
         editing={editing}
+        dataField="eyebrow"
+        onActivate={activate('eyebrow')}
         onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
       />
     </EditorialLabel>
@@ -1975,6 +2030,8 @@ function SlideBlank({ content, num, editing, onEdit }: SlideRenderProps) {
         value={content.heading ?? 'Blank Slide.'}
         editing={editing}
         multiline
+        dataField="heading"
+        onActivate={activate('heading')}
         onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
       />
     </h2>
@@ -1985,6 +2042,8 @@ function SlideBlank({ content, num, editing, onEdit }: SlideRenderProps) {
         value={content.body ?? 'Click to add your content…'}
         editing={editing}
         multiline
+        dataField="body"
+        onActivate={activate('body')}
         onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
       />
     </p>
@@ -2140,7 +2199,7 @@ export function SlideStage({
 // ---------------------------------------------------------------------------
 // PresentationCanvas
 // ---------------------------------------------------------------------------
-export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange }: PresentationCanvasProps) {
+export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange, onRequestEdit }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   // Which slide currently holds focus while editing - drives the "you're
   // editing this one" outline so all slides don't look identically active.
@@ -2266,6 +2325,8 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
                 onEdit={(updater) => onEditSlide(slide.instanceId, updater)}
                 logoUrl={deck.logoUrl}
                 onLogoChange={onLogoChange}
+                instanceId={slide.instanceId}
+                onRequestEdit={onRequestEdit}
               />
             )}
 

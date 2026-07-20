@@ -538,6 +538,7 @@ export function MasterTemplatePage() {
         editing={editing}
         onEditSlide={handleEditSlide}
         onLogoChange={(v) => mutateDeck((d) => ({ ...d, logoUrl: v }))}
+        onRequestEdit={handleEnterEdit}
       />
 
       {/* Floating edit-session bar: appears while edit mode is active. */}
