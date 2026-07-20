@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SlideNavList } from './SlideNavList';
-import { UploadPanel } from './UploadPanel';
+import { SourceMaterialModal } from './SourceMaterialModal';
 // Sidebar for presenting the generated slides list and actions
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
@@ -16,6 +16,8 @@ interface GeneratorSidebarProps {
   editing: boolean;
   dirty: boolean;
   onDocumentParsed: (ast: DocumentNode | null) => void;
+  /** Import a source AND build the deck in one step (Import & Load in the modal). */
+  onImport: (ast: DocumentNode) => void;
   onGenerate: () => void;
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
@@ -44,6 +46,7 @@ export function GeneratorSidebar({
   editing,
   dirty,
   onDocumentParsed,
+  onImport,
   onGenerate,
   onToggleHidden,
   onDuplicate,
@@ -51,7 +54,7 @@ export function GeneratorSidebar({
   onRename,
 }: GeneratorSidebarProps) {
   const [shareOpen, setShareOpen] = useState(false);
-  const [generateArmed, setGenerateArmed] = useArmedConfirm();
+  const [sourceOpen, setSourceOpen] = useState(false);
 
   // Export states
   const [isExportingPDF, setIsExportingPDF] = useState(false);
@@ -62,20 +65,6 @@ export function GeneratorSidebar({
 
   // Derive visible slides for export
   const visibleSlideIds = deck.slides.filter((s) => !s.hidden).map((s) => s.instanceId);
-
-  // Regenerating replaces an existing generated deck (and any edits) — require
-  // a second confirming click in that case. A pristine template deck is safe.
-  const generateNeedsConfirm = deckGenerated || dirty || editing;
-
-  const handleGenerateClick = () => {
-    if (!hasPresentation) return;
-    if (generateNeedsConfirm && !generateArmed) {
-      setGenerateArmed(true);
-      return;
-    }
-    setGenerateArmed(false);
-    onGenerate();
-  };
 
   const handleExportPDF = async () => {
     if (visibleSlideIds.length === 0) return;
@@ -142,30 +131,41 @@ export function GeneratorSidebar({
 
       {/* Tools Section at the bottom with premium vertical layout rhythm */}
       <div className="sidenav-tools flex flex-col gap-5 p-4 border-t border-neutral-150 bg-neutral-50/50">
-        {/* Source Material label and dropzone container */}
-        <div className="flex flex-col gap-2.5">
-          <div className="tools-label font-mono text-[10px] font-semibold tracking-[0.1em] text-neutral-400 select-none">
-            Source Material
-          </div>
-          <UploadPanel onDocumentParsed={onDocumentParsed} />
-        </div>
+        {/* Single entry point — opens the 3-tab Source Material modal
+            (Conversion Prompt · Paste · Upload). */}
+        <button
+          onClick={() => setSourceOpen(true)}
+          className="w-full flex items-center justify-center gap-2 h-[44px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[14px] bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white transition-colors cursor-pointer"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+          Source Material
+          {hasPresentation && (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+          )}
+        </button>
 
         {/* CTA Actions container */}
         <div className="flex flex-col gap-2">
-          {/* Primary CTA: Generate Deck — enabled once a Business Record parses.
-              Regeneration over an existing deck requires a confirming click. */}
+          {/* Generate Deck — "Import & Load" in the Source Material modal now builds
+              the deck automatically, so this is only the fallback for a source that
+              was loaded but not yet built. Once a deck exists it locks to a done
+              state to prevent accidental re-generation (which would discard edits).
+              To rebuild, use Reset then Source Material again. */}
           <button
-            disabled={!hasPresentation}
-            onClick={handleGenerateClick}
-            className={`w-full flex items-center justify-center gap-2.5 border-none h-[44px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[14px] transition-colors ${
+            disabled={!hasPresentation || deckGenerated}
+            onClick={() => hasPresentation && !deckGenerated && onGenerate()}
+            className={`w-full flex items-center justify-center gap-2 h-[44px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[14px] transition-colors ${
               !hasPresentation
-                ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
-                : generateArmed
-                  ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
-                  : 'bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white cursor-pointer'
+                ? 'border-none bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                : deckGenerated
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 cursor-default'
+                  : 'border-none bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white cursor-pointer'
             }`}
           >
-            {generateArmed ? 'Replace Current Deck?' : 'Generate Deck'}
+            {deckGenerated && (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            )}
+            {deckGenerated ? 'Deck Generated' : 'Generate Deck'}
           </button>
 
           {/* Share dropdown trigger */}
@@ -228,6 +228,14 @@ export function GeneratorSidebar({
           )}
         </div>
       </div>
+
+      <SourceMaterialModal
+        open={sourceOpen}
+        onClose={() => setSourceOpen(false)}
+        onDocumentParsed={onDocumentParsed}
+        onImport={onImport}
+        hasSource={hasPresentation}
+      />
     </aside>
   );
 }

@@ -105,10 +105,21 @@ export function MasterTemplatePage() {
     setDirty(false);
   }, [ast]);
 
+  /** Import path: set the source AND build the deck in one step, so "Import & Load"
+   *  in the Source Material modal doubles as Generate (no separate click needed).
+   *  Uses the freshly parsed AST directly rather than waiting on `ast` state. */
+  const handleImportAndGenerate = useCallback((imported: DocumentNode) => {
+    setAst(imported);
+    setDeck(buildDeckFromDocument(imported));
+    setDraft(null);
+    setDirty(false);
+  }, []);
+
   const handleReset = useCallback(() => {
     setDeck(createTemplateDeck());
     setDraft(null);
     setDirty(false);
+    setAst(null); // unload the source too, so Source Material drops its loaded state
   }, []);
 
   const handleEnterEdit = useCallback(() => {
@@ -210,6 +221,7 @@ export function MasterTemplatePage() {
         editing={editing}
         dirty={dirty}
         onDocumentParsed={setAst}
+        onImport={handleImportAndGenerate}
         onGenerate={handleGenerate}
         onToggleHidden={handleToggleHidden}
         onDuplicate={handleDuplicate}
@@ -296,7 +308,7 @@ export function MasterTemplatePage() {
           style={{
             position: 'fixed',
             bottom: 28,
-            left: 'calc(50% + 118px)', // visually centred over the canvas (236px sidenav)
+            left: 'calc(50% + 150px)', // visually centred over the canvas (half of --sidenav-w: 300px)
             transform: 'translateX(-50%)',
             display: 'flex',
             alignItems: 'center',

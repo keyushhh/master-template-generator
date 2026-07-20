@@ -83,6 +83,141 @@ function E({ value, editing, onCommit, multiline }: EditableProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Media-editing primitives — all affordances render only in edit mode, so the
+// exported (view-mode) DOM captured by html2canvas / print stays clean.
+// Sized in the slide's native 1920px coordinate space (scaled with the slide).
+// ---------------------------------------------------------------------------
+
+/** Downscale an uploaded image to a JPEG data URL so decks stay light in
+ *  localStorage and on export. Falls back to the raw data URL if canvas fails. */
+async function fileToDataUrl(file: File, maxDim = 1600): Promise<string> {
+  const raw = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = () => rej(new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => {
+      img.onload = res;
+      img.onerror = rej;
+      img.src = raw;
+    });
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return raw;
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', 0.85);
+  } catch {
+    return raw;
+  }
+}
+
+/** Pill button to append an item to a list (a bar, KPI, row, phase, …). */
+function AddBtn({ label, onClick, style }: { label: string; onClick: () => void; style?: React.CSSProperties }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 10,
+        height: 52, padding: '0 24px',
+        fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600,
+        letterSpacing: '0.06em', textTransform: 'uppercase',
+        color: 'var(--indigo-600)', background: 'var(--indigo-50)',
+        border: '1.5px dashed var(--indigo-400)', cursor: 'pointer',
+        borderRadius: 'var(--radius-sharp)', ...style,
+      }}
+    >
+      <span style={{ fontSize: 26, lineHeight: 1 }}>+</span> {label}
+    </button>
+  );
+}
+
+/** Circular remove control shown on each editable list item. */
+function RemoveBtn({ onClick, style }: { onClick: () => void; style?: React.CSSProperties }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Remove"
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 40, height: 40, flexShrink: 0, padding: 0,
+        background: '#fff', color: '#dc2626',
+        border: '1.5px solid #fecaca', cursor: 'pointer',
+        borderRadius: '50%', fontSize: 30, lineHeight: 1, fontWeight: 400,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.14)', ...style,
+      }}
+    >
+      ×
+    </button>
+  );
+}
+
+/** Image slot: renders the image (or placeholder) in both modes so it captures
+ *  cleanly, and overlays Upload / Replace / Remove controls in edit mode. */
+function ImageSlot({ src, editing, onChange, placeholder, style }: {
+  src?: string;
+  editing: boolean;
+  onChange: (dataUrl: string | undefined) => void;
+  placeholder?: string;
+  style?: React.CSSProperties;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      try { onChange(await fileToDataUrl(f)); } catch { /* ignore bad file */ }
+    }
+    e.target.value = '';
+  };
+  const btn: React.CSSProperties = {
+    height: 52, padding: '0 22px', fontSize: 18, fontWeight: 700,
+    border: 'none', cursor: 'pointer', borderRadius: 'var(--radius-sharp)', color: '#fff',
+  };
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', ...style }}>
+      {src ? (
+        <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      ) : (
+        <div
+          onClick={() => editing && inputRef.current?.click()}
+          style={{
+            width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--neutral-100)',
+            border: editing ? '3px dashed var(--neutral-300)' : 'none',
+            cursor: editing ? 'pointer' : 'default',
+            fontFamily: 'var(--font-mono)', fontSize: 20, color: 'var(--neutral-400)',
+            textTransform: 'uppercase', letterSpacing: '0.12em', textAlign: 'center', padding: 40,
+          }}
+        >
+          {editing ? (placeholder ?? 'Click to add image') : (placeholder ?? 'Image Asset Placeholder')}
+        </div>
+      )}
+
+      {editing && (
+        <div style={{ position: 'absolute', top: 24, right: 24, display: 'flex', gap: 12, zIndex: 20 }}>
+          <button onClick={() => inputRef.current?.click()} style={{ ...btn, background: 'rgba(0,0,0,0.78)' }}>
+            {src ? 'Replace' : 'Upload'}
+          </button>
+          {src && (
+            <button onClick={() => onChange(undefined)} style={{ ...btn, background: 'rgba(220,38,38,0.92)' }}>
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" onChange={onFile} style={{ display: 'none' }} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Shared micro-components (slide-internal only, not exported)
 // ---------------------------------------------------------------------------
 
@@ -261,6 +396,14 @@ function Logo({ ast, style }: { ast: DocumentNode | null; style?: React.CSSPrope
 
 function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
   const lines = content.headingLines ?? ['Master Primary', 'Heading', 'Variable.'];
+  // Auto-fit the hero: shrink the font and tighten the top padding for longer
+  // titles so the headline never overflows the fixed 1080px slide and keeps a
+  // clean bottom gap. Short titles keep the full 180px display size.
+  const longestLine = Math.max(...lines.map((l) => l.length), 1);
+  const heroFont = Math.round(
+    Math.max(72, Math.min(180, 1640 / (longestLine * 0.6), 620 / (lines.length * 0.95)))
+  );
+  const heroTopPad = lines.length >= 4 ? 160 : lines.length === 3 ? 210 : 280;
   return (
     <>
       <SlideGrid />
@@ -281,8 +424,8 @@ function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
           />
         }
       />
-      {/* Shifted padding-top from 380px to 280px to prevent bottom edge vertical clipping of placeholder/footer text */}
-      <div style={{ padding: '280px 140px', position: 'relative', zIndex: 10 }}>
+      {/* Top padding adapts to the number of hero lines so long titles fit cleanly. */}
+      <div style={{ padding: `${heroTopPad}px 140px`, position: 'relative', zIndex: 10 }}>
         <EditorialLabel>
           <E
             value={content.eyebrow ?? 'Presentation Subtitle'}
@@ -293,7 +436,7 @@ function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
         <h1
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 180,
+            fontSize: heroFont,
             fontWeight: 700,
             color: 'var(--neutral-900)',
             whiteSpace: 'pre-line',
@@ -833,16 +976,23 @@ const DEFAULT_KPIS = [
 function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderProps) {
   const bars = content.bars ?? DEFAULT_BARS;
   const kpis = content.kpis ?? DEFAULT_KPIS;
-  const editBar = (i: number, label: string) =>
-    onEdit((c) => {
-      const arr = (c.bars ?? DEFAULT_BARS).map((b, j) => (j === i ? { ...b, label: label || b.label } : b));
-      return { ...c, bars: arr };
-    });
+  const patchBar = (i: number, patch: Partial<(typeof bars)[number]>) =>
+    onEdit((c) => ({ ...c, bars: (c.bars ?? DEFAULT_BARS).map((b, j) => (j === i ? { ...b, ...patch } : b)) }));
+  const editBar = (i: number, label: string) => patchBar(i, { label: label || bars[i].label });
+  const setBarPct = (i: number, v: string) =>
+    patchBar(i, { pct: Math.max(0, Math.min(100, Math.round(parseFloat(v) || 0))) });
+  const toggleBarActive = (i: number) =>
+    onEdit((c) => ({ ...c, bars: (c.bars ?? DEFAULT_BARS).map((b, j) => ({ ...b, active: j === i ? !b.active : b.active })) }));
+  const addBar = () =>
+    onEdit((c) => ({ ...c, bars: [...(c.bars ?? DEFAULT_BARS), { label: 'New', pct: 50, active: false }] }));
+  const removeBar = (i: number) =>
+    onEdit((c) => ({ ...c, bars: (c.bars ?? DEFAULT_BARS).filter((_, j) => j !== i) }));
   const editKpi = (i: number, patch: Partial<(typeof kpis)[number]>) =>
-    onEdit((c) => {
-      const arr = (c.kpis ?? DEFAULT_KPIS).map((k, j) => (j === i ? { ...k, ...patch } : k));
-      return { ...c, kpis: arr };
-    });
+    onEdit((c) => ({ ...c, kpis: (c.kpis ?? DEFAULT_KPIS).map((k, j) => (j === i ? { ...k, ...patch } : k)) }));
+  const addKpi = () =>
+    onEdit((c) => ({ ...c, kpis: [...(c.kpis ?? DEFAULT_KPIS), { label: 'New Metric', value: '000' }] }));
+  const removeKpi = (i: number) =>
+    onEdit((c) => ({ ...c, kpis: (c.kpis ?? DEFAULT_KPIS).filter((_, j) => j !== i) }));
   return (
     <>
       <SlideGrid />
@@ -901,6 +1051,37 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
             </div>
           ))}
         </div>
+        {/* Per-bar edit controls (value, highlight, remove), aligned under each bar. */}
+        {editing && (
+          <div style={{ display: 'flex', gap: 20, marginTop: 18 }}>
+            {bars.map((b, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono)', fontSize: 22, color: 'var(--neutral-900)' }}>
+                  <E value={String(b.pct)} editing onCommit={(v) => setBarPct(i, v)} />%
+                </div>
+                <button
+                  onClick={() => toggleBarActive(i)}
+                  style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 13, padding: '6px 12px', cursor: 'pointer',
+                    textTransform: 'uppercase', letterSpacing: '0.08em',
+                    background: b.active ? 'var(--indigo-500)' : '#fff',
+                    color: b.active ? '#fff' : 'var(--neutral-500)',
+                    border: `1px solid ${b.active ? 'var(--indigo-500)' : 'var(--neutral-300)'}`,
+                    borderRadius: 'var(--radius-sharp)',
+                  }}
+                >
+                  {b.active ? 'Highlighted' : 'Highlight'}
+                </button>
+                <RemoveBtn onClick={() => removeBar(i)} />
+              </div>
+            ))}
+          </div>
+        )}
+        {editing && (
+          <div style={{ marginTop: 22 }}>
+            <AddBtn label="Add bar" onClick={addBar} />
+          </div>
+        )}
         <div
           style={{
             display: 'grid',
@@ -910,7 +1091,10 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
           }}
         >
           {kpis.map((k, i) => (
-            <div key={i}>
+            <div key={i} style={{ position: 'relative' }}>
+              {editing && (
+                <RemoveBtn onClick={() => removeKpi(i)} style={{ position: 'absolute', top: -12, right: -12, zIndex: 20 }} />
+              )}
               <EditorialLabel style={{ fontSize: 10 }}>
                 <E
                   value={k.label}
@@ -935,6 +1119,11 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
             </div>
           ))}
         </div>
+        {editing && (
+          <div style={{ marginTop: 40 }}>
+            <AddBtn label="Add KPI" onClick={addKpi} />
+          </div>
+        )}
       </div>
     </>
   );
@@ -954,11 +1143,20 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
       const arr = (c.rows ?? DEFAULT_ROWS).map((r, j) => (j === i ? { ...r, ...patch } : r));
       return { ...c, rows: arr };
     });
+  const addRow = () =>
+    onEdit((c) => ({ ...c, rows: [...(c.rows ?? DEFAULT_ROWS), { dim: 'New Dimension', cur: '—', tgt: '—', delta: '—' }] }));
+  const removeRow = (i: number) =>
+    onEdit((c) => ({ ...c, rows: (c.rows ?? DEFAULT_ROWS).filter((_, j) => j !== i) }));
+  // Scale type + row padding down as rows grow so content stays on-slide and clean.
+  const cellFont = rows.length > 6 ? 18 : rows.length > 4 ? 22 : 26;
+  const cellPadV = rows.length > 6 ? 16 : rows.length > 4 ? 24 : 32;
   const cellStyle: React.CSSProperties = {
-    padding: '35px 0',
+    padding: `${cellPadV}px 36px ${cellPadV}px 0`,
     borderBottom: '1px solid var(--neutral-200)',
-    fontSize: 28,
+    fontSize: cellFont,
+    lineHeight: 1.35,
     color: 'var(--neutral-900)',
+    verticalAlign: 'top',
   };
   return (
     <>
@@ -981,7 +1179,14 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
         </EditorialLabel>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '19%' }} />
+            <col style={{ width: '27%' }} />
+            <col style={{ width: '27%' }} />
+            <col style={{ width: editing ? '21%' : '27%' }} />
+            {editing && <col style={{ width: '6%' }} />}
+          </colgroup>
           <thead>
             <tr>
               {['Analysis Category', 'Current Variable', 'Target Variable', 'Performance Delta'].map(
@@ -990,19 +1195,21 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
                     key={h}
                     style={{
                       textAlign: 'left',
-                      padding: '25px 0',
+                      padding: '0 36px 22px 0',
                       borderBottom: '2px solid var(--neutral-900)',
                       fontFamily: 'var(--font-mono)',
                       fontSize: 13,
                       color: 'var(--neutral-500)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.12em',
+                      verticalAlign: 'bottom',
                     }}
                   >
                     {h}
                   </th>
                 )
               )}
+              {editing && <th style={{ borderBottom: '2px solid var(--neutral-900)' }} />}
             </tr>
           </thead>
           <tbody>
@@ -1020,10 +1227,20 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
                 <td style={{ ...cellStyle, color: 'var(--indigo-600)' }}>
                   <E value={r.delta} editing={editing} onCommit={(v) => editRow(i, { delta: v || r.delta })} />
                 </td>
+                {editing && (
+                  <td style={{ ...cellStyle, textAlign: 'right' }}>
+                    <RemoveBtn onClick={() => removeRow(i)} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
+        {editing && (
+          <div style={{ marginTop: 30 }}>
+            <AddBtn label="Add row" onClick={addRow} />
+          </div>
+        )}
       </div>
     </>
   );
@@ -1038,10 +1255,12 @@ const DEFAULT_PHASES = [
 function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderProps) {
   const phases = content.phases ?? DEFAULT_PHASES;
   const editPhase = (i: number, patch: Partial<(typeof phases)[number]>) =>
-    onEdit((c) => {
-      const arr = (c.phases ?? DEFAULT_PHASES).map((p, j) => (j === i ? { ...p, ...patch } : p));
-      return { ...c, phases: arr };
-    });
+    onEdit((c) => ({ ...c, phases: (c.phases ?? DEFAULT_PHASES).map((p, j) => (j === i ? { ...p, ...patch } : p)) }));
+  const toggleDone = (i: number) => editPhase(i, { completed: !phases[i].completed });
+  const addPhase = () =>
+    onEdit((c) => ({ ...c, phases: [...(c.phases ?? DEFAULT_PHASES), { title: 'New Phase', description: '', completed: false }] }));
+  const removePhase = (i: number) =>
+    onEdit((c) => ({ ...c, phases: (c.phases ?? DEFAULT_PHASES).filter((_, j) => j !== i) }));
   return (
     <>
       <SlideGrid />
@@ -1094,7 +1313,12 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             {phases.map((p, i) => (
               <div key={i} style={{ width: 320, position: 'relative' }}>
+                {editing && (
+                  <RemoveBtn onClick={() => removePhase(i)} style={{ position: 'absolute', top: -8, right: 0, zIndex: 20 }} />
+                )}
                 <div
+                  onClick={() => editing && toggleDone(i)}
+                  title={editing ? 'Toggle completed' : undefined}
                   style={{
                     width: 24,
                     height: 24,
@@ -1102,6 +1326,8 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
                     borderRadius: '50%',
                     position: 'relative',
                     zIndex: 2,
+                    cursor: editing ? 'pointer' : 'default',
+                    boxShadow: editing ? '0 0 0 4px rgba(0,0,0,0.06)' : 'none',
                   }}
                 />
                 <div style={{ marginTop: 30 }}>
@@ -1136,6 +1362,11 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
             ))}
           </div>
         </div>
+        {editing && (
+          <div style={{ marginTop: 60 }}>
+            <AddBtn label="Add phase" onClick={addPhase} />
+          </div>
+        )}
       </div>
     </>
   );
@@ -1185,32 +1416,20 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
             />
           </p>
         </div>
-        <div
-          style={{
-            flex: 1.2,
-            background: 'var(--neutral-100)',
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 13,
-              color: 'var(--neutral-400)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-            }}
-          >
-            Image Asset Placeholder
-          </span>
+        <div style={{ flex: 1.2, position: 'relative' }}>
+          <ImageSlot
+            src={content.imageUrl}
+            editing={editing}
+            onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+          />
+          {/* Left-edge blend into the text column (kept above the image, below edit controls). */}
           <div
             style={{
               position: 'absolute',
               inset: 0,
               background: 'linear-gradient(90deg, #fff 0%, transparent 20%)',
+              pointerEvents: 'none',
+              zIndex: 15,
             }}
           />
         </div>
@@ -1228,10 +1447,11 @@ const DEFAULT_STEPS = [
 function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRenderProps) {
   const steps = content.steps ?? DEFAULT_STEPS;
   const editStep = (i: number, patch: Partial<(typeof steps)[number]>) =>
-    onEdit((c) => {
-      const arr = (c.steps ?? DEFAULT_STEPS).map((s, j) => (j === i ? { ...s, ...patch } : s));
-      return { ...c, steps: arr };
-    });
+    onEdit((c) => ({ ...c, steps: (c.steps ?? DEFAULT_STEPS).map((s, j) => (j === i ? { ...s, ...patch } : s)) }));
+  const addStep = () =>
+    onEdit((c) => ({ ...c, steps: [...(c.steps ?? DEFAULT_STEPS), { title: 'New Step', description: '' }] }));
+  const removeStep = (i: number) =>
+    onEdit((c) => ({ ...c, steps: (c.steps ?? DEFAULT_STEPS).filter((_, j) => j !== i) }));
   return (
     <>
       <SlideGrid />
@@ -1277,8 +1497,12 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
                 border: `1px solid ${i === 1 ? 'var(--indigo-500)' : 'var(--neutral-200)'}`,
                 padding: 40,
                 marginTop: i * 40,
+                position: 'relative',
               }}
             >
+              {editing && (
+                <RemoveBtn onClick={() => removeStep(i)} style={{ position: 'absolute', top: 12, right: 12, zIndex: 20 }} />
+              )}
               <div
                 style={{
                   fontFamily: 'var(--font-mono)',
@@ -1315,6 +1539,11 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
             </div>
           ))}
         </div>
+        {editing && (
+          <div style={{ marginTop: 50 }}>
+            <AddBtn label="Add step" onClick={addStep} />
+          </div>
+        )}
       </div>
     </>
   );
@@ -1330,10 +1559,11 @@ const DEFAULT_SECTORS = [
 function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
   const sectors = content.sectors ?? DEFAULT_SECTORS;
   const editSector = (i: number, patch: Partial<(typeof sectors)[number]>) =>
-    onEdit((c) => {
-      const arr = (c.sectors ?? DEFAULT_SECTORS).map((s, j) => (j === i ? { ...s, ...patch } : s));
-      return { ...c, sectors: arr };
-    });
+    onEdit((c) => ({ ...c, sectors: (c.sectors ?? DEFAULT_SECTORS).map((s, j) => (j === i ? { ...s, ...patch } : s)) }));
+  const addSector = () =>
+    onEdit((c) => ({ ...c, sectors: [...(c.sectors ?? DEFAULT_SECTORS), { label: 'New Region', value: '0.0M Metric' }] }));
+  const removeSector = (i: number) =>
+    onEdit((c) => ({ ...c, sectors: (c.sectors ?? DEFAULT_SECTORS).filter((_, j) => j !== i) }));
   return (
     <>
       <SlideGrid />
@@ -1376,44 +1606,40 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
           style={{
             flex: 1,
             position: 'relative',
-            background: 'var(--neutral-100)',
             border: '1px solid var(--neutral-200)',
             overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
           }}
         >
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 13,
-              color: 'var(--neutral-400)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-            }}
-          >
-            Geographic Visualisation Placeholder
-          </span>
-          {/* accent hotspots */}
-          {[{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
-            <div
-              key={i}
-              style={{
-                position: 'absolute',
-                ...pos,
-                width: 20,
-                height: 20,
-                background: 'var(--indigo-500)',
-                borderRadius: '50%',
-                boxShadow: '0 0 40px var(--indigo-500)',
-              }}
-            />
-          ))}
+          <ImageSlot
+            src={content.imageUrl}
+            editing={editing}
+            onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+            placeholder={editing ? 'Click to add a map / visual' : 'Geographic Visualisation Placeholder'}
+          />
+          {/* accent hotspots — only over the empty placeholder, not a real image */}
+          {!content.imageUrl &&
+            [{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  ...pos,
+                  width: 20,
+                  height: 20,
+                  background: 'var(--indigo-500)',
+                  borderRadius: '50%',
+                  boxShadow: '0 0 40px var(--indigo-500)',
+                  pointerEvents: 'none',
+                }}
+              />
+            ))}
         </div>
-        <div style={{ display: 'flex', gap: 100, marginTop: 40 }}>
+        <div style={{ display: 'flex', gap: 100, marginTop: 40, alignItems: 'flex-start' }}>
           {sectors.map((s, i) => (
-            <div key={i}>
+            <div key={i} style={{ position: 'relative' }}>
+              {editing && (
+                <RemoveBtn onClick={() => removeSector(i)} style={{ position: 'absolute', top: -12, right: -40, zIndex: 20 }} />
+              )}
               <EditorialLabel style={{ fontSize: 10 }}>
                 <E
                   value={s.label}
@@ -1437,6 +1663,7 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
               </h4>
             </div>
           ))}
+          {editing && <AddBtn label="Add region" onClick={addSector} style={{ height: 44 }} />}
         </div>
       </div>
     </>

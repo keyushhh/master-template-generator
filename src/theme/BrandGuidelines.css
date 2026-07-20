@@ -19,6 +19,9 @@
   --radius-xs: 6px;
   --radius-sharp: 0px;
 
+  /* Width of the fixed left panel; the deck reserves this space then centers. */
+  --sidenav-w: 300px;
+
   --shadow-soft: 0 1px 2px rgba(15,23,20,0.04), 0 12px 32px -12px rgba(15,23,20,0.10);
   --shadow-lift: 0 2px 4px rgba(15,23,20,0.05), 0 24px 48px -16px rgba(15,23,20,0.16);
 
@@ -31,6 +34,8 @@
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   display: block;
+  /* Reserve the fixed sidebar's width so .book can center in the remaining space. */
+  padding-left: var(--sidenav-w);
 }
 
 /* ---------- Theme preset scales ---------- */
@@ -43,7 +48,7 @@
 .wg-doc .sidenav {
   position: fixed;
   top: 0; left: 0; bottom: 0;
-  width: 236px;
+  width: var(--sidenav-w);
   background: var(--pure-white);
   border-right: 1px solid var(--neutral-150);
   display: flex;
@@ -64,7 +69,9 @@
 
 
 /* ================= MAIN / PAGES ================= */
-.wg-doc .book { margin-left: 236px; padding: 40px 40px 120px; max-width: 1180px; }
+/* .wg-doc reserves the sidebar via padding-left; auto margins center the deck
+   in the remaining viewport so it isn't left-pinned with dead space on the right. */
+.wg-doc .book { margin: 0 auto; padding: 40px 40px 120px; max-width: 1200px; }
 .wg-doc .page {
   background: var(--pure-white);
   border-radius: 0;
@@ -92,8 +99,9 @@
 }
 
 @media (max-width: 720px) {
+  .wg-doc { padding-left: 0; }
   .wg-doc .sidenav { display: none; }
-  .wg-doc .book { margin-left: 0; padding: 24px 16px 80px; }
+  .wg-doc .book { margin: 0; padding: 24px 16px 80px; }
   .wg-doc .page { padding: 36px 24px; }
 }
 

@@ -104,6 +104,9 @@ export interface SlideContent {
   // s12 Global Reach Map
   sectors?: RegionSector[];
 
+  // s10 Image Editorial — uploaded image as a (downscaled) data URL
+  imageUrl?: string;
+
   // s13 Featured Quote
   quote?: string;
   author?: string;
