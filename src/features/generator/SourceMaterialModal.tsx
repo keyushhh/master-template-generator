@@ -52,6 +52,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [rawTranscriptHint, setRawTranscriptHint] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset transient state each time the modal opens.
@@ -60,6 +61,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
       setTab('samples');
       setCopied(false);
       setError(null);
+      setRawTranscriptHint(false);
     }
   }, [open]);
 
@@ -86,6 +88,14 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   /** Shared import path for both paste and file. On success, hand up the AST and close. */
   const importText = async (text: string, name: string) => {
     setError(null);
+    setRawTranscriptHint(false);
+    // A Business Record always opens with a `---` YAML frontmatter fence. If it
+    // doesn't, this is very likely a raw transcript that hasn't been through
+    // the Conversion Prompt yet - say so instead of surfacing a parser error.
+    if (!text.trim().startsWith('---')) {
+      setRawTranscriptHint(true);
+      return;
+    }
     setIsValidating(true);
     try {
       const result: ValidationResult = await ImportService.importRecord(text, name);
@@ -113,8 +123,12 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
 
   const processFile = (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'md' && ext !== 'markdown') {
-      setError('Please choose a .md or .markdown file.');
+    if (ext === 'docx' || ext === 'doc') {
+      setError('Word documents aren’t supported. Export the transcript as plain text, then use the Conversion Prompt tab to turn it into a Business Record.');
+      return;
+    }
+    if (ext !== 'md' && ext !== 'markdown' && ext !== 'txt') {
+      setError('Please choose a .md, .markdown, or .txt file.');
       return;
     }
     const reader = new FileReader();
@@ -165,7 +179,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
             {TABS.map((t) => (
               <button
                 key={t.id}
-                onClick={() => { setTab(t.id); setError(null); }}
+                onClick={() => { setTab(t.id); setError(null); setRawTranscriptHint(false); }}
                 className={`flex-1 h-[34px] flex items-center justify-center text-center text-[12.5px] font-bold rounded-[var(--radius-sharp)] transition-colors cursor-pointer ${
                   tab === t.id
                     ? 'bg-neutral-900 text-white'
@@ -251,7 +265,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                   {copied ? 'Copied!' : 'Copy Prompt'}
                 </button>
                 <button
-                  onClick={() => { setTab('paste'); setError(null); }}
+                  onClick={() => { setTab('paste'); setError(null); setRawTranscriptHint(false); }}
                   className="h-[40px] px-4 flex items-center gap-1.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
                 >
                   I’ve copied it - Paste result
@@ -285,7 +299,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
           {tab === 'upload' && (
             <div className="flex flex-col gap-3">
               <p className="text-[12.5px] text-neutral-600 leading-relaxed">
-                Already have a Business Record <span className="font-mono text-[11px]">.md</span> file? Drop it here or browse.
+                Already have a Business Record <span className="font-mono text-[11px]">.md</span> or <span className="font-mono text-[11px]">.txt</span> file? Drop it here or browse.
               </p>
               <div
                 className={`upload-zone rounded-[var(--radius-sharp)] ${isDragging ? ' dragging' : ''}`}
@@ -295,13 +309,27 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
               >
-                <input type="file" ref={fileInputRef} className="hidden" accept=".md,.markdown" onChange={handleFileChange} />
+                <input type="file" ref={fileInputRef} className="hidden" accept=".md,.markdown,.txt" onChange={handleFileChange} />
                 <svg className={`w-6 h-6 mb-3 transition-colors ${isDragging ? 'text-emerald-500' : 'text-neutral-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
                 <div className="text-[13px] font-bold text-neutral-900 mb-1.5">
                   {isValidating ? 'Parsing Document…' : 'Drop or click to upload'}
                 </div>
-                <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-500">Markdown (.md)</div>
+                <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-500">Markdown (.md) or plain text (.txt)</div>
               </div>
+            </div>
+          )}
+
+          {rawTranscriptHint && (
+            <div className="mt-3 p-3 flex flex-col gap-2 bg-amber-50 border border-amber-200 rounded-[var(--radius-sharp)]">
+              <p className="text-[12px] text-amber-800 leading-relaxed">
+                This doesn’t look like a formatted Business Record (no <span className="font-mono text-[11px]">---</span> frontmatter) - it reads more like a raw transcript. Convert it first with the Conversion Prompt, then paste the result here.
+              </p>
+              <button
+                onClick={() => { setTab('prompt'); setRawTranscriptHint(false); }}
+                className="self-start h-[32px] px-3.5 text-[12px] font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
+              >
+                Go to Conversion Prompt
+              </button>
             </div>
           )}
 

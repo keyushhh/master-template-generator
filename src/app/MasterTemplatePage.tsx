@@ -290,6 +290,12 @@ export function MasterTemplatePage() {
         const [moved] = slides.splice(from, 1);
         to = slides.findIndex((s) => s.instanceId === toId); // recompute after removal
         slides.splice(to, 0, moved);
+        // Adopt the group of its new neighbor so the sidebar label reflects
+        // where the slide landed, not the section it originally belonged to.
+        const neighborGroup = slides[to - 1]?.group ?? slides[to + 1]?.group;
+        if (neighborGroup && neighborGroup !== moved.group) {
+          slides[to] = { ...moved, group: neighborGroup };
+        }
         return { ...prev, slides };
       });
     },

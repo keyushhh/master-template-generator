@@ -116,6 +116,9 @@ export interface SlideContent {
 
   // s14 Exit
   contacts?: string[];
+
+  // blank - freeform slide layout choice
+  blankLayout?: 'standard' | 'two-column' | 'full-bleed';
 }
 
 export interface SlideInstance {

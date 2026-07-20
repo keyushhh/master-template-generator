@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, SlideContent, SlideInstance } from '../deck/types';
 
@@ -62,6 +62,7 @@ function E({ value, editing, onCommit, multiline }: EditableProps) {
       contentEditable
       suppressContentEditableWarning
       spellCheck={false}
+      title="Press Esc to revert this field"
       onKeyDown={(e) => {
         if (!multiline && e.key === 'Enter') {
           e.preventDefault();
@@ -1909,53 +1910,157 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
   );
 }
 
-/** Freeform user slide - editable eyebrow, heading, body, and an optional image. */
+const BLANK_LAYOUTS: { id: 'standard' | 'two-column' | 'full-bleed'; label: string }[] = [
+  { id: 'standard', label: 'Standard' },
+  { id: 'two-column', label: 'Two-Column' },
+  { id: 'full-bleed', label: 'Full-Bleed' },
+];
+
+/** Layout picker shown only in edit mode - lets a custom slide choose its shape. */
+function BlankLayoutPicker({
+  value,
+  onChange,
+}: {
+  value: 'standard' | 'two-column' | 'full-bleed';
+  onChange: (v: 'standard' | 'two-column' | 'full-bleed') => void;
+}) {
+  return (
+    <div style={{ position: 'absolute', top: 60, right: 80, zIndex: 20, display: 'flex', gap: 6 }}>
+      {BLANK_LAYOUTS.map((l) => (
+        <button
+          key={l.id}
+          onClick={() => onChange(l.id)}
+          style={{
+            height: 36,
+            padding: '0 16px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            border: '1px solid',
+            borderColor: value === l.id ? 'var(--emerald-500)' : 'var(--neutral-300)',
+            background: value === l.id ? 'var(--emerald-500)' : '#ffffff',
+            color: value === l.id ? '#ffffff' : 'var(--neutral-600)',
+            cursor: 'pointer',
+            borderRadius: 'var(--radius-sharp)',
+          }}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Freeform user slide - editable eyebrow, heading, body, and an optional image,
+ *  in one of three layouts the author can switch between while editing. */
 function SlideBlank({ content, num, editing, onEdit }: SlideRenderProps) {
+  const layout = content.blankLayout ?? 'standard';
+  const setLayout = (v: 'standard' | 'two-column' | 'full-bleed') =>
+    onEdit((c) => ({ ...c, blankLayout: v }));
+
+  const eyebrow = (
+    <EditorialLabel>
+      <E
+        value={content.eyebrow ?? 'Section'}
+        editing={editing}
+        onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+      />
+    </EditorialLabel>
+  );
+  const heading = (fontSize: number) => (
+    <h2 style={{ ...DISPLAY_HEADING_BASE, fontSize, fontWeight: 600, marginBottom: 40 }}>
+      <E
+        value={content.heading ?? 'Blank Slide.'}
+        editing={editing}
+        multiline
+        onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+      />
+    </h2>
+  );
+  const body = (maxWidth?: number) => (
+    <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth }}>
+      <E
+        value={content.body ?? 'Click to add your content…'}
+        editing={editing}
+        multiline
+        onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
+      />
+    </p>
+  );
+  const image = (placeholder: string, style?: React.CSSProperties) => (
+    <ImageSlot
+      src={content.imageUrl}
+      editing={editing}
+      onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+      placeholder={editing ? placeholder : ''}
+      style={style}
+    />
+  );
+  const hudLabel = (
+    <E
+      value={content.hudLabel ?? 'Custom Slide'}
+      editing={editing}
+      onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+    />
+  );
+
+  if (layout === 'full-bleed') {
+    return (
+      <>
+        <div style={{ position: 'absolute', inset: 0 }}>{image('Click to add a background image', { width: '100%', height: '100%' })}</div>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(0deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.15) 55%, transparent 100%)',
+            zIndex: 5,
+          }}
+        />
+        <HudTop label={<span style={{ color: '#fff' }}>{hudLabel}</span>} num={<span style={{ color: '#fff' }}>{num}</span>} />
+        {editing && <BlankLayoutPicker value={layout} onChange={setLayout} />}
+        <div style={{ position: 'absolute', left: 140, right: 140, bottom: 120, zIndex: 10, color: '#fff' }}>
+          {eyebrow}
+          {heading(72)}
+          {body(1200)}
+        </div>
+      </>
+    );
+  }
+
+  if (layout === 'two-column') {
+    return (
+      <>
+        <SlideGrid />
+        <HudTop label={hudLabel} num={num} />
+        {editing && <BlankLayoutPicker value={layout} onChange={setLayout} />}
+        <div style={{ position: 'absolute', top: 160, bottom: 0, left: 140, right: 0, zIndex: 10, display: 'flex' }}>
+          <div style={{ flex: '0 0 50%', paddingRight: 60, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            {eyebrow}
+            {heading(64)}
+            {body()}
+          </div>
+          <div style={{ flex: '0 0 50%', paddingBottom: 160 }}>
+            {image('Click to add an image')}
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <SlideGrid />
-      <HudTop
-        label={
-          <E
-            value={content.hudLabel ?? 'Custom Slide'}
-            editing={editing}
-            onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
-          />
-        }
-        num={num}
-      />
+      <HudTop label={hudLabel} num={num} />
+      {editing && <BlankLayoutPicker value={layout} onChange={setLayout} />}
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <EditorialLabel>
-          <E
-            value={content.eyebrow ?? 'Section'}
-            editing={editing}
-            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
-          />
-        </EditorialLabel>
-        <h2 style={{ ...DISPLAY_HEADING_BASE, fontSize: 88, fontWeight: 600, color: 'var(--neutral-900)', marginBottom: 40 }}>
-          <E
-            value={content.heading ?? 'Blank Slide.'}
-            editing={editing}
-            multiline
-            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
-          />
-        </h2>
-        <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth: 1200 }}>
-          <E
-            value={content.body ?? 'Click to add your content…'}
-            editing={editing}
-            multiline
-            onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
-          />
-        </p>
+        {eyebrow}
+        <div style={{ color: 'var(--neutral-900)' }}>{heading(88)}</div>
+        {body(1200)}
         {(content.imageUrl || editing) && (
           <div style={{ marginTop: 48, flex: 1, minHeight: 0 }}>
-            <ImageSlot
-              src={content.imageUrl}
-              editing={editing}
-              onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
-              placeholder={editing ? 'Click to add an image (optional)' : ''}
-            />
+            {image('Click to add an image (optional)')}
           </div>
         )}
       </div>
@@ -2037,6 +2142,13 @@ export function SlideStage({
 // ---------------------------------------------------------------------------
 export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
+  // Which slide currently holds focus while editing - drives the "you're
+  // editing this one" outline so all slides don't look identically active.
+  const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editing) setActiveSlideId(null);
+  }, [editing]);
 
   const visibleSlides = deck.slides.filter((s) => !s.hidden);
 
@@ -2088,12 +2200,15 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
         const isDark = DARK_TEMPLATES.has(slide.templateId);
         const num = String(i + 1).padStart(2, '0');
 
+        const isActiveEdit = editing && activeSlideId === slide.instanceId;
+
         return (
           <div
             key={slide.instanceId}
             id={slide.instanceId}
             data-slide
             className="page"
+            onFocus={() => editing && setActiveSlideId(slide.instanceId)}
             style={{
               /* 1920 × 1080 base - scaled by the engine above */
               width: 1920,
@@ -2105,11 +2220,43 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
               background: isDark ? '#000000' : 'var(--pure-white)',
               color: isDark ? '#ffffff' : 'var(--neutral-900)',
               // Standard design system shadow used for all slides instead of custom heavy shadow
-              boxShadow: 'var(--shadow-soft)',
-              // Subtle affordance that the slide is live for editing
-              outline: editing ? '2px solid color-mix(in srgb, var(--emerald-500) 35%, transparent)' : 'none',
+              boxShadow: isActiveEdit
+                ? 'var(--shadow-soft), 0 0 0 4px color-mix(in srgb, var(--emerald-500) 18%, transparent)'
+                : 'var(--shadow-soft)',
+              // Subtle affordance that the slide is live for editing; the
+              // currently-focused slide gets a solid, brighter outline so it's
+              // clear which one your edits are landing on.
+              outline: !editing
+                ? 'none'
+                : isActiveEdit
+                  ? '2px solid var(--emerald-500)'
+                  : '2px solid color-mix(in srgb, var(--emerald-500) 20%, transparent)',
+              transition: 'outline-color .15s ease, box-shadow .15s ease',
             }}
           >
+            {editing && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  zIndex: 20,
+                  padding: '4px 10px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: '#fff',
+                  background: 'var(--emerald-500)',
+                  opacity: isActiveEdit ? 1 : 0,
+                  pointerEvents: 'none',
+                  transition: 'opacity .15s ease',
+                }}
+              >
+                Editing this slide
+              </span>
+            )}
             {Renderer && (
               <Renderer
                 ast={ast}
