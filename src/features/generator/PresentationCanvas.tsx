@@ -1121,45 +1121,47 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
           zIndex: 10,
         }}
       >
-        <EditorialLabel>
-          <E
-            value={content.eyebrow ?? 'Performance Metric'}
-            editing={editing}
-            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
-          />
-          <FitHint editing={editing} shrunk={valueFont < VALUE_MAX || headingFont < HEADING_MAX} />
-        </EditorialLabel>
-        <div
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: valueFont,
-            fontWeight: 700,
-            lineHeight: 0.8,
-            letterSpacing: '-0.07em',
-            display: 'flex',
-            alignItems: 'baseline',
-            color: 'var(--neutral-900)',
-          }}
-        >
-          <E
-            value={valueText}
-            editing={editing}
-            onCommit={(v) => onEdit((c) => ({ ...c, value: v || undefined }))}
-          />
-          <span style={{ color: 'var(--emerald-500)', fontSize: '0.3em', marginLeft: 10 }}>
+        <div style={{ marginTop: -100 }}>
+          <EditorialLabel>
             <E
-              value={content.unit ?? 'M'}
+              value={content.eyebrow ?? 'Performance Metric'}
               editing={editing}
-              onCommit={(v) => onEdit((c) => ({ ...c, unit: v || undefined }))}
+              onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
             />
-          </span>
+            <FitHint editing={editing} shrunk={valueFont < VALUE_MAX || headingFont < HEADING_MAX} />
+          </EditorialLabel>
+          <div
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: valueFont,
+              fontWeight: 700,
+              lineHeight: 0.8,
+              letterSpacing: '-0.07em',
+              display: 'flex',
+              alignItems: 'baseline',
+              color: 'var(--neutral-900)',
+            }}
+          >
+            <E
+              value={valueText}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, value: v || undefined }))}
+            />
+            <span style={{ color: 'var(--emerald-500)', fontSize: '0.3em', marginLeft: 10 }}>
+              <E
+                value={content.unit ?? 'M'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, unit: v || undefined }))}
+              />
+            </span>
+          </div>
         </div>
         <h3
           style={{
             ...DISPLAY_HEADING_BASE,
             fontSize: headingFont,
             fontWeight: 600,
-            marginTop: -20,
+            marginTop: 24,
             color: 'var(--neutral-900)',
           }}
         >
@@ -1169,7 +1171,7 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
         </h3>
-        <p style={{ marginTop: 60, maxWidth: 800, fontSize: bodyFont, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
+        <p style={{ marginTop: 40, maxWidth: 800, fontSize: bodyFont, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
           <E
             value={bodyText}
             editing={editing}
@@ -2703,11 +2705,210 @@ export function SlideStage({
         }}
       >
         {Renderer && <Renderer ast={ast} content={slide.content} num={num} editing={false} onEdit={() => { }} logoUrl={logoUrl} />}
+        <UniversalSlideOverlayImage
+          templateId={slide.templateId}
+          imageUrl={slide.content.imageUrl}
+          editing={false}
+          onRemove={() => {}}
+        />
         <div className="footer-row" style={{ zIndex: 10 }}>
           <span>{slide.title}</span>
           <span>{num}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SlideImageToolbar({
+  editing,
+  isActiveEdit,
+  num,
+  imageUrl,
+  onUpload,
+  onRemove,
+}: {
+  editing: boolean;
+  isActiveEdit: boolean;
+  num: string;
+  imageUrl?: string;
+  onUpload: (dataUrl: string) => void;
+  onRemove: () => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const dataUrl = await fileToDataUrl(file);
+        onUpload(dataUrl);
+      } catch (err) {
+        console.error('Failed to load image file', err);
+      }
+    }
+    e.target.value = '';
+  };
+
+  if (!editing) return null;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 35,
+        padding: '10px 24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        background: 'var(--emerald-500)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+        opacity: isActiveEdit ? 1 : 0,
+        pointerEvents: isActiveEdit ? 'auto' : 'none',
+        transition: 'opacity .15s ease',
+      }}
+    >
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 18,
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: '#fff',
+        }}
+      >
+        Editing Slide {num}
+      </span>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleFile}
+      />
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {imageUrl ? (
+          <>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                background: 'rgba(255, 255, 255, 0.25)',
+                color: '#fff',
+                border: '1px solid rgba(255, 255, 255, 0.4)',
+                padding: '6px 14px',
+                borderRadius: 6,
+                fontWeight: 700,
+                fontSize: 14,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              🖼️ Replace Image
+            </button>
+            <button
+              onClick={onRemove}
+              style={{
+                background: 'rgba(220, 38, 38, 0.9)',
+                color: '#fff',
+                border: 'none',
+                padding: '6px 14px',
+                borderRadius: 6,
+                fontWeight: 700,
+                fontSize: 14,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              ✕ Remove Image
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              background: '#ffffff',
+              color: 'var(--emerald-700)',
+              border: 'none',
+              padding: '6px 16px',
+              borderRadius: 6,
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+            }}
+          >
+            ➕ Add Image to Slide
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UniversalSlideOverlayImage({
+  templateId,
+  imageUrl,
+  editing,
+  onRemove,
+}: {
+  templateId: string;
+  imageUrl?: string;
+  editing: boolean;
+  onRemove: () => void;
+}) {
+  // s10 (Editorial Image), s12 (Global Map), and blank handle their own primary image layouts.
+  if (!imageUrl || ['s10', 's12', 'blank'].includes(templateId)) return null;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 140,
+        right: 120,
+        width: 520,
+        height: 700,
+        borderRadius: 16,
+        overflow: 'hidden',
+        boxShadow: '0 24px 48px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.08)',
+        zIndex: 15,
+        background: '#000',
+      }}
+    >
+      <img src={imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {editing && (
+        <button
+          onClick={onRemove}
+          style={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            background: 'rgba(220, 38, 38, 0.92)',
+            color: '#fff',
+            border: 'none',
+            padding: '8px 14px',
+            borderRadius: 6,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontSize: 13,
+            zIndex: 20,
+          }}
+        >
+          Remove Image
+        </button>
+      )}
     </div>
   );
 }
@@ -2794,13 +2995,9 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
               overflow: 'hidden',
               background: isDark ? '#000000' : 'var(--pure-white)',
               color: isDark ? '#ffffff' : 'var(--neutral-900)',
-              // Standard design system shadow used for all slides instead of custom heavy shadow
               boxShadow: isActiveEdit
                 ? 'var(--shadow-soft), 0 0 0 4px color-mix(in srgb, var(--emerald-500) 18%, transparent)'
                 : 'var(--shadow-soft)',
-              // Subtle affordance that the slide is live for editing; the
-              // currently-focused slide gets a solid, brighter outline so it's
-              // clear which one your edits are landing on.
               outline: !editing
                 ? 'none'
                 : isActiveEdit
@@ -2809,30 +3006,14 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
               transition: 'outline-color .15s ease, box-shadow .15s ease',
             }}
           >
-            {editing && (
-              <span
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  zIndex: 20,
-                  padding: '12px 26px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 22,
-                  fontWeight: 700,
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                  color: '#fff',
-                  background: 'var(--emerald-500)',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
-                  opacity: isActiveEdit ? 1 : 0,
-                  pointerEvents: 'none',
-                  transition: 'opacity .15s ease',
-                }}
-              >
-                Editing this slide
-              </span>
-            )}
+            <SlideImageToolbar
+              editing={editing}
+              isActiveEdit={isActiveEdit}
+              num={num}
+              imageUrl={slide.content.imageUrl}
+              onUpload={(url) => onEditSlide(slide.instanceId, (c) => ({ ...c, imageUrl: url, hideImage: false }))}
+              onRemove={() => onEditSlide(slide.instanceId, (c) => ({ ...c, imageUrl: undefined }))}
+            />
             {Renderer && (
               <Renderer
                 ast={ast}
@@ -2846,6 +3027,12 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
                 onRequestEdit={onRequestEdit}
               />
             )}
+            <UniversalSlideOverlayImage
+              templateId={slide.templateId}
+              imageUrl={slide.content.imageUrl}
+              editing={editing}
+              onRemove={() => onEditSlide(slide.instanceId, (c) => ({ ...c, imageUrl: undefined }))}
+            />
 
             {/* Footer row - preserved from original shell */}
             <div className="footer-row" style={{ zIndex: 10 }}>

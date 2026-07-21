@@ -550,18 +550,18 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
 }
 
 function buildDataMonument(slide: pptxgen.Slide, content: SlideInstance['content']) {
-  addEditorialLabel(slide, content.eyebrow ?? 'Performance Metric', 140, 260);
+  addEditorialLabel(slide, content.eyebrow ?? 'Performance Metric', 140, 140);
   const runs: pptxgen.TextProps[] = [
     { text: content.value ?? '000.0', options: {} },
     { text: ` ${content.unit ?? 'M'}`, options: { color: EMERALD_500, fontSize: pt(420 * 0.3) } },
   ];
-  addText(slide, runs, box(140, 305, 1600, 330), { size: 420, bold: true, lineSpacingMultiple: 0.8 });
-  addText(slide, content.heading ?? 'Primary Performance Variable Title.', box(140, 630, 1600, 100), {
+  addText(slide, runs, box(140, 185, 1600, 330), { size: 420, bold: true, lineSpacingMultiple: 0.8 });
+  addText(slide, content.heading ?? 'Primary Performance Variable Title.', box(140, 615, 1600, 100), {
     size: 64,
     bold: true,
     lineSpacingMultiple: 0.95,
   });
-  addText(slide, content.body ?? PLACEHOLDER, box(140, 745, 800, 220), {
+  addText(slide, content.body ?? PLACEHOLDER, box(140, 735, 800, 220), {
     fontFace: FONT_DISPLAY,
     size: 32,
     color: NEUTRAL_500,
@@ -1081,6 +1081,10 @@ export async function addNativeSlide(
       break;
     default:
       break;
+  }
+
+  if (c.imageUrl && !['s10', 's12', 'blank'].includes(instance.templateId)) {
+    addImageCover(slide, c.imageUrl, box(1200, 140, 520, 700));
   }
 
   if (pageLabel) {
