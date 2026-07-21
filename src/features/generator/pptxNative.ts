@@ -95,17 +95,29 @@ interface DecorConfig {
   glow?: GlowSpec;
 }
 
+/**
+ * Background Grid Tweakable Settings (for native PPTX export)
+ * - GRID_LINE_WIDTH_PX: Stroke thickness in px (e.g. 1px, 2px)
+ * - GRID_CELL_SIZE_PX: Grid box size in px (e.g. 40px, 120px)
+ * - DARK_GRID_LINE_COLOR: Stroke color & opacity for Dark Mode (white stroke)
+ * - LIGHT_GRID_LINE_COLOR: Stroke color & opacity for Light Mode
+ */
+const GRID_LINE_WIDTH_PX = 1;
+const GRID_CELL_SIZE_PX = 120;
+const DARK_GRID_LINE_COLOR = 'rgba(255, 255, 255, 0.08)';
+const LIGHT_GRID_LINE_COLOR = 'rgba(0, 0, 0, 0.04)';
+
 function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, isDark?: boolean) {
   ctx.save();
-  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.04)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x <= w; x += 120) {
+  ctx.strokeStyle = isDark ? DARK_GRID_LINE_COLOR : LIGHT_GRID_LINE_COLOR;
+  ctx.lineWidth = GRID_LINE_WIDTH_PX;
+  for (let x = 0; x <= w; x += GRID_CELL_SIZE_PX) {
     ctx.beginPath();
     ctx.moveTo(x + 0.5, 0);
     ctx.lineTo(x + 0.5, h);
     ctx.stroke();
   }
-  for (let y = 0; y <= h; y += 120) {
+  for (let y = 0; y <= h; y += GRID_CELL_SIZE_PX) {
     ctx.beginPath();
     ctx.moveTo(0, y + 0.5);
     ctx.lineTo(w, y + 0.5);

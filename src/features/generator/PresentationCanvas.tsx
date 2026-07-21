@@ -272,19 +272,25 @@ function ImageSlot({ src, editing, onChange, placeholder, style, onDeleteContain
 // Shared micro-components (slide-internal only, not exported)
 // ---------------------------------------------------------------------------
 
-/** Hairline grid overlay present on most light slides.
- *  Uses explicit z-index to stay strictly behind text content layers.
+/**
+ * Slide Background Grid Tweakable Settings (for web editor canvas)
+ * - GRID_LINE_WIDTH_PX: Thickness in px (e.g. 1px, 2px)
+ * - GRID_CELL_SIZE_PX: Grid box size in px (e.g. 40px, 120px)
+ * - GRID_CONTAINER_OPACITY: Container opacity (0.0 to 1.0)
  */
+const GRID_LINE_WIDTH_PX = 1;
+const GRID_CELL_SIZE_PX = 120;
+const GRID_CONTAINER_OPACITY = 1.0;
+
 function SlideGrid() {
   return (
     <div
       style={{
         position: 'absolute',
         inset: 0,
-        backgroundImage:
-          'linear-gradient(var(--grid-line-color, var(--border-subtle)) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line-color, var(--border-subtle)) 1px, transparent 1px)',
-        backgroundSize: '120px 120px',
-        opacity: 0.65,
+        backgroundImage: `linear-gradient(var(--grid-line-color, var(--border-subtle)) ${GRID_LINE_WIDTH_PX}px, transparent ${GRID_LINE_WIDTH_PX}px), linear-gradient(90deg, var(--grid-line-color, var(--border-subtle)) ${GRID_LINE_WIDTH_PX}px, transparent ${GRID_LINE_WIDTH_PX}px)`,
+        backgroundSize: `var(--grid-cell-size, ${GRID_CELL_SIZE_PX}px) var(--grid-cell-size, ${GRID_CELL_SIZE_PX}px)`,
+        opacity: GRID_CONTAINER_OPACITY,
         pointerEvents: 'none',
         zIndex: 0,
       }}
