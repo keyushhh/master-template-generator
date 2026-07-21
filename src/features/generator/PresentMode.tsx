@@ -99,7 +99,7 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0 }: Presen
 
       {/* Slide (click right/left half to navigate) */}
       <div style={{ position: 'relative', boxShadow: '0 30px 80px rgba(0,0,0,0.6)' }}>
-        <SlideStage slide={slide} ast={ast} num={String(index + 1).padStart(2, '0')} scale={scale} logoUrl={deck.logoUrl} />
+        <SlideStage slide={slide} ast={ast} num={String(index + 1).padStart(2, '0')} scale={scale} logoUrl={deck.logoUrl} deckThemeMode={deck.themeMode} />
         <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
           <div onClick={manualPrev} style={{ flex: 1, cursor: atStart ? 'default' : 'w-resize' }} />
           <div onClick={manualNext} style={{ flex: 1, cursor: atEnd ? 'default' : 'e-resize' }} />

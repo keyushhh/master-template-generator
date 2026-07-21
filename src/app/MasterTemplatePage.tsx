@@ -9,6 +9,7 @@ import type { DocumentNode } from '../features/business-record/parser/ast';
 import type { Deck, SlideContent } from '../features/deck/types';
 import { saveLibraryEntry, type LibraryEntry } from '../features/business-record/libraryStore';
 import type { CampaignType } from '../features/business-record/sampleDecks';
+import { isSlideDark } from '../features/deck/themeHelper';
 import {
   createTemplateDeck,
   buildDeckFromDocument,
@@ -297,6 +298,28 @@ export function MasterTemplatePage() {
     [mutateDeck]
   );
 
+  const handleSetThemeMode = useCallback(
+    (mode: 'hybrid' | 'light' | 'dark') => {
+      mutateDeck((prev) => ({ ...prev, themeMode: mode }));
+      showToast(`Deck Theme set to ${mode.toUpperCase()}`);
+    },
+    [mutateDeck, showToast]
+  );
+
+  const handleToggleSlideTheme = useCallback(
+    (instanceId: string) => {
+      mutateDeck((prev) => ({
+        ...prev,
+        slides: prev.slides.map((s) => {
+          if (s.instanceId !== instanceId) return s;
+          const isDarkNow = isSlideDark(s.templateId, prev.themeMode, s.themeOverride);
+          return { ...s, themeOverride: isDarkNow ? 'light' : 'dark' };
+        }),
+      }));
+    },
+    [mutateDeck]
+  );
+
   const handleBulkDelete = useCallback(
     (instanceIds: string[]) => {
       const ids = new Set(instanceIds);
@@ -509,6 +532,7 @@ export function MasterTemplatePage() {
         onNewDeck={handleNewDeck}
         onRenameDeck={handleRenameDeck}
         onDeleteDeck={handleDeleteDeck}
+        onSetThemeMode={handleSetThemeMode}
       />
 
       {/* ── Edit / Reset buttons - fixed, aligned with slide left edge ── */}
@@ -635,6 +659,7 @@ export function MasterTemplatePage() {
         onEditSlide={handleEditSlide}
         onLogoChange={(v) => mutateDeck((d) => ({ ...d, logoUrl: v }))}
         onRequestEdit={handleEnterEdit}
+        onToggleSlideTheme={handleToggleSlideTheme}
       />
 
       {/* Floating edit-session bar: appears while edit mode is active. */}

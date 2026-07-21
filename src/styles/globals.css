@@ -23,3 +23,52 @@
   outline-color: var(--emerald-500);
   background: color-mix(in srgb, var(--emerald-500) 6%, transparent);
 }
+
+/* -------------------------------------------------------------------------
+   Slide Deck Dynamic Light/Dark Theme Engine
+   ------------------------------------------------------------------------- */
+[data-theme="dark"],
+.page[data-theme="dark"],
+.wg-doc[data-theme="dark"] {
+  --neutral-900: #ffffff !important;
+  --neutral-800: #f8fafc !important;
+  --neutral-700: #f1f5f9 !important;
+  --neutral-600: #cbd5e1 !important;
+  --neutral-500: #94a3b8 !important;
+  --neutral-400: #64748b !important;
+  --neutral-300: #334155 !important;
+  --neutral-200: rgba(255, 255, 255, 0.08) !important;
+  --neutral-100: rgba(255, 255, 255, 0.04) !important;
+  --neutral-50: rgba(255, 255, 255, 0.02) !important;
+  --border-subtle: rgba(255, 255, 255, 0.035) !important;
+  --pure-white: #09090b !important;
+  --bg-card-accent: rgba(255, 255, 255, 0.04) !important;
+  --grid-line-color: rgba(255, 255, 255, 0.03) !important;
+  --glow-bg: radial-gradient(circle, rgba(16, 185, 129, 0.35) 0%, rgba(16, 185, 129, 0.14) 45%, transparent 70%) !important;
+  --glow-filter: blur(30px) !important;
+  background-color: #09090b !important;
+  color: #ffffff !important;
+}
+
+[data-theme="light"],
+.page[data-theme="light"],
+.wg-doc[data-theme="light"] {
+  --neutral-900: #171717 !important;
+  --neutral-800: #262626 !important;
+  --neutral-700: #404040 !important;
+  --neutral-600: #525252 !important;
+  --neutral-500: #737373 !important;
+  --neutral-400: #a3a3a3 !important;
+  --neutral-300: #d4d4d4 !important;
+  --neutral-200: #e5e5e5 !important;
+  --neutral-100: #f5f5f5 !important;
+  --neutral-50: #fafafa !important;
+  --border-subtle: rgba(0, 0, 0, 0.06) !important;
+  --pure-white: #ffffff !important;
+  --bg-card-accent: #f8fafc !important;
+  --grid-line-color: rgba(0, 0, 0, 0.04) !important;
+  --glow-bg: radial-gradient(circle, color-mix(in srgb, var(--emerald-500) 8%, transparent) 0%, transparent 70%) !important;
+  --glow-filter: none !important;
+  background-color: #ffffff !important;
+  color: #171717 !important;
+}

@@ -1,5 +1,6 @@
 import type pptxgen from 'pptxgenjs';
-import type { SlideInstance, ComparisonRow } from '../deck/types';
+import type { SlideInstance, ComparisonRow, ThemeMode } from '../deck/types';
+import { isSlideDark } from '../deck/themeHelper';
 
 /**
  * Native (editable) pptxgenjs equivalent of PresentationCanvas.tsx's DOM
@@ -94,9 +95,9 @@ interface DecorConfig {
   glow?: GlowSpec;
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number) {
+function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, isDark?: boolean) {
   ctx.save();
-  ctx.strokeStyle = 'rgba(245,245,245,0.8)';
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.04)';
   ctx.lineWidth = 1;
   for (let x = 0; x <= w; x += 120) {
     ctx.beginPath();
@@ -113,20 +114,25 @@ function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.restore();
 }
 
-function drawGlow(ctx: CanvasRenderingContext2D, g: GlowSpec) {
+function drawGlow(ctx: CanvasRenderingContext2D, g: GlowSpec, isDark?: boolean) {
   const grad = ctx.createRadialGradient(g.cx, g.cy, 0, g.cx, g.cy, g.r);
-  grad.addColorStop(0, 'rgba(16,185,129,0.08)');
-  grad.addColorStop(0.7, 'rgba(16,185,129,0)');
-  grad.addColorStop(1, 'rgba(16,185,129,0)');
+  if (isDark) {
+    grad.addColorStop(0, 'rgba(16,185,129,0.35)');
+    grad.addColorStop(0.45, 'rgba(16,185,129,0.14)');
+    grad.addColorStop(1, 'rgba(16,185,129,0)');
+  } else {
+    grad.addColorStop(0, 'rgba(16,185,129,0.08)');
+    grad.addColorStop(0.7, 'rgba(16,185,129,0)');
+  }
   ctx.save();
   ctx.fillStyle = grad;
-  ctx.fillRect(g.cx - g.r, g.cy - g.r, g.r * 2, g.r * 2);
+  ctx.fillRect(0, 0, 1920, 1080);
   ctx.restore();
 }
 
 /** Renders the given template's decorative background to a flattened PNG data
  *  URL, or returns undefined for a plain flat fill (nothing to bake in). */
-function buildDecorBackground(cfg: DecorConfig): string | undefined {
+function buildDecorBackground(cfg: DecorConfig, isDark?: boolean): string | undefined {
   if (!cfg.grid && !cfg.glow) return undefined;
   const canvas = document.createElement('canvas');
   canvas.width = 1920;
@@ -135,15 +141,15 @@ function buildDecorBackground(cfg: DecorConfig): string | undefined {
   if (!ctx) return undefined;
   ctx.fillStyle = `#${cfg.base}`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  if (cfg.grid) drawGrid(ctx, canvas.width, canvas.height);
-  if (cfg.glow) drawGlow(ctx, cfg.glow);
+  if (cfg.grid) drawGrid(ctx, canvas.width, canvas.height, isDark);
+  if (cfg.glow) drawGlow(ctx, cfg.glow, isDark);
   return canvas.toDataURL('image/png');
 }
 
 /** Sets the slide's real (non-editable) PowerPoint background - a flat color,
  *  or a baked-in grid/glow image where the template calls for one. */
-function applyBackground(slide: pptxgen.Slide, cfg: DecorConfig) {
-  const data = buildDecorBackground(cfg);
+function applyBackground(slide: pptxgen.Slide, cfg: DecorConfig, isDark?: boolean) {
+  const data = buildDecorBackground(cfg, isDark);
   slide.background = data ? { data } : { color: cfg.base };
 }
 
@@ -260,23 +266,23 @@ function addCircle(slide: pptxgen.Slide, b: Box, fill: string, line?: { color: s
 }
 
 /** Top HUD bar shared by most light templates: label left, slide number right, hairline rule below. */
-function addHudTop(slide: pptxgen.Slide, label: string, num: string) {
+function addHudTop(slide: pptxgen.Slide, label: string, num: string, isDark?: boolean) {
   addText(slide, label.toUpperCase(), box(80, 55, 800, 30), {
     fontFace: FONT_MONO,
     size: 12,
-    color: NEUTRAL_500,
+    color: isDark ? NEUTRAL_400 : NEUTRAL_500,
     letterSpacingEm: 0.12,
     valign: 'bottom',
   });
   addText(slide, num.toUpperCase(), box(1040, 55, 800, 30), {
     fontFace: FONT_MONO,
     size: 12,
-    color: NEUTRAL_500,
+    color: isDark ? NEUTRAL_400 : NEUTRAL_500,
     align: 'right',
     letterSpacingEm: 0.12,
     valign: 'bottom',
   });
-  addLine(slide, 80, 92, 1840, 92, NEUTRAL_200, 1);
+  addLine(slide, 80, 92, 1840, 92, isDark ? '27272A' : NEUTRAL_200, 1);
 }
 
 /** Editorial eyebrow label: short emerald rule + tracked mono uppercase text. */
@@ -356,24 +362,21 @@ async function addLogo(slide: pptxgen.Slide, logoUrl: string | undefined, xPx: n
 // Per-template builders
 // ---------------------------------------------------------------------------
 
-async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'], logoUrl?: string) {
+async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'], logoUrl?: string, isDark = false) {
   const lines = content.headingLines?.length ? content.headingLines : ['Master Primary', 'Heading.'];
   const longest = Math.max(...lines.map((l) => l.length), 1);
   const heroFont = Math.round(Math.max(72, Math.min(180, 1640 / (longest * 0.6), 620 / (lines.length * 0.95))));
   const heroTopPad = lines.length >= 4 ? 160 : lines.length === 3 ? 210 : 280;
 
-  addHudTop(slide, content.projectLabel ?? 'Project Name Placeholder', content.versionLabel ?? 'YYYY // Version 0.0');
+  addHudTop(slide, content.projectLabel ?? 'Project Name Placeholder', content.versionLabel ?? 'YYYY // Version 0.0', isDark);
   addEditorialLabel(slide, content.eyebrow ?? 'Presentation Subtitle', 140, heroTopPad);
 
-  // Multiplier is intentionally generous (vs. the ~0.85 Space Grotesk itself renders at): if the
-  // embedded font ever fails to load, PowerPoint's fallback font may have taller line metrics, and
-  // this estimate drives the tagline's Y position below - undershooting crowds the tagline into the heading.
   const headingH = lines.length * heroFont * 1.05 * PX_TO_PT * (PX_PER_IN / 72);
   const runs: pptxgen.TextProps[] = lines.map((line, i) => ({
     text: line,
     options: {
       ...(i > 0 ? { softBreakBefore: true } : {}),
-      ...(i === lines.length - 1 && lines.length > 1 ? { color: NEUTRAL_300 } : {}),
+      ...(i === lines.length - 1 && lines.length > 1 ? { color: isDark ? '475569' : NEUTRAL_300 } : { color: isDark ? WHITE : NEUTRAL_900 }),
     },
   }));
   addText(slide, runs, box(140, heroTopPad + 55, 1680, headingH + 40), {
@@ -387,16 +390,16 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
   addText(slide, content.tagline ?? PLACEHOLDER, box(323, taglineY - 10, 1460, 40), {
     fontFace: FONT_MONO,
     size: 18,
-    color: NEUTRAL_500,
+    color: isDark ? '94A3B8' : NEUTRAL_500,
     letterSpacingEm: 0.25,
   });
 
   addText(slide, 'PROPRIETARY AND CONFIDENTIAL', box(80, 1000, 500, 26), {
     fontFace: FONT_MONO,
     size: 11,
-    color: NEUTRAL_400,
+    color: isDark ? '64748B' : NEUTRAL_400,
   });
-  await addLogo(slide, logoUrl, 1580, 995);
+  await addLogo(slide, logoUrl, 1580, 995, isDark);
 }
 
 const DEFAULT_INDEX_PARTS = [
@@ -406,9 +409,9 @@ const DEFAULT_INDEX_PARTS = [
   { title: 'Strategy', description: PLACEHOLDER },
 ];
 
-function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
+function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
   const parts = content.parts?.length ? content.parts : DEFAULT_INDEX_PARTS;
-  addHudTop(slide, content.hudLabel ?? 'Agenda', num);
+  addHudTop(slide, content.hudLabel ?? 'Agenda', num, isDark);
   addEditorialLabel(slide, 'Navigation', 140, 160);
   const heading = content.heading ?? 'Presentation\nStructure.';
   const headingFont = 100;
@@ -418,6 +421,7 @@ function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num
   addText(slide, heading, box(140, 215, headingW, headingH), {
     size: headingFont,
     bold: true,
+    color: isDark ? WHITE : NEUTRAL_900,
     lineSpacingMultiple: 0.9,
   });
 
@@ -431,28 +435,27 @@ function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num
   parts.slice(0, 4).forEach((part, i) => {
     const cx = startX + (i % cols) * (colW + gapX);
     const cy = startY + Math.floor(i / cols) * (rowH + gapY);
-    addLine(slide, cx, cy, cx, cy + rowH, i === 0 ? EMERALD_500 : NEUTRAL_200, 2);
+    addLine(slide, cx, cy, cx, cy + rowH, i === 0 ? EMERALD_500 : isDark ? '27272A' : NEUTRAL_200, 2);
     addEditorialLabel(slide, `Part 0${i + 1}`, cx + 30, cy, { size: 10 });
-    addText(slide, part.title, box(cx + 30, cy + 30, colW - 30, 50), { size: 32, bold: true, lineSpacingMultiple: 1.05 });
+    addText(slide, part.title, box(cx + 30, cy + 30, colW - 30, 50), { size: 32, bold: true, color: isDark ? WHITE : NEUTRAL_900, lineSpacingMultiple: 1.05 });
     addText(slide, part.description, box(cx + 30, cy + 85, colW - 30, 120), {
       size: 18,
-      color: NEUTRAL_500,
+      color: isDark ? '94A3B8' : NEUTRAL_500,
       lineSpacingMultiple: 1.5,
     });
   });
 }
 
-function buildExecutiveSummary(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
-  addHudTop(slide, content.hudLabel ?? 'Executive Summary', num);
+function buildExecutiveSummary(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
+  addHudTop(slide, content.hudLabel ?? 'Executive Summary', num, isDark);
   addEditorialLabel(slide, content.eyebrow ?? 'Executive Summary', 140, 160);
   addText(slide, content.heading ?? 'Core Strategic\nObjective.', box(140, 215, 1640, 220), {
     size: 100,
     bold: true,
+    color: isDark ? WHITE : NEUTRAL_900,
     lineSpacingMultiple: 0.9,
   });
 
-  // 1.4fr:1fr split (vs. an even 1fr:1fr) so the recommendation reads as the
-  // primary content and the metric as a supporting aside, matching the source layout.
   const bodyY = 500;
   const gap = 120;
   const contentW = 1640 - gap;
@@ -463,17 +466,17 @@ function buildExecutiveSummary(slide: pptxgen.Slide, content: SlideInstance['con
   addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, leftW, 400), {
     fontFace: FONT_DISPLAY,
     size: 32,
-    color: NEUTRAL_500,
+    color: isDark ? 'CBD5E1' : NEUTRAL_500,
     lineSpacingMultiple: 1.5,
   });
 
   const rightPadLeft = 66;
-  addLine(slide, rightX, bodyY, rightX, bodyY + 340, NEUTRAL_200, 1);
+  addLine(slide, rightX, bodyY, rightX, bodyY + 340, isDark ? '27272A' : NEUTRAL_200, 1);
   addEditorialLabel(slide, content.metricLabel ?? 'Variable Metric', rightX + rightPadLeft, bodyY + 100);
   addText(slide, content.metricText ?? '00.0%', box(rightX + rightPadLeft, bodyY + 150, rightW - rightPadLeft, 140), {
     size: 56,
     bold: true,
-    color: NEUTRAL_900,
+    color: isDark ? WHITE : NEUTRAL_900,
     lineSpacingMultiple: 1.1,
   });
 }
@@ -507,21 +510,22 @@ async function buildSectionDivider(slide: pptxgen.Slide, content: SlideInstance[
 
 const DEFAULT_ATTRIBUTES = ['Placeholder Attribute', 'Placeholder Attribute', 'Placeholder Attribute'];
 
-function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
+function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
   const attributes = content.leftAttributes?.length ? content.leftAttributes : DEFAULT_ATTRIBUTES;
-  addHudTop(slide, content.hudLabel ?? 'Strategic Context', num);
-  addLine(slide, 960, 0, 960, 1080, NEUTRAL_200, 1);
+  addHudTop(slide, content.hudLabel ?? 'Strategic Context', num, isDark);
+  addLine(slide, 960, 0, 960, 1080, isDark ? '27272A' : NEUTRAL_200, 1);
 
   addEditorialLabel(slide, content.leftLabel ?? 'Condition A', 140, 250);
   addText(slide, content.leftHeading ?? 'Current State\nEnvironment.', box(140, 305, 700, 200), {
     size: 72,
     bold: true,
+    color: isDark ? WHITE : NEUTRAL_900,
     lineSpacingMultiple: 0.9,
   });
   addText(slide, content.leftBody ?? PLACEHOLDER, box(140, 515, 700, 160), {
     fontFace: FONT_DISPLAY,
     size: 32,
-    color: NEUTRAL_500,
+    color: isDark ? 'CBD5E1' : NEUTRAL_500,
     lineSpacingMultiple: 1.5,
   });
   const attrRuns: pptxgen.TextProps[] = attributes.flatMap((a, i) => [
@@ -530,41 +534,43 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
   addText(slide, attrRuns, box(140, 690, 700, 180), {
     fontFace: FONT_MONO,
     size: 20,
-    color: NEUTRAL_400,
+    color: isDark ? '94A3B8' : NEUTRAL_400,
     lineSpacingMultiple: 1.6,
   });
 
-  addRect(slide, box(960, 0, 960, 1080), NEUTRAL_50);
+  addRect(slide, box(960, 0, 960, 1080), isDark ? '121215' : NEUTRAL_50);
   addEditorialLabel(slide, content.rightLabel ?? 'Condition B', 1000, 250);
   addText(slide, content.rightHeading ?? 'Strategic Pivot\nTarget State.', box(1000, 305, 780, 200), {
     size: 72,
     bold: true,
+    color: isDark ? WHITE : NEUTRAL_900,
     lineSpacingMultiple: 0.9,
   });
   addText(slide, content.rightBody ?? PLACEHOLDER, box(1000, 515, 780, 300), {
     fontFace: FONT_DISPLAY,
     size: 32,
-    color: NEUTRAL_900,
+    color: isDark ? 'CBD5E1' : NEUTRAL_900,
     lineSpacingMultiple: 1.5,
   });
 }
 
-function buildDataMonument(slide: pptxgen.Slide, content: SlideInstance['content']) {
+function buildDataMonument(slide: pptxgen.Slide, content: SlideInstance['content'], isDark = false) {
   addEditorialLabel(slide, content.eyebrow ?? 'Performance Metric', 140, 140);
   const runs: pptxgen.TextProps[] = [
-    { text: content.value ?? '000.0', options: {} },
+    { text: content.value ?? '000.0', options: { color: isDark ? WHITE : NEUTRAL_900 } },
     { text: ` ${content.unit ?? 'M'}`, options: { color: EMERALD_500, fontSize: pt(420 * 0.3) } },
   ];
   addText(slide, runs, box(140, 185, 1600, 330), { size: 420, bold: true, lineSpacingMultiple: 0.8 });
   addText(slide, content.heading ?? 'Primary Performance Variable Title.', box(140, 615, 1600, 100), {
     size: 64,
     bold: true,
+    color: isDark ? WHITE : NEUTRAL_900,
     lineSpacingMultiple: 0.95,
   });
   addText(slide, content.body ?? PLACEHOLDER, box(140, 735, 800, 220), {
     fontFace: FONT_DISPLAY,
     size: 32,
-    color: NEUTRAL_500,
+    color: isDark ? 'CBD5E1' : NEUTRAL_500,
     lineSpacingMultiple: 1.5,
   });
 }
@@ -654,10 +660,10 @@ function buildMetricsChart(slide: pptxgen.Slide, bars: SlideInstance['content'][
   });
 }
 
-function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
+function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
   const bars = content.bars?.length ? content.bars : DEFAULT_BARS;
   const kpis = content.kpis?.length ? content.kpis : DEFAULT_KPIS;
-  addHudTop(slide, content.hudLabel ?? 'Metrics Dashboard', num);
+  addHudTop(slide, content.hudLabel ?? 'Metrics Dashboard', num, isDark);
   addEditorialLabel(slide, content.eyebrow ?? 'Temporal Performance', 140, 260);
 
   buildMetricsChart(slide, bars, content.chartType ?? 'bar', box(140, 300, 1640, 400));
@@ -667,7 +673,7 @@ function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['con
   kpis.slice(0, 3).forEach((k, i) => {
     const x = 140 + i * (kpiColW + 40);
     addEditorialLabel(slide, k.label, x, kpiY, { size: 10 });
-    addText(slide, k.value, box(x, kpiY + 40, kpiColW, 90), { size: 64, bold: true, lineSpacingMultiple: 0.95 });
+    addText(slide, k.value, box(x, kpiY + 40, kpiColW, 90), { size: 64, bold: true, color: isDark ? WHITE : NEUTRAL_900, lineSpacingMultiple: 0.95 });
   });
 }
 
@@ -678,9 +684,9 @@ const DEFAULT_ROWS: ComparisonRow[] = [
   { dim: 'Dimension 04', cur: 'XXX.X', tgt: 'XXX.X', delta: '+00.0%' },
 ];
 
-function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
+function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
   const rows = content.rows?.length ? content.rows : DEFAULT_ROWS;
-  addHudTop(slide, content.hudLabel ?? 'Comparative Framework', num);
+  addHudTop(slide, content.hudLabel ?? 'Comparative Framework', num, isDark);
   addEditorialLabel(slide, content.eyebrow ?? 'Benchmark Comparison', 140, 260);
 
   const cellFont = rows.length > 6 ? 18 : rows.length > 4 ? 22 : 26;
@@ -692,10 +698,10 @@ function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['con
     options: {
       fontFace: FONT_MONO,
       fontSize: pt(13),
-      color: NEUTRAL_500,
+      color: isDark ? '94A3B8' : NEUTRAL_500,
       bold: false,
       charSpacing: tracking(13, 0.12),
-      border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: NEUTRAL_900, pt: 1.5 }, { type: 'none' }],
+      border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: isDark ? WHITE : NEUTRAL_900, pt: 1.5 }, { type: 'none' }],
       valign: 'bottom',
     },
   }));
@@ -710,8 +716,8 @@ function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['con
     options: {
       fontFace: FONT_DISPLAY,
       fontSize: pt(cellFont),
-      color: c.options.color ?? NEUTRAL_900,
-      border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: NEUTRAL_200, pt: 0.75 }, { type: 'none' }],
+      color: c.options.color ?? (isDark ? WHITE : NEUTRAL_900),
+      border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: isDark ? '27272A' : NEUTRAL_200, pt: 0.75 }, { type: 'none' }],
       valign: 'top',
     },
   })));
@@ -732,14 +738,14 @@ const DEFAULT_PHASES = [
   { title: 'Optimization', description: PLACEHOLDER, completed: false },
 ];
 
-function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
+function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
   const phases = content.phases?.length ? content.phases : DEFAULT_PHASES;
-  addHudTop(slide, content.hudLabel ?? 'Execution Timeline', num);
+  addHudTop(slide, content.hudLabel ?? 'Execution Timeline', num, isDark);
   addEditorialLabel(slide, content.eyebrow ?? 'Milestone Projection', 140, 260);
-  addText(slide, content.heading ?? 'Pathway to Execution.', box(140, 315, 1640, 100), { size: 100, bold: true });
+  addText(slide, content.heading ?? 'Pathway to Execution.', box(140, 315, 1640, 100), { size: 100, bold: true, color: isDark ? WHITE : NEUTRAL_900 });
 
   const railY = 490;
-  addLine(slide, 140, railY, 1780, railY, NEUTRAL_200, 2);
+  addLine(slide, 140, railY, 1780, railY, isDark ? '27272A' : NEUTRAL_200, 2);
 
   const itemW = 320;
   const n = phases.length;
@@ -747,19 +753,19 @@ function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['con
   const spacing = n > 1 ? (totalW - itemW) / (n - 1) : 0;
   phases.forEach((p, i) => {
     const x = 140 + i * spacing;
-    addCircle(slide, box(x, railY - 10, 20, 20), p.completed ? EMERALD_500 : NEUTRAL_300);
+    addCircle(slide, box(x, railY - 10, 20, 20), p.completed ? EMERALD_500 : isDark ? '475569' : NEUTRAL_300);
     addEditorialLabel(slide, `Phase ${String(i + 1).padStart(2, '0')}`, x, railY + 42, { size: 12 });
-    addText(slide, p.title, box(x, railY + 85, itemW, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05 });
+    addText(slide, p.title, box(x, railY + 85, itemW, 60), { size: 32, bold: true, color: isDark ? WHITE : NEUTRAL_900, lineSpacingMultiple: 1.05 });
     addText(slide, p.description || PLACEHOLDER, box(x, railY + 140, itemW, 140), {
       fontFace: FONT_DISPLAY,
       size: 18,
-      color: NEUTRAL_500,
+      color: isDark ? '94A3B8' : NEUTRAL_500,
       lineSpacingMultiple: 1.5,
     });
   });
 }
 
-async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance['content']) {
+async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance['content'], isDark = false) {
   const showImage = !content.hideImage;
   const leftW = showImage ? 873 : 1920;
   const textPad = showImage ? 140 : 360;
@@ -772,13 +778,14 @@ async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance[
   addText(slide, heading, box(140, 455, headingW, headingH), {
     size: headingFont,
     bold: true,
+    color: isDark ? WHITE : NEUTRAL_900,
     lineSpacingMultiple: 0.95,
   });
   const bodyY = 455 + headingH + 40;
   addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, headingW - 60, 260), {
     fontFace: FONT_DISPLAY,
     size: 32,
-    color: NEUTRAL_500,
+    color: isDark ? 'CBD5E1' : NEUTRAL_500,
     lineSpacingMultiple: 1.5,
   });
   if (!showImage) return;
@@ -786,11 +793,11 @@ async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance[
   if (content.imageUrl) {
     addImageCover(slide, content.imageUrl, imgBox);
   } else {
-    addRect(slide, imgBox, NEUTRAL_100);
+    addRect(slide, imgBox, isDark ? '121215' : NEUTRAL_100);
     addText(slide, 'IMAGE ASSET PLACEHOLDER', imgBox, {
       fontFace: FONT_MONO,
       size: 20,
-      color: NEUTRAL_400,
+      color: isDark ? '64748B' : NEUTRAL_400,
       align: 'center',
       valign: 'middle',
       letterSpacingEm: 0.12,
@@ -804,11 +811,11 @@ const DEFAULT_STEPS = [
   { title: 'Output', description: PLACEHOLDER },
 ];
 
-function buildProcessArchitecture(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
+function buildProcessArchitecture(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
   const steps = content.steps?.length ? content.steps : DEFAULT_STEPS;
-  addHudTop(slide, content.hudLabel ?? 'System Logic', num);
+  addHudTop(slide, content.hudLabel ?? 'System Logic', num, isDark);
   addEditorialLabel(slide, content.eyebrow ?? 'Architectural Protocol', 140, 260);
-  addText(slide, content.heading ?? 'Operational Flow.', box(140, 315, 1640, 100), { size: 100, bold: true });
+  addText(slide, content.heading ?? 'Operational Flow.', box(140, 315, 1640, 100), { size: 100, bold: true, color: isDark ? WHITE : NEUTRAL_900 });
 
   const n = steps.length;
   const gap = 40;
@@ -818,17 +825,17 @@ function buildProcessArchitecture(slide: pptxgen.Slide, content: SlideInstance['
     const yOffset = i * 40;
     const top = 495 + yOffset;
     const h = 420 - yOffset;
-    addRect(slide, box(x, top, colW, h), undefined, { color: i === 1 ? EMERALD_500 : NEUTRAL_200, widthPx: 1 });
+    addRect(slide, box(x, top, colW, h), isDark ? '121215' : undefined, { color: i === 1 ? EMERALD_500 : isDark ? '27272A' : NEUTRAL_200, widthPx: 1 });
     addText(slide, String(i + 1).padStart(2, '0'), box(x + 40, top + 30, colW - 80, 70), {
       fontFace: FONT_MONO,
       size: 48,
       color: EMERALD_500,
     });
-    addText(slide, s.title, box(x + 40, top + 110, colW - 80, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05 });
+    addText(slide, s.title, box(x + 40, top + 110, colW - 80, 60), { size: 32, bold: true, color: isDark ? WHITE : NEUTRAL_900, lineSpacingMultiple: 1.05 });
     addText(slide, s.description || PLACEHOLDER, box(x + 40, top + 170, colW - 80, h - 200), {
       fontFace: FONT_DISPLAY,
       size: 18,
-      color: NEUTRAL_500,
+      color: isDark ? '94A3B8' : NEUTRAL_500,
       lineSpacingMultiple: 1.5,
     });
   });
@@ -840,31 +847,30 @@ const DEFAULT_SECTORS = [
   { label: 'Sector C', value: '0.0M Metric' },
 ];
 
-async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
+async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
   const sectors = content.sectors?.length ? content.sectors : DEFAULT_SECTORS;
-  addHudTop(slide, content.hudLabel ?? 'Reach Distribution', num);
+  addHudTop(slide, content.hudLabel ?? 'Reach Distribution', num, isDark);
 
-  // 1.2fr:1fr split - image column left, stats column right (vertically centered), matching the source layout.
   const gap = 105;
   const contentW = 1640 - gap;
   const leftW = Math.round((contentW * 1.2) / 2.2);
   const rightX = 140 + leftW + gap;
   const rightW = 1640 - leftW - gap;
 
-  addText(slide, content.heading ?? 'Regional Impact.', box(140, 160, leftW, 100), { size: 100, bold: true });
+  addText(slide, content.heading ?? 'Regional Impact.', box(140, 160, leftW, 100), { size: 100, bold: true, color: isDark ? WHITE : NEUTRAL_900 });
 
   const showMap = !content.hideImage;
   if (showMap) {
     const mapBox = box(140, 305, leftW, 645);
     if (content.imageUrl) {
       addImageCover(slide, content.imageUrl, mapBox);
-      addRect(slide, mapBox, undefined, { color: NEUTRAL_200, widthPx: 1 });
+      addRect(slide, mapBox, undefined, { color: isDark ? '27272A' : NEUTRAL_200, widthPx: 1 });
     } else {
-      addRect(slide, mapBox, NEUTRAL_50, { color: NEUTRAL_200, widthPx: 1 });
+      addRect(slide, mapBox, isDark ? '121215' : NEUTRAL_50, { color: isDark ? '27272A' : NEUTRAL_200, widthPx: 1 });
       addText(slide, 'GEOGRAPHIC VISUALISATION PLACEHOLDER', mapBox, {
         fontFace: FONT_MONO,
         size: 20,
-        color: NEUTRAL_400,
+        color: isDark ? '64748B' : NEUTRAL_400,
         align: 'center',
         valign: 'middle',
         letterSpacingEm: 0.12,
@@ -877,18 +883,16 @@ async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['cont
   const startY = 160 + Math.max(0, (860 - totalH) / 2);
   sectors.forEach((s, i) => {
     const y = startY + i * blockH;
-    addLine(slide, rightX, y, rightX + rightW, y, NEUTRAL_200, 1);
+    addLine(slide, rightX, y, rightX + rightW, y, isDark ? '27272A' : NEUTRAL_200, 1);
     addEditorialLabel(slide, s.label, rightX, y + 30, { size: 10 });
-    addText(slide, s.value, box(rightX, y + 68, rightW, 90), { size: 72, bold: true });
+    addText(slide, s.value, box(rightX, y + 68, rightW, 90), { size: 72, bold: true, color: isDark ? WHITE : NEUTRAL_900 });
   });
   void num;
 }
 
-async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
-  addHudTop(slide, content.eyebrow ?? 'Key Insight', num);
+async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
+  addHudTop(slide, content.eyebrow ?? 'Key Insight', num, isDark);
 
-  // Giant decorative quotation mark (vs. the previous inline quote-mark-in-heading treatment) -
-  // this is what let the source design run the actual quote text at a much saner size.
   addText(slide, '“', box(195, 160, 300, 160), {
     size: 300,
     bold: true,
@@ -903,6 +907,7 @@ async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['
   const quoteH = Math.max(200, quoteLines * quoteFont * 1.2);
   addText(slide, quote, box(195, 330, quoteW, quoteH), {
     size: quoteFont,
+    color: isDark ? WHITE : NEUTRAL_900,
     lineSpacingMultiple: 1.12,
   });
 
@@ -910,13 +915,13 @@ async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['
   if (content.avatarUrl) {
     slide.addImage({ data: content.avatarUrl, x: inch(195), y: inch(avatarY), w: inch(84), h: inch(84), rounding: true });
   } else {
-    addCircle(slide, box(195, avatarY, 84, 84), NEUTRAL_200);
+    addCircle(slide, box(195, avatarY, 84, 84), isDark ? '27272A' : NEUTRAL_200);
   }
-  addText(slide, content.author ?? 'Author Name', box(304, avatarY + 6, 700, 50), { size: 27, bold: true });
+  addText(slide, content.author ?? 'Author Name', box(304, avatarY + 6, 700, 50), { size: 27, bold: true, color: isDark ? WHITE : NEUTRAL_900 });
   addText(slide, content.role ?? 'Author Title Placeholder', box(304, avatarY + 50, 700, 40), {
     fontFace: FONT_MONO,
     size: 18,
-    color: NEUTRAL_500,
+    color: isDark ? '94A3B8' : NEUTRAL_500,
   });
 }
 
@@ -941,14 +946,14 @@ async function buildExit(slide: pptxgen.Slide, content: SlideInstance['content']
   addText(slide, runs, box(140, 920, 1600, 40), { fontFace: FONT_MONO, size: 16, color: EMERALD_400 });
 }
 
-async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
+async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, isDark = false) {
   const layout = content.blankLayout ?? 'standard';
 
   if (layout === 'full-bleed') {
     if (content.imageUrl) {
       addImageCover(slide, content.imageUrl, box(0, 0, 1920, 1080));
     } else {
-      addRect(slide, box(0, 0, 1920, 1080), NEUTRAL_100);
+      addRect(slide, box(0, 0, 1920, 1080), isDark ? '09090B' : NEUTRAL_100);
     }
     addRect(slide, box(0, 540, 1920, 540), BLACK, undefined, 30);
     addText(slide, (content.hudLabel ?? 'Custom Slide').toUpperCase(), box(80, 55, 800, 30), {
@@ -970,24 +975,24 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
   }
 
   if (layout === 'two-column') {
-    addHudTop(slide, content.hudLabel ?? 'Custom Slide', num);
+    addHudTop(slide, content.hudLabel ?? 'Custom Slide', num, isDark);
     addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200);
-    addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 780, 180), { size: 64, bold: true, lineSpacingMultiple: 0.95 });
+    addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 780, 180), { size: 64, bold: true, color: isDark ? WHITE : NEUTRAL_900, lineSpacingMultiple: 0.95 });
     addText(slide, content.body ?? 'Click to add your content…', box(140, 460, 780, 400), {
       fontFace: FONT_DISPLAY,
       size: 28,
-      color: NEUTRAL_500,
+      color: isDark ? 'CBD5E1' : NEUTRAL_500,
       lineSpacingMultiple: 1.5,
     });
     const imgBox = box(1000, 160, 780, 760);
     if (content.imageUrl) {
       addImageCover(slide, content.imageUrl, imgBox);
     } else {
-      addRect(slide, imgBox, NEUTRAL_100);
+      addRect(slide, imgBox, isDark ? '121215' : NEUTRAL_100);
       addText(slide, 'CLICK TO ADD AN IMAGE', imgBox, {
         fontFace: FONT_MONO,
         size: 18,
-        color: NEUTRAL_400,
+        color: isDark ? '64748B' : NEUTRAL_400,
         align: 'center',
         valign: 'middle',
         letterSpacingEm: 0.12,
@@ -997,13 +1002,13 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
   }
 
   // standard
-  addHudTop(slide, content.hudLabel ?? 'Custom Slide', num);
+  addHudTop(slide, content.hudLabel ?? 'Custom Slide', num, isDark);
   addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200);
-  addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 1640, 130), { size: 88, bold: true });
+  addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 1640, 130), { size: 88, bold: true, color: isDark ? WHITE : NEUTRAL_900 });
   addText(slide, content.body ?? 'Click to add your content…', box(140, 400, 1200, 200), {
     fontFace: FONT_DISPLAY,
     size: 28,
-    color: NEUTRAL_500,
+    color: isDark ? 'CBD5E1' : NEUTRAL_500,
     lineSpacingMultiple: 1.5,
   });
   if (content.imageUrl && !content.hideImage) {
@@ -1022,62 +1027,70 @@ export async function addNativeSlide(
   instance: SlideInstance,
   num: string,
   logoUrl?: string,
-  pageLabel?: string
+  pageLabel?: string,
+  deckThemeMode?: ThemeMode
 ): Promise<void> {
   const c = instance.content;
+  const isDark = isSlideDark(instance.templateId, deckThemeMode, instance.themeOverride);
 
   if (instance.templateId === 'blank') {
     const layout = c.blankLayout ?? 'standard';
-    applyBackground(slide, layout === 'full-bleed' ? { base: WHITE } : { base: WHITE, grid: true });
+    applyBackground(
+      slide,
+      layout === 'full-bleed' ? { base: isDark ? BLACK : WHITE } : { base: isDark ? BLACK : WHITE, grid: true },
+      isDark
+    );
   } else {
-    applyBackground(slide, DECOR[instance.templateId] ?? { base: WHITE });
+    const defaultDecor = DECOR[instance.templateId] ?? { base: WHITE };
+    const baseColor = isDark ? BLACK : defaultDecor.base;
+    applyBackground(slide, { ...defaultDecor, base: baseColor }, isDark);
   }
 
   switch (instance.templateId) {
     case 's1':
-      await buildCover(slide, c, logoUrl);
+      await buildCover(slide, c, logoUrl, isDark);
       break;
     case 's2':
-      buildIndex(slide, c, num);
+      buildIndex(slide, c, num, isDark);
       break;
     case 's3':
-      buildExecutiveSummary(slide, c, num);
+      buildExecutiveSummary(slide, c, num, isDark);
       break;
     case 's4':
       await buildSectionDivider(slide, c, num, logoUrl);
       break;
     case 's5':
-      buildTwoColumnContext(slide, c, num);
+      buildTwoColumnContext(slide, c, num, isDark);
       break;
     case 's6':
-      buildDataMonument(slide, c);
+      buildDataMonument(slide, c, isDark);
       break;
     case 's7':
-      buildMetricsDashboard(slide, c, num);
+      buildMetricsDashboard(slide, c, num, isDark);
       break;
     case 's8':
-      buildComparativeTable(slide, c, num);
+      buildComparativeTable(slide, c, num, isDark);
       break;
     case 's9':
-      buildStrategicRoadmap(slide, c, num);
+      buildStrategicRoadmap(slide, c, num, isDark);
       break;
     case 's10':
-      await buildImageEditorial(slide, c);
+      await buildImageEditorial(slide, c, isDark);
       break;
     case 's11':
-      buildProcessArchitecture(slide, c, num);
+      buildProcessArchitecture(slide, c, num, isDark);
       break;
     case 's12':
-      await buildGlobalMap(slide, c, num);
+      await buildGlobalMap(slide, c, num, isDark);
       break;
     case 's13':
-      await buildFeaturedQuote(slide, c, num);
+      await buildFeaturedQuote(slide, c, num, isDark);
       break;
     case 's14':
       await buildExit(slide, c, logoUrl);
       break;
     case 'blank':
-      await buildBlank(slide, c, num);
+      await buildBlank(slide, c, num, isDark);
       break;
     default:
       break;

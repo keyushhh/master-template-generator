@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
 import { addNativeSlide } from './pptxNative';
 import { embedPptxFonts } from './pptxFontEmbed';
-import type { SlideInstance } from '../deck/types';
+import type { SlideInstance, ThemeMode } from '../deck/types';
 
 /**
  * html2canvas's CSS parser doesn't understand `color-mix()` (or the `color()`
@@ -146,7 +146,8 @@ export async function exportToPPTX(
   slides: SlideInstance[],
   deckTitle: string,
   logoUrl: string | undefined,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  themeMode?: ThemeMode
 ) {
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
@@ -158,7 +159,7 @@ export async function exportToPPTX(
     onProgress?.(i, total);
     const num = String(i + 1).padStart(2, '0');
     const slide = pptx.addSlide();
-    await addNativeSlide(slide, slides[i], num, logoUrl, `${i + 1} / ${total}`);
+    await addNativeSlide(slide, slides[i], num, logoUrl, `${i + 1} / ${total}`, themeMode);
   }
 
   onProgress?.(total, total);

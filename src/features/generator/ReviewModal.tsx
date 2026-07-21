@@ -5,7 +5,7 @@ import { analyzeCoverage } from '../deck/deckBuilder';
 import { useToast } from '../toast/Toast';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
-import type { Deck, SlideInstance } from '../deck/types';
+import type { Deck, SlideInstance, ThemeMode } from '../deck/types';
 import type { CampaignType } from '../business-record/sampleDecks';
 
 interface ReviewModalProps {
@@ -38,11 +38,13 @@ function ScaledSlideStage({
   ast,
   num,
   logoUrl,
+  deckThemeMode,
 }: {
   slide: SlideInstance;
   ast: DocumentNode | null;
   num: string;
   logoUrl?: string;
+  deckThemeMode?: ThemeMode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.16);
@@ -64,8 +66,8 @@ function ScaledSlideStage({
   }, []);
 
   return (
-    <div ref={containerRef} className="w-full aspect-[16/9] relative overflow-hidden bg-white">
-      <SlideStage slide={slide} ast={ast} num={num} scale={scale} logoUrl={logoUrl} />
+    <div ref={containerRef} className="w-full aspect-[16/9] relative overflow-hidden bg-transparent">
+      <SlideStage slide={slide} ast={ast} num={num} scale={scale} logoUrl={logoUrl} deckThemeMode={deckThemeMode} />
     </div>
   );
 }
@@ -140,7 +142,7 @@ export function ReviewModal({
       const onProgress = (current: number, total: number) => setProgress({ current, total });
       if (kind === 'pdf') await mod.exportToPDF(visibleIds, title, onProgress);
       else if (kind === 'png') await mod.exportSlidesAsPngZip(visibleIds, title, onProgress);
-      else await mod.exportToPPTX(visible, title, deck.logoUrl, onProgress);
+      else await mod.exportToPPTX(visible, title, deck.logoUrl, onProgress, deck.themeMode);
     } catch (err) {
       console.error(`${kind} export error:`, err);
       showToast(`${kind.toUpperCase()} export failed. Please try again.`, 'error');
@@ -264,7 +266,7 @@ export function ReviewModal({
                               : 'border-neutral-300'
                         }`}
                       >
-                        <ScaledSlideStage slide={slide} ast={ast} num={num} logoUrl={deck.logoUrl} />
+                        <ScaledSlideStage slide={slide} ast={ast} num={num} logoUrl={deck.logoUrl} deckThemeMode={deck.themeMode} />
                         {/* Permanent accent wash - selected (included) reads emerald, unselected (excluded) reads a muted gray-green, both visible without hovering. */}
                         <div
                           className={`absolute inset-0 z-[8] pointer-events-none transition-colors ${

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, SlideContent, SlideInstance } from '../deck/types';
+import { isSlideDark } from '../deck/themeHelper';
 import { autoFitHeadingFontSize, autoFitBodyFontSize } from './autoFit';
 
 interface PresentationCanvasProps {
@@ -14,6 +15,8 @@ interface PresentationCanvasProps {
   /** Enter edit mode (used so a click on an empty blank-slide field can jump
    *  straight into editing instead of requiring a separate "Edit Content" click). */
   onRequestEdit?: () => void;
+  /** Toggle an individual slide's theme override between light and dark. */
+  onToggleSlideTheme?: (instanceId: string) => void;
 }
 
 /** Props every slide renderer receives: parsed document (for the logo), the
@@ -279,9 +282,9 @@ function SlideGrid() {
         position: 'absolute',
         inset: 0,
         backgroundImage:
-          'linear-gradient(var(--border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px)',
+          'linear-gradient(var(--grid-line-color, var(--border-subtle)) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line-color, var(--border-subtle)) 1px, transparent 1px)',
         backgroundSize: '120px 120px',
-        opacity: 1.0,
+        opacity: 0.65,
         pointerEvents: 'none',
         zIndex: 0,
       }}
@@ -289,7 +292,7 @@ function SlideGrid() {
   );
 }
 
-/** Radial glow for light slides - uses accent colour.
+/** Radial emerald ambient glow - vibrant and visible in dark mode.
  *  Uses explicit z-index to avoid overlaying text.
  */
 function Glow({ style }: { style?: React.CSSProperties }) {
@@ -300,7 +303,8 @@ function Glow({ style }: { style?: React.CSSProperties }) {
         width: 1400,
         height: 1400,
         background:
-          'radial-gradient(circle, color-mix(in srgb, var(--emerald-500) 8%, transparent) 0%, transparent 70%)',
+          'var(--glow-bg, radial-gradient(circle, color-mix(in srgb, var(--emerald-500) 8%, transparent) 0%, transparent 70%))',
+        filter: 'var(--glow-filter, none)',
         zIndex: 0,
         pointerEvents: 'none',
         ...style,
@@ -875,7 +879,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
           style={
             logoUrl
               ? undefined
-              : { borderColor: 'rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.6)' }
+              : { borderColor: 'var(--neutral-300)', color: 'var(--neutral-500)' }
           }
         />
       </div>
@@ -888,7 +892,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
           fontFamily: 'var(--font-mono)',
           fontSize: 15,
           letterSpacing: '0.2em',
-          color: 'rgba(255,255,255,0.4)',
+          color: 'var(--neutral-500)',
         }}
       >
         <E
@@ -921,7 +925,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
             ...DISPLAY_HEADING_BASE,
             fontSize: headingFont,
             fontWeight: 700,
-            color: '#ffffff',
+            color: 'var(--neutral-900)',
             margin: '42px 0 48px',
           }}
         >
@@ -933,7 +937,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
         </h1>
         <p
           style={{
-            color: 'rgba(255,255,255,0.55)',
+            color: 'var(--neutral-500)',
             fontSize: subtitleFont,
             lineHeight: 1.5,
             maxWidth: 960,
@@ -1862,7 +1866,7 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
               style={{
                 position: 'absolute',
                 inset: 0,
-                background: 'linear-gradient(90deg, #fff 0%, transparent 20%)',
+                background: 'linear-gradient(90deg, var(--pure-white) 0%, transparent 20%)',
                 pointerEvents: 'none',
                 zIndex: 15,
               }}
@@ -2351,7 +2355,7 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
           style={
             logoUrl
               ? undefined
-              : { borderColor: 'rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.6)' }
+              : { borderColor: 'var(--neutral-300)', color: 'var(--neutral-500)' }
           }
         />
       </div>
@@ -2379,7 +2383,7 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
             ...DISPLAY_HEADING_BASE,
             fontSize: exitHeadingFont,
             fontWeight: 700,
-            color: '#ffffff',
+            color: 'var(--neutral-900)',
             marginBottom: 40,
           }}
         >
@@ -2391,7 +2395,7 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
         </h1>
         <p
           style={{
-            color: 'rgba(255,255,255,0.5)',
+            color: 'var(--neutral-500)',
             fontSize: exitBodyFont,
             maxWidth: 800,
             lineHeight: 1.5,
@@ -2679,19 +2683,22 @@ export function SlideStage({
   num,
   scale,
   logoUrl,
+  deckThemeMode,
 }: {
   slide: SlideInstance;
   ast: DocumentNode | null;
   num: string;
   scale: number;
   logoUrl?: string;
+  deckThemeMode?: import('../deck/types').ThemeMode;
 }) {
   const Renderer = SLIDE_RENDERERS[slide.templateId];
-  const isDark = DARK_TEMPLATES.has(slide.templateId);
+  const isDark = isSlideDark(slide.templateId, deckThemeMode, slide.themeOverride);
   return (
     <div style={{ width: 1920 * scale, height: 1080 * scale, flexShrink: 0, overflow: 'hidden' }}>
       <div
         className="wg-doc"
+        data-theme={isDark ? 'dark' : 'light'}
         style={{
           width: 1920,
           height: 1080,
@@ -2700,7 +2707,7 @@ export function SlideStage({
           position: 'relative',
           overflow: 'hidden',
           padding: 0,
-          background: isDark ? '#000000' : 'var(--pure-white)',
+          background: isDark ? '#09090b' : 'var(--pure-white)',
           color: isDark ? '#ffffff' : 'var(--neutral-900)',
         }}
       >
@@ -2725,15 +2732,19 @@ function SlideImageToolbar({
   isActiveEdit,
   num,
   imageUrl,
+  isDark,
   onUpload,
   onRemove,
+  onToggleTheme,
 }: {
   editing: boolean;
   isActiveEdit: boolean;
   num: string;
   imageUrl?: string;
+  isDark: boolean;
   onUpload: (dataUrl: string) => void;
   onRemove: () => void;
+  onToggleTheme?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -2793,6 +2804,42 @@ function SlideImageToolbar({
       />
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {onToggleTheme && (
+          <button
+            onClick={onToggleTheme}
+            style={{
+              background: 'rgba(255, 255, 255, 0.2)',
+              color: '#fff',
+              border: '1px solid rgba(255, 255, 255, 0.35)',
+              padding: '6px 14px',
+              borderRadius: 6,
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+            title="Toggle theme for this slide"
+          >
+            {isDark ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+                </svg>
+                Set Light
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" fill="currentColor" />
+                </svg>
+                Set Dark
+              </>
+            )}
+          </button>
+        )}
         {imageUrl ? (
           <>
             <button
@@ -2811,7 +2858,12 @@ function SlideImageToolbar({
                 gap: 6,
               }}
             >
-              🖼️ Replace Image
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              Replace Image
             </button>
             <button
               onClick={onRemove}
@@ -2829,7 +2881,11 @@ function SlideImageToolbar({
                 gap: 6,
               }}
             >
-              ✕ Remove Image
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Remove Image
             </button>
           </>
         ) : (
@@ -2850,7 +2906,11 @@ function SlideImageToolbar({
               boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
             }}
           >
-            ➕ Add Image to Slide
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add Image to Slide
           </button>
         )}
       </div>
@@ -2916,7 +2976,7 @@ function UniversalSlideOverlayImage({
 // ---------------------------------------------------------------------------
 // PresentationCanvas
 // ---------------------------------------------------------------------------
-export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange, onRequestEdit }: PresentationCanvasProps) {
+export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange, onRequestEdit, onToggleSlideTheme }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   // Which slide currently holds focus while editing - drives the "you're
   // editing this one" outline so all slides don't look identically active.
@@ -2973,7 +3033,7 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
     >
       {visibleSlides.map((slide, i) => {
         const Renderer = SLIDE_RENDERERS[slide.templateId];
-        const isDark = DARK_TEMPLATES.has(slide.templateId);
+        const isDark = isSlideDark(slide.templateId, deck.themeMode, slide.themeOverride);
         const num = String(i + 1).padStart(2, '0');
 
         const isActiveEdit = editing && activeSlideId === slide.instanceId;
@@ -2983,6 +3043,7 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
             key={slide.instanceId}
             id={slide.instanceId}
             data-slide
+            data-theme={isDark ? 'dark' : 'light'}
             className="page"
             onFocus={() => editing && setActiveSlideId(slide.instanceId)}
             style={{
@@ -2993,7 +3054,7 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
               flexShrink: 0,
               position: 'relative',
               overflow: 'hidden',
-              background: isDark ? '#000000' : 'var(--pure-white)',
+              background: isDark ? '#09090b' : 'var(--pure-white)',
               color: isDark ? '#ffffff' : 'var(--neutral-900)',
               boxShadow: isActiveEdit
                 ? 'var(--shadow-soft), 0 0 0 4px color-mix(in srgb, var(--emerald-500) 18%, transparent)'
@@ -3011,8 +3072,10 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
               isActiveEdit={isActiveEdit}
               num={num}
               imageUrl={slide.content.imageUrl}
+              isDark={isDark}
               onUpload={(url) => onEditSlide(slide.instanceId, (c) => ({ ...c, imageUrl: url, hideImage: false }))}
               onRemove={() => onEditSlide(slide.instanceId, (c) => ({ ...c, imageUrl: undefined }))}
+              onToggleTheme={onToggleSlideTheme ? () => onToggleSlideTheme(slide.instanceId) : undefined}
             />
             {Renderer && (
               <Renderer

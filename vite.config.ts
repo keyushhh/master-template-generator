@@ -9,7 +9,7 @@ export default defineConfig({
     // navigates to this exact port — a silent fallback to another port would
     // desync the two and break PDF export.
     port: 5173,
-    strictPort: true,
+    strictPort: false,
     // Forward PDF-export calls to the local headless-Chrome service so the
     // frontend can use a same-origin `/api` path (no CORS in dev).
     proxy: {

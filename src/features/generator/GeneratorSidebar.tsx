@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Columns3, Sun, Moon } from 'lucide-react';
 import { SlideNavList } from './SlideNavList';
 import { SourceMaterialModal } from './SourceMaterialModal';
 import { DeckSwitcher } from './DeckSwitcher';
@@ -41,6 +42,7 @@ interface GeneratorSidebarProps {
   onNewDeck: () => void;
   onRenameDeck: (id: string, name: string) => void;
   onDeleteDeck: (id: string) => void;
+  onSetThemeMode?: (mode: 'hybrid' | 'light' | 'dark') => void;
 }
 
 /** Two-step confirm state that disarms itself after a short pause. */
@@ -81,6 +83,7 @@ export function GeneratorSidebar({
   onNewDeck,
   onRenameDeck,
   onDeleteDeck,
+  onSetThemeMode,
 }: GeneratorSidebarProps) {
   const [sourceOpen, setSourceOpen] = useState(false);
 
@@ -100,6 +103,50 @@ export function GeneratorSidebar({
           onRename={onRenameDeck}
           onDelete={onDeleteDeck}
         />
+
+        {/* Deck Theme Mode Segmented Controller */}
+        <div className="w-full mt-1">
+          <div className="grid grid-cols-3 gap-0.5 bg-neutral-100 p-0.5 rounded-none border border-neutral-200 shadow-none">
+            <button
+              onClick={() => onSetThemeMode?.('hybrid')}
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-1 rounded-none transition-all cursor-pointer font-sans text-[12px] font-normal tracking-normal shadow-none ${
+                (deck.themeMode ?? 'hybrid') === 'hybrid'
+                  ? 'bg-neutral-900 text-white'
+                  : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-200/50'
+              }`}
+              title="Default Theme: Dark Cover/Dividers, Light Content"
+            >
+              <Columns3 size={13} strokeWidth={1.5} />
+              <span>Default</span>
+            </button>
+
+            <button
+              onClick={() => onSetThemeMode?.('light')}
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-1 rounded-none transition-all cursor-pointer font-sans text-[12px] font-normal tracking-normal shadow-none ${
+                deck.themeMode === 'light'
+                  ? 'bg-neutral-900 text-white'
+                  : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-200/50'
+              }`}
+              title="Light Theme: Pure white corporate background"
+            >
+              <Sun size={13} strokeWidth={1.5} />
+              <span>Light</span>
+            </button>
+
+            <button
+              onClick={() => onSetThemeMode?.('dark')}
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-1 rounded-none transition-all cursor-pointer font-sans text-[12px] font-normal tracking-normal shadow-none ${
+                deck.themeMode === 'dark'
+                  ? 'bg-neutral-900 text-white'
+                  : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-200/50'
+              }`}
+              title="Dark Theme: Executive obsidian keynote background"
+            >
+              <Moon size={13} strokeWidth={1.5} />
+              <span>Dark</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Scrollable Navigation section */}

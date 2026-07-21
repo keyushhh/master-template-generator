@@ -130,6 +130,8 @@ export interface SlideContent {
   blankLayout?: 'standard' | 'two-column' | 'full-bleed';
 }
 
+export type ThemeMode = 'hybrid' | 'light' | 'dark';
+
 export interface SlideInstance {
   /** Unique per instance - duplicating a slide mints a new instanceId while
    *  keeping the same templateId. Used as the DOM anchor id. */
@@ -143,6 +145,8 @@ export interface SlideInstance {
    *  the canvas and from numbering. */
   hidden: boolean;
   content: SlideContent;
+  /** Per-slide theme override ('light' | 'dark'). Defaults to deck theme. */
+  themeOverride?: 'light' | 'dark';
 }
 
 export interface Deck {
@@ -151,4 +155,6 @@ export interface Deck {
   generated: boolean;
   /** Deck-level client logo (data URL or frontmatter URL); editable in edit mode. */
   logoUrl?: string;
+  /** Deck-wide presentation theme mode: 'hybrid' (default balance), 'light', or 'dark'. */
+  themeMode?: ThemeMode;
 }
