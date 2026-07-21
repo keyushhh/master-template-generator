@@ -7,6 +7,12 @@ interface SlideNavListProps {
   onDuplicate: (instanceId: string) => void;
   onDelete: (instanceId: string) => void;
   onRename: (instanceId: string, title: string) => void;
+  /** Move `fromId` to sit just before `toId` in the deck order. */
+  onReorder: (fromId: string, toId: string) => void;
+  /** Append a new blank slide to the deck. */
+  onAddBlank: () => void;
+  /** Insert a new blank slide immediately after the given instanceId. */
+  onInsertAfter: (instanceId: string) => void;
 }
 
 interface NavGroup {
@@ -57,6 +63,17 @@ function PlusIcon() {
   );
 }
 
+/** Arrow pointing down to a line — reads clearly as "insert below". */
+function InsertAfterIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="3" x2="12" y2="15" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="5" y1="20" x2="19" y2="20" />
+    </svg>
+  );
+}
+
 function TrashIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -68,11 +85,32 @@ function TrashIcon() {
   );
 }
 
-export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, onRename }: SlideNavListProps) {
+/**
+ * Instant custom tooltip — replaces the native `title` attr which has a
+ * ~500ms OS delay. Black sharp box, white mono text, appears above the target.
+ */
+function Tip({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="relative group/tip flex items-center justify-center">
+      {children}
+      <div
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-[7px] px-[7px] py-[3px] bg-neutral-900 text-white font-mono text-[10px] font-semibold tracking-[0.06em] whitespace-nowrap select-none z-[200] opacity-0 group-hover/tip:opacity-100 transition-opacity duration-75"
+      >
+        {label}
+      </div>
+    </div>
+  );
+}
+
+export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, onRename, onReorder, onAddBlank, onInsertAfter }: SlideNavListProps) {
   const [activeId, setActiveId] = useState<string>(slides[0]?.instanceId ?? '');
   // Double-click-to-rename state: which row is being renamed + its draft text.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  // Drag-to-reorder state.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
   const commitRename = () => {
     if (renamingId && renameValue.trim()) {
@@ -81,7 +119,7 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
     setRenamingId(null);
   };
 
-  // Visible-slide numbering — must match the canvas footer numbering.
+  // Visible-slide numbering - must match the canvas footer numbering.
   const numbering = new Map<string, string>();
   let visibleIndex = 0;
   for (const slide of slides) {
@@ -143,9 +181,31 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
                 return (
                   <div
                     key={slide.instanceId}
+                    draggable
+                    onDragStart={(e) => {
+                      setDragId(slide.instanceId);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragId && overId !== slide.instanceId) setOverId(slide.instanceId);
+                    }}
+                    onDragEnd={() => { setDragId(null); setOverId(null); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (dragId && dragId !== slide.instanceId) onReorder(dragId, slide.instanceId);
+                      setDragId(null);
+                      setOverId(null);
+                    }}
                     className={`group/item relative flex items-center rounded-[var(--radius-sharp)] transition-all duration-150 ${
+                      dragId === slide.instanceId ? 'opacity-40' : ''
+                    } ${
+                      overId === slide.instanceId && dragId && dragId !== slide.instanceId
+                        ? 'border-t-2 border-emerald-500'
+                        : 'border-t-2 border-transparent'
+                    } ${
                       isActive
-                        ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                        ? 'bg-emerald-50 text-emerald-700 font-semibold'
                         : slide.hidden
                           ? 'text-neutral-300 hover:bg-neutral-50'
                           : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
@@ -153,25 +213,26 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
                   >
                     <a
                       href={`#${slide.instanceId}`}
+                      draggable={false}
                       onClick={(e) => {
                         e.preventDefault();
                         handleNavigate(slide);
                       }}
                       className={`flex items-baseline gap-3 px-3 py-[9px] flex-1 min-w-0 ${
-                        slide.hidden ? 'cursor-default pr-24' : 'cursor-pointer'
+                        slide.hidden ? 'cursor-default pr-24' : 'cursor-grab active:cursor-grabbing'
                       }`}
                     >
                       {/* Slide Number: fixed column alignment with min-width */}
                       <span
                         className={`font-mono text-[11px] tracking-[0.1em] min-w-[24px] ${
                           isActive
-                            ? 'text-indigo-600 font-medium'
+                            ? 'text-emerald-600 font-medium'
                             : slide.hidden
                               ? 'text-neutral-300'
                               : 'text-neutral-400'
                         }`}
                       >
-                        {slide.hidden ? '—' : numbering.get(slide.instanceId)}
+                        {slide.hidden ? '-' : numbering.get(slide.instanceId)}
                       </span>
                       {/* Slide Title: clean weights, struck through when hidden.
                           Double-click to rename inline. */}
@@ -186,7 +247,7 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
                             if (e.key === 'Escape') setRenamingId(null);
                           }}
                           onClick={(e) => e.preventDefault()}
-                          className="font-sans text-[13px] tracking-normal flex-1 min-w-0 bg-white border border-indigo-300 rounded-[var(--radius-sharp)] px-1 py-0 outline-none text-neutral-900"
+                          className="font-sans text-[13px] tracking-normal flex-1 min-w-0 bg-white border border-emerald-300 rounded-[var(--radius-sharp)] px-1 py-0 outline-none text-neutral-900"
                         />
                       ) : (
                         <span
@@ -215,41 +276,54 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
                         slide.hidden
                           ? 'opacity-100'
                           : `opacity-0 group-hover/item:opacity-100 ${
-                              isActive ? 'bg-indigo-50' : 'bg-neutral-100'
+                              isActive ? 'bg-emerald-50' : 'bg-neutral-100'
                             }`
                       }`}
                     >
-                      <button
-                        type="button"
-                        title={slide.hidden ? 'Show slide' : 'Hide slide'}
-                        aria-label={slide.hidden ? 'Show slide' : 'Hide slide'}
-                        onClick={() => onToggleHidden(slide.instanceId)}
-                        className={`flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent transition-colors ${
-                          slide.hidden
-                            ? 'text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100'
-                            : 'text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200'
-                        }`}
-                      >
-                        <EyeIcon off={slide.hidden} />
-                      </button>
-                      <button
-                        type="button"
-                        title="Duplicate slide"
-                        aria-label="Duplicate slide"
-                        onClick={() => onDuplicate(slide.instanceId)}
-                        className="flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200 transition-colors"
-                      >
-                        <PlusIcon />
-                      </button>
-                      <button
-                        type="button"
-                        title="Delete slide"
-                        aria-label="Delete slide"
-                        onClick={() => onDelete(slide.instanceId)}
-                        className="flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <TrashIcon />
-                      </button>
+                      <Tip label={slide.hidden ? 'Show slide' : 'Hide slide'}>
+                        <button
+                          type="button"
+                          aria-label={slide.hidden ? 'Show slide' : 'Hide slide'}
+                          onClick={() => onToggleHidden(slide.instanceId)}
+                          className={`flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent transition-colors ${
+                            slide.hidden
+                              ? 'text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100'
+                              : 'text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200'
+                          }`}
+                        >
+                          <EyeIcon off={slide.hidden} />
+                        </button>
+                      </Tip>
+                      <Tip label="Duplicate">
+                        <button
+                          type="button"
+                          aria-label="Duplicate slide"
+                          onClick={() => onDuplicate(slide.instanceId)}
+                          className="flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200 transition-colors"
+                        >
+                          <PlusIcon />
+                        </button>
+                      </Tip>
+                      <Tip label="Insert after">
+                        <button
+                          type="button"
+                          aria-label="Insert blank slide after"
+                          onClick={() => onInsertAfter(slide.instanceId)}
+                          className="flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent text-neutral-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        >
+                          <InsertAfterIcon />
+                        </button>
+                      </Tip>
+                      <Tip label="Delete">
+                        <button
+                          type="button"
+                          aria-label="Delete slide"
+                          onClick={() => onDelete(slide.instanceId)}
+                          className="flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </Tip>
                     </div>
                   </div>
                 );
@@ -258,6 +332,16 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
           </div>
         ))}
       </div>
+
+      {/* Add a fresh blank slide the user can fill in from scratch. */}
+      <button
+        type="button"
+        onClick={onAddBlank}
+        className="mt-5 mx-1 flex items-center justify-center gap-2 h-[38px] rounded-[var(--radius-sharp)] border border-dashed border-neutral-300 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400 hover:bg-neutral-50 transition-colors cursor-pointer font-mono text-[11px] font-semibold uppercase tracking-[0.1em]"
+      >
+        <PlusIcon />
+        Add blank slide
+      </button>
     </div>
   );
 }

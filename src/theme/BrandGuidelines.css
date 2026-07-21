@@ -1,5 +1,5 @@
 /* ============================================================
-   WOZKU — MASTER TEMPLATE GENERATOR (Scoped Styles)
+   WOZKU - MASTER TEMPLATE GENERATOR (Scoped Styles)
    ============================================================ */
 
 /* This reset must live in @layer base: unlayered styles outrank every
@@ -19,6 +19,9 @@
   --radius-xs: 6px;
   --radius-sharp: 0px;
 
+  /* Width of the fixed left panel; the deck reserves this space then centers. */
+  --sidenav-w: 300px;
+
   --shadow-soft: 0 1px 2px rgba(15,23,20,0.04), 0 12px 32px -12px rgba(15,23,20,0.10);
   --shadow-lift: 0 2px 4px rgba(15,23,20,0.05), 0 24px 48px -16px rgba(15,23,20,0.16);
 
@@ -31,11 +34,13 @@
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   display: block;
+  /* Reserve the fixed sidebar's width so .book can center in the remaining space. */
+  padding-left: var(--sidenav-w);
 }
 
-/* ---------- Theme preset scales ---------- */
-.wg-doc.theme-emerald {
-  --indigo-50:#ecfdf5; --indigo-100:#d1fae5; --indigo-200:#a7f3d0; --indigo-300:#6ee7b7; --indigo-400:#34d399; --indigo-500:#10b981; --indigo-600:#059669; --indigo-700:#047857; --indigo-800:#065f46; --indigo-900:#064e3b;
+/* ---------- Brand primary scale (emerald green) ---------- */
+.wg-doc {
+  --emerald-50:#ecfdf5; --emerald-100:#d1fae5; --emerald-200:#a7f3d0; --emerald-300:#6ee7b7; --emerald-400:#34d399; --emerald-500:#10b981; --emerald-600:#059669; --emerald-700:#047857; --emerald-800:#065f46; --emerald-900:#064e3b;
   --accent-50:#f0fdf4; --accent-100:#dcfce7; --accent-200:#bbf7d0; --accent-300:#86efac; --accent-400:#4ade80; --accent-500:#22c55e; --accent-600:#16a34a; --accent-700:#15803d; --accent-800:#166534; --accent-900:#14532d;
 }
 
@@ -43,7 +48,7 @@
 .wg-doc .sidenav {
   position: fixed;
   top: 0; left: 0; bottom: 0;
-  width: 236px;
+  width: var(--sidenav-w);
   background: var(--pure-white);
   border-right: 1px solid var(--neutral-150);
   display: flex;
@@ -51,7 +56,7 @@
   z-index: 100;
 }
 .wg-doc .sidenav-brand {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: flex-start; gap: 8px;
   padding: 22px 20px 18px;
   border-bottom: 1px solid var(--neutral-150);
 }
@@ -64,7 +69,9 @@
 
 
 /* ================= MAIN / PAGES ================= */
-.wg-doc .book { margin-left: 236px; padding: 40px 40px 120px; max-width: 1180px; }
+/* .wg-doc reserves the sidebar via padding-left; auto margins center the deck
+   in the remaining viewport so it isn't left-pinned with dead space on the right. */
+.wg-doc .book { margin: 0 auto; padding: 40px 40px 120px; max-width: 1200px; }
 .wg-doc .page {
   background: var(--pure-white);
   border-radius: 0;
@@ -78,10 +85,10 @@
 }
 .wg-doc .eyebrow {
   font-family: var(--font-mono); font-size: 11px; font-weight: 500;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--indigo-600);
+  letter-spacing: .09em; text-transform: uppercase; color: var(--emerald-600);
   margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
 }
-.wg-doc .eyebrow::before { content: ""; width: 14px; height: 1.5px; background: var(--indigo-500); display: inline-block; }
+.wg-doc .eyebrow::before { content: ""; width: 14px; height: 1.5px; background: var(--emerald-500); display: inline-block; }
 .wg-doc h1.page-title { font-family: var(--font-display); font-weight: 700; font-size: 40px; letter-spacing: -0.02em; line-height: 1.05; margin-bottom: 18px; color: var(--neutral-950); }
 .wg-doc .page-body { font-size: 15px; line-height: 1.65; color: var(--neutral-600); max-width: 480px; }
 .wg-doc .footer-row {
@@ -92,12 +99,13 @@
 }
 
 @media (max-width: 720px) {
+  .wg-doc { padding-left: 0; }
   .wg-doc .sidenav { display: none; }
-  .wg-doc .book { margin-left: 0; padding: 24px 16px 80px; }
+  .wg-doc .book { margin: 0; padding: 24px 16px 80px; }
   .wg-doc .page { padding: 36px 24px; }
 }
 
-/* Upload zone — explicit values to survive the * { padding:0 } reset */
+/* Upload zone - explicit values to survive the * { padding:0 } reset */
 .wg-doc .upload-zone {
   display: flex;
   flex-direction: column;
@@ -110,8 +118,8 @@
   cursor: pointer;
   transition: border-color .15s ease, background .15s ease;
 }
-.wg-doc .upload-zone:hover { border-color: var(--indigo-500); background: var(--indigo-50); }
-.wg-doc .upload-zone.dragging { border-color: var(--indigo-500); background: var(--indigo-50); }
+.wg-doc .upload-zone:hover { border-color: var(--emerald-500); background: var(--emerald-50); }
+.wg-doc .upload-zone.dragging { border-color: var(--emerald-500); background: var(--emerald-50); }
 
 /* ================= PRINT / PDF EXPORT ================= */
 @media print {

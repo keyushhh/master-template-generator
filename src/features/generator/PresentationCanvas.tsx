@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DocumentNode } from '../business-record/parser/ast';
-import type { Deck, SlideContent } from '../deck/types';
+import type { Deck, SlideContent, SlideInstance } from '../deck/types';
 
 interface PresentationCanvasProps {
   ast: DocumentNode | null;
@@ -8,6 +8,11 @@ interface PresentationCanvasProps {
   /** Edit mode: text slots become contentEditable and commit via onEditSlide. */
   editing: boolean;
   onEditSlide: (instanceId: string, updater: (content: SlideContent) => SlideContent) => void;
+  /** Set/clear the deck-level client logo (edit mode). */
+  onLogoChange?: (dataUrl: string | undefined) => void;
+  /** Enter edit mode (used so a click on an empty blank-slide field can jump
+   *  straight into editing instead of requiring a separate "Edit Content" click). */
+  onRequestEdit?: () => void;
 }
 
 /** Props every slide renderer receives: parsed document (for the logo), the
@@ -19,6 +24,13 @@ interface SlideRenderProps {
   num: string;
   editing: boolean;
   onEdit: (updater: (content: SlideContent) => SlideContent) => void;
+  /** Deck-level client logo + its setter (edit mode). */
+  logoUrl?: string;
+  onLogoChange?: (dataUrl: string | undefined) => void;
+  /** DOM id of this slide's wrapper - lets a renderer target its own fields. */
+  instanceId?: string;
+  /** Enter edit mode from a view-mode click (see SlideBlank). */
+  onRequestEdit?: () => void;
 }
 
 const PLACEHOLDER =
@@ -44,19 +56,34 @@ interface EditableProps {
   onCommit: (value: string) => void;
   /** Allow Enter to create new lines (headings/bodies that support \n). */
   multiline?: boolean;
+  /** Tags the contentEditable span so a caller can find + focus it by
+   *  selector after programmatically entering edit mode (see SlideBlank). */
+  dataField?: string;
+  /** Called when this field is clicked while still in view mode - lets a
+   *  slide jump straight into editing that exact field with one click. */
+  onActivate?: () => void;
 }
 
 /** Renders plain text normally; in edit mode becomes a contentEditable span
  *  that commits on blur. Committing an empty string signals "revert to the
  *  template placeholder" (callers map '' → undefined). */
-function E({ value, editing, onCommit, multiline }: EditableProps) {
-  if (!editing) return <>{value}</>;
+function E({ value, editing, onCommit, multiline, dataField, onActivate }: EditableProps) {
+  if (!editing) {
+    if (!onActivate) return <>{value}</>;
+    return (
+      <span onClick={onActivate} style={{ cursor: 'text' }}>
+        {value}
+      </span>
+    );
+  }
   return (
     <span
       data-editable
+      data-field={dataField}
       contentEditable
       suppressContentEditableWarning
       spellCheck={false}
+      title="Press Esc to revert this field"
       onKeyDown={(e) => {
         if (!multiline && e.key === 'Enter') {
           e.preventDefault();
@@ -83,6 +110,161 @@ function E({ value, editing, onCommit, multiline }: EditableProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Media-editing primitives - all affordances render only in edit mode, so the
+// exported (view-mode) DOM captured by html2canvas / print stays clean.
+// Sized in the slide's native 1920px coordinate space (scaled with the slide).
+// ---------------------------------------------------------------------------
+
+/** Downscale an uploaded image to a JPEG data URL so decks stay light in
+ *  localStorage and on export. Falls back to the raw data URL if canvas fails. */
+async function fileToDataUrl(file: File, maxDim = 1600, mime: 'image/jpeg' | 'image/png' = 'image/jpeg'): Promise<string> {
+  const raw = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = () => rej(new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => {
+      img.onload = res;
+      img.onerror = rej;
+      img.src = raw;
+    });
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return raw;
+    ctx.drawImage(img, 0, 0, w, h);
+    // PNG preserves transparency (used for logos); JPEG keeps photos small.
+    return mime === 'image/png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85);
+  } catch {
+    return raw;
+  }
+}
+
+/** Pill button to append an item to a list (a bar, KPI, row, phase, …). */
+function AddBtn({ label, onClick, style }: { label: string; onClick: () => void; style?: React.CSSProperties }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 10,
+        height: 52, padding: '0 24px',
+        fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600,
+        letterSpacing: '0.06em', textTransform: 'uppercase',
+        color: 'var(--emerald-600)', background: 'var(--emerald-50)',
+        border: '1.5px dashed var(--emerald-400)', cursor: 'pointer',
+        borderRadius: 'var(--radius-sharp)', ...style,
+      }}
+    >
+      <span style={{ fontSize: 26, lineHeight: 1 }}>+</span> {label}
+    </button>
+  );
+}
+
+/** Circular remove control shown on each editable list item. */
+function RemoveBtn({ onClick, style, label = 'Remove' }: { onClick: () => void; style?: React.CSSProperties; label?: string }) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 40, height: 40, flexShrink: 0, padding: 0,
+        background: '#fff', color: '#dc2626',
+        border: '1.5px solid #fecaca', cursor: 'pointer',
+        borderRadius: '50%', fontSize: 30, lineHeight: 1, fontWeight: 400,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.14)', ...style,
+      }}
+    >
+      ×
+    </button>
+  );
+}
+
+/** Image slot: renders the image (or placeholder) in both modes so it captures
+ *  cleanly, and overlays Upload / Replace / Remove controls in edit mode.
+ *  `onDeleteContainer`, if given, adds a control that removes the whole slot
+ *  (not just its image) - the template falls back to a text-only layout. */
+function ImageSlot({ src, editing, onChange, placeholder, style, onDeleteContainer }: {
+  src?: string;
+  editing: boolean;
+  onChange: (dataUrl: string | undefined) => void;
+  placeholder?: string;
+  style?: React.CSSProperties;
+  onDeleteContainer?: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      try { onChange(await fileToDataUrl(f)); } catch { /* ignore bad file */ }
+    }
+    e.target.value = '';
+  };
+  const btn: React.CSSProperties = {
+    height: 52, padding: '0 22px', fontSize: 18, fontWeight: 700,
+    border: 'none', cursor: 'pointer', borderRadius: 'var(--radius-sharp)', color: '#fff',
+  };
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', ...style }}>
+      {src ? (
+        <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      ) : (
+        <div
+          onClick={() => editing && inputRef.current?.click()}
+          style={{
+            width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--neutral-100)',
+            border: editing ? '3px dashed var(--neutral-300)' : 'none',
+            cursor: editing ? 'pointer' : 'default',
+            fontFamily: 'var(--font-mono)', fontSize: 20, color: 'var(--neutral-400)',
+            textTransform: 'uppercase', letterSpacing: '0.12em', textAlign: 'center', padding: 40,
+          }}
+        >
+          {editing ? (placeholder ?? 'Click to add image') : (placeholder ?? 'Image Asset Placeholder')}
+        </div>
+      )}
+
+      {editing && onDeleteContainer && (
+        <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 20 }}>
+          <button
+            onClick={onDeleteContainer}
+            title="Remove this image area entirely"
+            style={{ ...btn, background: 'rgba(220,38,38,0.92)', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            Delete Container
+          </button>
+        </div>
+      )}
+
+      {editing && (
+        <div style={{ position: 'absolute', top: 24, right: 24, display: 'flex', gap: 12, zIndex: 20 }}>
+          <button onClick={() => inputRef.current?.click()} style={{ ...btn, background: 'rgba(0,0,0,0.78)' }}>
+            {src ? 'Replace' : 'Upload'}
+          </button>
+          {src && (
+            <button onClick={() => onChange(undefined)} style={{ ...btn, background: 'rgba(220,38,38,0.92)' }}>
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" onChange={onFile} style={{ display: 'none' }} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Shared micro-components (slide-internal only, not exported)
 // ---------------------------------------------------------------------------
 
@@ -98,6 +280,7 @@ function SlideGrid() {
         backgroundImage:
           'linear-gradient(var(--border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px)',
         backgroundSize: '120px 120px',
+        opacity: 1.0,
         pointerEvents: 'none',
         zIndex: 0,
       }}
@@ -105,7 +288,7 @@ function SlideGrid() {
   );
 }
 
-/** Radial glow for light slides — uses accent colour.
+/** Radial glow for light slides - uses accent colour.
  *  Uses explicit z-index to avoid overlaying text.
  */
 function Glow({ style }: { style?: React.CSSProperties }) {
@@ -116,7 +299,7 @@ function Glow({ style }: { style?: React.CSSProperties }) {
         width: 1400,
         height: 1400,
         background:
-          'radial-gradient(circle, color-mix(in srgb, var(--indigo-500) 8%, transparent) 0%, transparent 70%)',
+          'radial-gradient(circle, color-mix(in srgb, var(--emerald-500) 8%, transparent) 0%, transparent 70%)',
         zIndex: 0,
         pointerEvents: 'none',
         ...style,
@@ -168,7 +351,7 @@ function EditorialLabel({
         fontFamily: 'var(--font-mono)',
         fontSize: 14,
         textTransform: 'uppercase',
-        color: 'var(--indigo-600)',
+        color: 'var(--emerald-600)',
         letterSpacing: '0.25em',
         marginBottom: 30,
         display: 'flex',
@@ -183,7 +366,7 @@ function EditorialLabel({
           display: 'inline-block',
           width: 40,
           height: 1,
-          background: 'var(--indigo-500)',
+          background: 'var(--emerald-500)',
           flexShrink: 0,
         }}
       />
@@ -193,7 +376,15 @@ function EditorialLabel({
 }
 
 /** Oversized background numeral used by dark divider / monument slides. */
-function GhostNumeral({ num, dark }: { num: string; dark?: boolean }) {
+function GhostNumeral({
+  num,
+  dark,
+  style,
+}: {
+  num: string;
+  dark?: boolean;
+  style?: React.CSSProperties;
+}) {
   return (
     <div
       style={{
@@ -207,6 +398,7 @@ function GhostNumeral({ num, dark }: { num: string; dark?: boolean }) {
         lineHeight: 1,
         pointerEvents: 'none',
         zIndex: 0,
+        ...style,
       }}
     >
       {num}
@@ -214,43 +406,85 @@ function GhostNumeral({ num, dark }: { num: string; dark?: boolean }) {
   );
 }
 
-/** Client logo slot — sourced from the Business Record's optional `logo`
- *  frontmatter key (a URL). Renders a dashed placeholder mark when absent,
- *  matching the sidebar's upload-slot styling so it reads as swappable.
- */
-function Logo({ ast, style }: { ast: DocumentNode | null; style?: React.CSSProperties }) {
-  const src = ast?.metadata.values.logo;
+/** Client logo slot — deck-level `logoUrl` (seeded from the Business Record's
+ *  optional `logo` frontmatter). In edit mode the slot becomes click-to-upload
+ *  with a remove control, so users can set the brand logo without a URL. */
+function Logo({
+  src,
+  editing,
+  onChange,
+  style,
+}: {
+  src?: string;
+  editing?: boolean;
+  onChange?: (dataUrl: string | undefined) => void;
+  style?: React.CSSProperties;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      try { onChange?.(await fileToDataUrl(f, 600, 'image/png')); } catch { /* ignore */ }
+    }
+    e.target.value = '';
+  };
 
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt="Client logo"
-        style={{ height: 36, width: 'auto', objectFit: 'contain', zIndex: 10, ...style }}
-      />
+  const uploadIcon = (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+
+  // Resting placeholder (not editing): a clear, readable "add your logo" hint
+  // rather than a faint whisper that gets missed.
+  const placeholder: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 44, padding: '0 18px',
+    border: '1.5px dashed rgba(120,120,135,0.6)', borderRadius: 'var(--radius-sharp)',
+    fontFamily: 'var(--font-mono)', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.14em',
+    textTransform: 'uppercase', color: 'rgba(90,90,105,0.9)', whiteSpace: 'nowrap',
+  };
+
+  if (!editing) {
+    return src ? (
+      <img src={src} alt="Client logo" style={{ height: 40, width: 'auto', objectFit: 'contain', zIndex: 10, ...style }} />
+    ) : (
+      <div style={{ zIndex: 10, ...placeholder, ...style }}>{uploadIcon}Client Logo</div>
     );
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: 36,
-        padding: '0 16px',
-        border: '1px dashed rgba(140,140,150,0.4)',
-        borderRadius: 'var(--radius-sharp)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        letterSpacing: '0.15em',
-        textTransform: 'uppercase',
-        color: 'rgba(140,140,150,0.7)',
-        zIndex: 10,
-        ...style,
-      }}
-    >
-      Client Logo
+    <div style={{ position: 'relative', display: 'inline-flex', zIndex: 20, ...style }}>
+      <div
+        onClick={() => inputRef.current?.click()}
+        title={src ? 'Replace logo' : 'Upload logo'}
+        style={{
+          cursor: 'pointer',
+          ...placeholder,
+          padding: src ? 4 : '0 18px',
+          border: '2px solid var(--emerald-500, #10b981)',
+          background: src ? 'transparent' : 'rgba(16,185,129,0.10)',
+          color: 'var(--emerald-600, #059669)',
+          boxShadow: src ? 'none' : '0 1px 4px rgba(5,150,105,0.18)',
+        }}
+      >
+        {src
+          ? <img src={src} alt="Client logo" style={{ height: 40, width: 'auto', objectFit: 'contain' }} />
+          : <>{uploadIcon}Upload Logo</>}
+      </div>
+      {src && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onChange?.(undefined); }}
+          title="Remove logo"
+          aria-label="Remove logo"
+          style={{ position: 'absolute', top: -12, right: -12, width: 26, height: 26, borderRadius: '50%', background: '#fff', color: '#dc2626', border: '1.5px solid #fecaca', cursor: 'pointer', fontSize: 18, lineHeight: 1, boxShadow: '0 2px 6px rgba(0,0,0,0.14)' }}
+        >
+          ×
+        </button>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" onChange={onFile} style={{ display: 'none' }} />
     </div>
   );
 }
@@ -259,8 +493,16 @@ function Logo({ ast, style }: { ast: DocumentNode | null; style?: React.CSSPrope
 // Individual slide renderers
 // ---------------------------------------------------------------------------
 
-function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
-  const lines = content.headingLines ?? ['Master Primary', 'Heading', 'Variable.'];
+function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
+  const lines = content.headingLines ?? ['Master Primary', 'Heading.'];
+  // Auto-fit the hero: shrink the font and tighten the top padding for longer
+  // titles so the headline never overflows the fixed 1080px slide and keeps a
+  // clean bottom gap. Short titles keep the full 180px display size.
+  const longestLine = Math.max(...lines.map((l) => l.length), 1);
+  const heroFont = Math.round(
+    Math.max(72, Math.min(180, 1640 / (longestLine * 0.6), 620 / (lines.length * 0.95)))
+  );
+  const heroTopPad = lines.length >= 4 ? 160 : lines.length === 3 ? 210 : 280;
   return (
     <>
       <SlideGrid />
@@ -281,8 +523,8 @@ function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
           />
         }
       />
-      {/* Shifted padding-top from 380px to 280px to prevent bottom edge vertical clipping of placeholder/footer text */}
-      <div style={{ padding: '280px 140px', position: 'relative', zIndex: 10 }}>
+      {/* Top padding adapts to the number of hero lines so long titles fit cleanly. */}
+      <div style={{ padding: `${heroTopPad}px 140px`, position: 'relative', zIndex: 10 }}>
         <EditorialLabel>
           <E
             value={content.eyebrow ?? 'Presentation Subtitle'}
@@ -293,7 +535,7 @@ function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
         <h1
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 180,
+            fontSize: heroFont,
             fontWeight: 700,
             color: 'var(--neutral-900)',
             whiteSpace: 'pre-line',
@@ -326,12 +568,12 @@ function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
             ))
           )}
         </h1>
-        <div style={{ marginTop: 100, display: 'flex', alignItems: 'center', gap: 40 }}>
-          <div style={{ width: 120, height: 1, background: 'var(--indigo-500)' }} />
+        <div style={{ marginTop: 96, display: 'flex', alignItems: 'center', gap: 48 }}>
+          <div style={{ width: 135, height: 1, background: 'var(--emerald-500)' }} />
           <p
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: 14,
+              fontSize: 18,
               textTransform: 'uppercase',
               letterSpacing: '0.25em',
               color: 'var(--neutral-500)',
@@ -362,7 +604,7 @@ function SlideCover({ ast, content, editing, onEdit }: SlideRenderProps) {
         }}
       >
         <span>PROPRIETARY AND CONFIDENTIAL</span>
-        <Logo ast={ast} />
+        <Logo src={logoUrl} editing={editing} onChange={onLogoChange} />
       </div>
     </>
   );
@@ -426,7 +668,7 @@ function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
               <div
                 key={i}
                 style={{
-                  borderLeft: `2px solid ${i === 0 ? 'var(--indigo-500)' : 'var(--neutral-200)'}`,
+                  borderLeft: `2px solid ${i === 0 ? 'var(--emerald-500)' : 'var(--neutral-200)'}`,
                   paddingLeft: 30,
                   marginBottom: 40,
                 }}
@@ -479,12 +721,19 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
         num={num}
       />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Executive Summary'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <h2
           style={{
             ...DISPLAY_HEADING_BASE,
             fontSize: 100,
             fontWeight: 600,
-            marginBottom: 80,
+            marginBottom: 48,
             color: 'var(--neutral-900)',
             whiteSpace: 'pre-line',
           }}
@@ -496,7 +745,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
         </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 120 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 120 }}>
           <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
             <E
               value={content.body ?? PLACEHOLDER}
@@ -507,9 +756,9 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
           </p>
           <div
             style={{
-              background: 'var(--neutral-50)',
-              border: '1px solid var(--neutral-200)',
-              padding: 60,
+              borderLeft: '1px solid var(--neutral-200)',
+              paddingLeft: 66,
+              alignSelf: 'center',
             }}
           >
             <EditorialLabel>
@@ -519,9 +768,19 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
                 onCommit={(v) => onEdit((c) => ({ ...c, metricLabel: v || undefined }))}
               />
             </EditorialLabel>
-            <p style={{ color: 'var(--neutral-900)', fontSize: 32, fontWeight: 500, lineHeight: 1.5 }}>
+            <p
+              style={{
+                ...DISPLAY_HEADING_BASE,
+                fontSize: 56,
+                fontWeight: 700,
+                lineHeight: 1.1,
+                color: 'var(--neutral-900)',
+                whiteSpace: 'pre-line',
+                margin: '18px 0 24px',
+              }}
+            >
               <E
-                value={content.metricText ?? PLACEHOLDER}
+                value={content.metricText ?? '00.0%'}
                 editing={editing}
                 multiline
                 onCommit={(v) => onEdit((c) => ({ ...c, metricText: v || undefined }))}
@@ -534,10 +793,10 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
   );
 }
 
-function SlideSectionDivider({ ast, content, num, editing, onEdit }: SlideRenderProps) {
+function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
   return (
     <>
-      {/* Clean, flat design layout for SlideSectionDivider — no shadows or glow blurs */}
+      {/* Clean, flat design layout for SlideSectionDivider - no shadows or glow blurs */}
       <div
         style={{
           position: 'absolute',
@@ -547,12 +806,32 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit }: SlideRender
         }}
       >
         <Logo
-          ast={ast}
+          src={logoUrl}
+          editing={editing}
+          onChange={onLogoChange}
           style={
-            ast?.metadata.values.logo
+            logoUrl
               ? undefined
               : { borderColor: 'rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.6)' }
           }
+        />
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          top: 60,
+          right: 80,
+          zIndex: 10,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 15,
+          letterSpacing: '0.2em',
+          color: 'rgba(255,255,255,0.4)',
+        }}
+      >
+        <E
+          value={content.hudLabel ?? 'Section Marker'}
+          editing={editing}
+          onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
         />
       </div>
       <div
@@ -561,15 +840,14 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit }: SlideRender
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          alignItems: 'center',
-          textAlign: 'center',
           position: 'relative',
+          padding: '0 150px',
           zIndex: 10,
         }}
       >
-        <EditorialLabel style={{ justifyContent: 'center' }}>
+        <EditorialLabel style={{ color: 'var(--emerald-500)' }}>
           <E
-            value={content.eyebrow ?? 'Section Marker'}
+            value={content.eyebrow ?? 'Part 02'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
@@ -577,9 +855,10 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit }: SlideRender
         <h1
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 240,
+            fontSize: 180,
             fontWeight: 700,
             color: '#ffffff',
+            margin: '42px 0 48px',
           }}
         >
           <E
@@ -590,13 +869,11 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit }: SlideRender
         </h1>
         <p
           style={{
-            color: 'rgba(255,255,255,0.4)',
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: '0.38em',
-            textTransform: 'uppercase',
-            marginTop: 40,
-            fontSize: 20,
-            maxWidth: 1400,
+            color: 'rgba(255,255,255,0.55)',
+            fontSize: 30,
+            lineHeight: 1.5,
+            maxWidth: 960,
+            margin: 0,
           }}
         >
           <E
@@ -607,7 +884,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit }: SlideRender
           />
         </p>
       </div>
-      <GhostNumeral num={num} dark />
+      <GhostNumeral num={num} dark style={{ bottom: -105, right: -45, fontSize: 630, color: 'rgba(255,255,255,0.03)' }} />
     </>
   );
 }
@@ -781,7 +1058,7 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, value: v || undefined }))}
           />
-          <span style={{ color: 'var(--indigo-500)', fontSize: '0.3em', marginLeft: 10 }}>
+          <span style={{ color: 'var(--emerald-500)', fontSize: '0.3em', marginLeft: 10 }}>
             <E
               value={content.unit ?? 'M'}
               editing={editing}
@@ -826,23 +1103,30 @@ const DEFAULT_BARS = [
 ];
 const DEFAULT_KPIS = [
   { label: 'Metric Alpha', value: '00.0%' },
-  { label: 'Metric Beta',  value: '00.0x' },
+  { label: 'Metric Beta', value: '00.0x' },
   { label: 'Metric Gamma', value: '-00%' },
 ];
 
 function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderProps) {
   const bars = content.bars ?? DEFAULT_BARS;
   const kpis = content.kpis ?? DEFAULT_KPIS;
-  const editBar = (i: number, label: string) =>
-    onEdit((c) => {
-      const arr = (c.bars ?? DEFAULT_BARS).map((b, j) => (j === i ? { ...b, label: label || b.label } : b));
-      return { ...c, bars: arr };
-    });
+  const patchBar = (i: number, patch: Partial<(typeof bars)[number]>) =>
+    onEdit((c) => ({ ...c, bars: (c.bars ?? DEFAULT_BARS).map((b, j) => (j === i ? { ...b, ...patch } : b)) }));
+  const editBar = (i: number, label: string) => patchBar(i, { label: label || bars[i].label });
+  const setBarPct = (i: number, v: string) =>
+    patchBar(i, { pct: Math.max(0, Math.min(100, Math.round(parseFloat(v) || 0))) });
+  const toggleBarActive = (i: number) =>
+    onEdit((c) => ({ ...c, bars: (c.bars ?? DEFAULT_BARS).map((b, j) => ({ ...b, active: j === i ? !b.active : b.active })) }));
+  const addBar = () =>
+    onEdit((c) => ({ ...c, bars: [...(c.bars ?? DEFAULT_BARS), { label: 'New', pct: 50, active: false }] }));
+  const removeBar = (i: number) =>
+    onEdit((c) => ({ ...c, bars: (c.bars ?? DEFAULT_BARS).filter((_, j) => j !== i) }));
   const editKpi = (i: number, patch: Partial<(typeof kpis)[number]>) =>
-    onEdit((c) => {
-      const arr = (c.kpis ?? DEFAULT_KPIS).map((k, j) => (j === i ? { ...k, ...patch } : k));
-      return { ...c, kpis: arr };
-    });
+    onEdit((c) => ({ ...c, kpis: (c.kpis ?? DEFAULT_KPIS).map((k, j) => (j === i ? { ...k, ...patch } : k)) }));
+  const addKpi = () =>
+    onEdit((c) => ({ ...c, kpis: [...(c.kpis ?? DEFAULT_KPIS), { label: 'New Metric', value: '000' }] }));
+  const removeKpi = (i: number) =>
+    onEdit((c) => ({ ...c, kpis: (c.kpis ?? DEFAULT_KPIS).filter((_, j) => j !== i) }));
   return (
     <>
       <SlideGrid />
@@ -879,7 +1163,7 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
               key={i}
               style={{
                 flex: 1,
-                background: b.active ? 'var(--indigo-500)' : 'var(--neutral-200)',
+                background: b.active ? 'var(--emerald-500)' : 'var(--neutral-200)',
                 height: `${b.pct}%`,
                 position: 'relative',
               }}
@@ -901,6 +1185,37 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
             </div>
           ))}
         </div>
+        {/* Per-bar edit controls (value, highlight, remove), aligned under each bar. */}
+        {editing && (
+          <div style={{ display: 'flex', gap: 20, marginTop: 18 }}>
+            {bars.map((b, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono)', fontSize: 22, color: 'var(--neutral-900)' }}>
+                  <E value={String(b.pct)} editing onCommit={(v) => setBarPct(i, v)} />%
+                </div>
+                <button
+                  onClick={() => toggleBarActive(i)}
+                  style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 13, padding: '6px 12px', cursor: 'pointer',
+                    textTransform: 'uppercase', letterSpacing: '0.08em',
+                    background: b.active ? 'var(--emerald-500)' : '#fff',
+                    color: b.active ? '#fff' : 'var(--neutral-500)',
+                    border: `1px solid ${b.active ? 'var(--emerald-500)' : 'var(--neutral-300)'}`,
+                    borderRadius: 'var(--radius-sharp)',
+                  }}
+                >
+                  {b.active ? 'Highlighted' : 'Highlight'}
+                </button>
+                <RemoveBtn onClick={() => removeBar(i)} />
+              </div>
+            ))}
+          </div>
+        )}
+        {editing && (
+          <div style={{ marginTop: 22 }}>
+            <AddBtn label="Add bar" onClick={addBar} />
+          </div>
+        )}
         <div
           style={{
             display: 'grid',
@@ -910,7 +1225,10 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
           }}
         >
           {kpis.map((k, i) => (
-            <div key={i}>
+            <div key={i} style={{ position: 'relative' }}>
+              {editing && (
+                <RemoveBtn onClick={() => removeKpi(i)} style={{ position: 'absolute', top: -12, right: -12, zIndex: 20 }} />
+              )}
               <EditorialLabel style={{ fontSize: 10 }}>
                 <E
                   value={k.label}
@@ -935,13 +1253,18 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
             </div>
           ))}
         </div>
+        {editing && (
+          <div style={{ marginTop: 40 }}>
+            <AddBtn label="Add KPI" onClick={addKpi} />
+          </div>
+        )}
       </div>
     </>
   );
 }
 
 const DEFAULT_ROWS = [
-  { dim: 'Dimension 01', cur: '00.0',  tgt: '00.0',  delta: '+00.0%' },
+  { dim: 'Dimension 01', cur: '00.0', tgt: '00.0', delta: '+00.0%' },
   { dim: 'Dimension 02', cur: '0.00%', tgt: '0.00%', delta: '+00.0%' },
   { dim: 'Dimension 03', cur: '0,000', tgt: '0,000', delta: '+00.0%' },
   { dim: 'Dimension 04', cur: 'XXX.X', tgt: 'XXX.X', delta: '+00.0%' },
@@ -954,11 +1277,20 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
       const arr = (c.rows ?? DEFAULT_ROWS).map((r, j) => (j === i ? { ...r, ...patch } : r));
       return { ...c, rows: arr };
     });
+  const addRow = () =>
+    onEdit((c) => ({ ...c, rows: [...(c.rows ?? DEFAULT_ROWS), { dim: 'New Dimension', cur: '-', tgt: '-', delta: '-' }] }));
+  const removeRow = (i: number) =>
+    onEdit((c) => ({ ...c, rows: (c.rows ?? DEFAULT_ROWS).filter((_, j) => j !== i) }));
+  // Scale type + row padding down as rows grow so content stays on-slide and clean.
+  const cellFont = rows.length > 6 ? 18 : rows.length > 4 ? 22 : 26;
+  const cellPadV = rows.length > 6 ? 16 : rows.length > 4 ? 24 : 32;
   const cellStyle: React.CSSProperties = {
-    padding: '35px 0',
+    padding: `${cellPadV}px 36px ${cellPadV}px 0`,
     borderBottom: '1px solid var(--neutral-200)',
-    fontSize: 28,
+    fontSize: cellFont,
+    lineHeight: 1.35,
     color: 'var(--neutral-900)',
+    verticalAlign: 'top',
   };
   return (
     <>
@@ -981,7 +1313,14 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
         </EditorialLabel>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '19%' }} />
+            <col style={{ width: '27%' }} />
+            <col style={{ width: '27%' }} />
+            <col style={{ width: editing ? '21%' : '27%' }} />
+            {editing && <col style={{ width: '6%' }} />}
+          </colgroup>
           <thead>
             <tr>
               {['Analysis Category', 'Current Variable', 'Target Variable', 'Performance Delta'].map(
@@ -990,19 +1329,21 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
                     key={h}
                     style={{
                       textAlign: 'left',
-                      padding: '25px 0',
+                      padding: '0 36px 22px 0',
                       borderBottom: '2px solid var(--neutral-900)',
                       fontFamily: 'var(--font-mono)',
                       fontSize: 13,
                       color: 'var(--neutral-500)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.12em',
+                      verticalAlign: 'bottom',
                     }}
                   >
                     {h}
                   </th>
                 )
               )}
+              {editing && <th style={{ borderBottom: '2px solid var(--neutral-900)' }} />}
             </tr>
           </thead>
           <tbody>
@@ -1017,31 +1358,43 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
                 <td style={cellStyle}>
                   <E value={r.tgt} editing={editing} onCommit={(v) => editRow(i, { tgt: v || r.tgt })} />
                 </td>
-                <td style={{ ...cellStyle, color: 'var(--indigo-600)' }}>
+                <td style={{ ...cellStyle, color: 'var(--emerald-600)' }}>
                   <E value={r.delta} editing={editing} onCommit={(v) => editRow(i, { delta: v || r.delta })} />
                 </td>
+                {editing && (
+                  <td style={{ ...cellStyle, textAlign: 'right' }}>
+                    <RemoveBtn onClick={() => removeRow(i)} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
+        {editing && (
+          <div style={{ marginTop: 30 }}>
+            <AddBtn label="Add row" onClick={addRow} />
+          </div>
+        )}
       </div>
     </>
   );
 }
 
 const DEFAULT_PHASES = [
-  { title: 'Initiation',   description: PLACEHOLDER, completed: true },
-  { title: 'Integration',  description: PLACEHOLDER, completed: true },
+  { title: 'Initiation', description: PLACEHOLDER, completed: true },
+  { title: 'Integration', description: PLACEHOLDER, completed: true },
   { title: 'Optimization', description: PLACEHOLDER, completed: false },
 ];
 
 function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderProps) {
   const phases = content.phases ?? DEFAULT_PHASES;
   const editPhase = (i: number, patch: Partial<(typeof phases)[number]>) =>
-    onEdit((c) => {
-      const arr = (c.phases ?? DEFAULT_PHASES).map((p, j) => (j === i ? { ...p, ...patch } : p));
-      return { ...c, phases: arr };
-    });
+    onEdit((c) => ({ ...c, phases: (c.phases ?? DEFAULT_PHASES).map((p, j) => (j === i ? { ...p, ...patch } : p)) }));
+  const toggleDone = (i: number) => editPhase(i, { completed: !phases[i].completed });
+  const addPhase = () =>
+    onEdit((c) => ({ ...c, phases: [...(c.phases ?? DEFAULT_PHASES), { title: 'New Phase', description: '', completed: false }] }));
+  const removePhase = (i: number) =>
+    onEdit((c) => ({ ...c, phases: (c.phases ?? DEFAULT_PHASES).filter((_, j) => j !== i) }));
   return (
     <>
       <SlideGrid />
@@ -1068,7 +1421,7 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
             ...DISPLAY_HEADING_BASE,
             fontSize: 100,
             fontWeight: 600,
-            marginBottom: 120,
+            marginBottom: 90,
             color: 'var(--neutral-900)',
           }}
         >
@@ -1079,11 +1432,11 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
           />
         </h2>
         <div style={{ position: 'relative', paddingTop: 60 }}>
-          {/* timeline rail */}
+          {/* timeline rail - centered on the 20px phase dots, which sit at paddingTop (60) */}
           <div
             style={{
               position: 'absolute',
-              top: 12,
+              top: 69,
               left: 0,
               right: 0,
               height: 2,
@@ -1094,14 +1447,21 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             {phases.map((p, i) => (
               <div key={i} style={{ width: 320, position: 'relative' }}>
+                {editing && (
+                  <RemoveBtn onClick={() => removePhase(i)} style={{ position: 'absolute', top: -8, right: 0, zIndex: 20 }} />
+                )}
                 <div
+                  onClick={() => editing && toggleDone(i)}
+                  title={editing ? 'Toggle completed' : undefined}
                   style={{
-                    width: 24,
-                    height: 24,
-                    background: p.completed ? 'var(--indigo-500)' : 'var(--neutral-300)',
+                    width: 20,
+                    height: 20,
+                    background: p.completed ? 'var(--emerald-500)' : 'var(--neutral-300)',
                     borderRadius: '50%',
                     position: 'relative',
                     zIndex: 2,
+                    cursor: editing ? 'pointer' : 'default',
+                    boxShadow: editing ? '0 0 0 4px rgba(0,0,0,0.06)' : 'none',
                   }}
                 />
                 <div style={{ marginTop: 30 }}>
@@ -1136,12 +1496,18 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
             ))}
           </div>
         </div>
+        {editing && (
+          <div style={{ marginTop: 60 }}>
+            <AddBtn label="Add phase" onClick={addPhase} />
+          </div>
+        )}
       </div>
     </>
   );
 }
 
 function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
+  const showImage = !content.hideImage;
   return (
     <>
       <SlideGrid />
@@ -1149,7 +1515,8 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
         <div
           style={{
             flex: 1,
-            padding: 140,
+            padding: showImage ? 140 : '140px 200px',
+            maxWidth: showImage ? undefined : 1200,
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',
@@ -1184,54 +1551,51 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
               onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
             />
           </p>
+          {!showImage && editing && (
+            <div style={{ marginTop: 40 }}>
+              <AddBtn label="Add image area back" onClick={() => onEdit((c) => ({ ...c, hideImage: false }))} />
+            </div>
+          )}
         </div>
-        <div
-          style={{
-            flex: 1.2,
-            background: 'var(--neutral-100)',
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 13,
-              color: 'var(--neutral-400)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
-            }}
-          >
-            Image Asset Placeholder
-          </span>
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'linear-gradient(90deg, #fff 0%, transparent 20%)',
-            }}
-          />
-        </div>
+        {showImage && (
+          <div style={{ flex: 1.2, position: 'relative' }}>
+            <ImageSlot
+              src={content.imageUrl}
+              editing={editing}
+              onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+              onDeleteContainer={() => onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))}
+            />
+            {/* Left-edge blend into the text column (kept above the image, below edit controls). */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(90deg, #fff 0%, transparent 20%)',
+                pointerEvents: 'none',
+                zIndex: 15,
+              }}
+            />
+          </div>
+        )}
       </div>
     </>
   );
 }
 
 const DEFAULT_STEPS = [
-  { title: 'Input',   description: PLACEHOLDER },
+  { title: 'Input', description: PLACEHOLDER },
   { title: 'Process', description: PLACEHOLDER },
-  { title: 'Output',  description: PLACEHOLDER },
+  { title: 'Output', description: PLACEHOLDER },
 ];
 
 function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRenderProps) {
   const steps = content.steps ?? DEFAULT_STEPS;
   const editStep = (i: number, patch: Partial<(typeof steps)[number]>) =>
-    onEdit((c) => {
-      const arr = (c.steps ?? DEFAULT_STEPS).map((s, j) => (j === i ? { ...s, ...patch } : s));
-      return { ...c, steps: arr };
-    });
+    onEdit((c) => ({ ...c, steps: (c.steps ?? DEFAULT_STEPS).map((s, j) => (j === i ? { ...s, ...patch } : s)) }));
+  const addStep = () =>
+    onEdit((c) => ({ ...c, steps: [...(c.steps ?? DEFAULT_STEPS), { title: 'New Step', description: '' }] }));
+  const removeStep = (i: number) =>
+    onEdit((c) => ({ ...c, steps: (c.steps ?? DEFAULT_STEPS).filter((_, j) => j !== i) }));
   return (
     <>
       <SlideGrid />
@@ -1274,16 +1638,20 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
               key={i}
               style={{
                 flex: 1,
-                border: `1px solid ${i === 1 ? 'var(--indigo-500)' : 'var(--neutral-200)'}`,
+                border: `1px solid ${i === 1 ? 'var(--emerald-500)' : 'var(--neutral-200)'}`,
                 padding: 40,
                 marginTop: i * 40,
+                position: 'relative',
               }}
             >
+              {editing && (
+                <RemoveBtn onClick={() => removeStep(i)} style={{ position: 'absolute', top: 12, right: 12, zIndex: 20 }} />
+              )}
               <div
                 style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: 48,
-                  color: 'var(--indigo-500)',
+                  color: 'var(--emerald-500)',
                   marginBottom: 20,
                 }}
               >
@@ -1315,6 +1683,11 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
             </div>
           ))}
         </div>
+        {editing && (
+          <div style={{ marginTop: 50 }}>
+            <AddBtn label="Add step" onClick={addStep} />
+          </div>
+        )}
       </div>
     </>
   );
@@ -1330,10 +1703,11 @@ const DEFAULT_SECTORS = [
 function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
   const sectors = content.sectors ?? DEFAULT_SECTORS;
   const editSector = (i: number, patch: Partial<(typeof sectors)[number]>) =>
-    onEdit((c) => {
-      const arr = (c.sectors ?? DEFAULT_SECTORS).map((s, j) => (j === i ? { ...s, ...patch } : s));
-      return { ...c, sectors: arr };
-    });
+    onEdit((c) => ({ ...c, sectors: (c.sectors ?? DEFAULT_SECTORS).map((s, j) => (j === i ? { ...s, ...patch } : s)) }));
+  const addSector = () =>
+    onEdit((c) => ({ ...c, sectors: [...(c.sectors ?? DEFAULT_SECTORS), { label: 'New Region', value: '0.0M Metric' }] }));
+  const removeSector = (i: number) =>
+    onEdit((c) => ({ ...c, sectors: (c.sectors ?? DEFAULT_SECTORS).filter((_, j) => j !== i) }));
   return (
     <>
       <SlideGrid />
@@ -1349,71 +1723,82 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
       />
       <div
         style={{
-          padding: '160px 140px',
+          padding: '160px 140px 0',
           height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
+          display: 'grid',
+          gridTemplateColumns: '1.2fr 1fr',
+          gap: 105,
           position: 'relative',
           zIndex: 10,
         }}
       >
-        <h2
-          style={{
-            ...DISPLAY_HEADING_BASE,
-            fontSize: 100,
-            fontWeight: 600,
-            marginBottom: 60,
-            color: 'var(--neutral-900)',
-          }}
-        >
-          <E
-            value={content.heading ?? 'Regional Impact.'}
-            editing={editing}
-            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
-          />
-        </h2>
-        <div
-          style={{
-            flex: 1,
-            position: 'relative',
-            background: 'var(--neutral-100)',
-            border: '1px solid var(--neutral-200)',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <span
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <h2
             style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 13,
-              color: 'var(--neutral-400)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.12em',
+              ...DISPLAY_HEADING_BASE,
+              fontSize: 100,
+              fontWeight: 600,
+              marginBottom: 45,
+              color: 'var(--neutral-900)',
             }}
           >
-            Geographic Visualisation Placeholder
-          </span>
-          {/* accent hotspots */}
-          {[{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
+            <E
+              value={content.heading ?? 'Regional Impact.'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+            />
+          </h2>
+          {content.hideImage ? (
+            editing && (
+              <div style={{ marginBottom: 10 }}>
+                <AddBtn label="Add map / visual back" onClick={() => onEdit((c) => ({ ...c, hideImage: false }))} />
+              </div>
+            )
+          ) : (
+            <div
+              style={{
+                flex: 1,
+                position: 'relative',
+                border: '1px solid var(--neutral-200)',
+                overflow: 'hidden',
+              }}
+            >
+              <ImageSlot
+                src={content.imageUrl}
+                editing={editing}
+                onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+                placeholder={editing ? 'Click to add a map / visual' : 'Geographic Visualisation Placeholder'}
+                onDeleteContainer={() => onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))}
+              />
+              {/* accent hotspots - only over the empty placeholder, not a real image */}
+              {!content.imageUrl &&
+                [{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      position: 'absolute',
+                      ...pos,
+                      width: 20,
+                      height: 20,
+                      background: 'var(--emerald-500)',
+                      borderRadius: '50%',
+                      boxShadow: '0 0 40px var(--emerald-500)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                ))}
+            </div>
+          )}
+        </div>
+        <div style={{ alignSelf: 'center', display: 'flex', flexDirection: 'column' }}>
+          {sectors.map((s, i) => (
             <div
               key={i}
-              style={{
-                position: 'absolute',
-                ...pos,
-                width: 20,
-                height: 20,
-                background: 'var(--indigo-500)',
-                borderRadius: '50%',
-                boxShadow: '0 0 40px var(--indigo-500)',
-              }}
-            />
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 100, marginTop: 40 }}>
-          {sectors.map((s, i) => (
-            <div key={i}>
+              style={{ position: 'relative', borderTop: '1px solid var(--neutral-200)', padding: '39px 0' }}
+            >
+              {editing && (
+                <RemoveBtn onClick={() => removeSector(i)} style={{ position: 'absolute', top: 15, right: -40, zIndex: 20 }} />
+              )}
               <EditorialLabel style={{ fontSize: 10 }}>
                 <E
                   value={s.label}
@@ -1424,8 +1809,9 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
               <h4
                 style={{
                   ...DISPLAY_HEADING_BASE,
-                  fontSize: 24,
+                  fontSize: 72,
                   fontWeight: 600,
+                  marginTop: 12,
                   color: 'var(--neutral-900)',
                 }}
               >
@@ -1437,6 +1823,11 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
               </h4>
             </div>
           ))}
+          {editing && (
+            <div style={{ paddingTop: 20 }}>
+              <AddBtn label="Add region" onClick={addSector} style={{ height: 44 }} />
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -1444,62 +1835,166 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
 }
 
 // Quote slide: inherits DISPLAY_HEADING_BASE for large-scale typography alignment
-function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
+function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps) {
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      // PNG preserves transparency; 400px is plenty for a circular avatar at 2× export.
+      const dataUrl = await fileToDataUrl(file, 400, 'image/png');
+      onEdit((c) => ({ ...c, avatarUrl: dataUrl }));
+    } catch {
+      // ignore bad files
+    }
+    e.target.value = '';
+  };
+
+  const avatarSrc = content.avatarUrl;
+
   return (
     <>
       <SlideGrid />
       <Glow style={{ bottom: -500, left: -500 }} />
+      <HudTop
+        label={
+          <E
+            value={content.eyebrow ?? 'Key Insight'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div
         style={{
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          padding: '0 140px',
+          padding: '0 195px',
           position: 'relative',
           zIndex: 10,
         }}
       >
-        <EditorialLabel>
-          <E
-            value={content.eyebrow ?? 'Key Insight'}
-            editing={editing}
-            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
-          />
-        </EditorialLabel>
-        <h1
+        <div
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 110,
-            fontWeight: 700,
-            marginBottom: 60,
-            color: 'var(--neutral-900)',
+            fontSize: 300,
+            lineHeight: 0.5,
+            color: 'var(--emerald-500)',
+            height: 105,
           }}
         >
           "
+        </div>
+        <blockquote
+          style={{
+            ...DISPLAY_HEADING_BASE,
+            fontSize: 84,
+            fontWeight: 500,
+            lineHeight: 1.12,
+            letterSpacing: '-0.03em',
+            margin: '0 0 72px',
+            maxWidth: 1440,
+            color: 'var(--neutral-900)',
+          }}
+        >
           <E
             value={content.quote ?? PLACEHOLDER}
             editing={editing}
             multiline
             onCommit={(v) => onEdit((c) => ({ ...c, quote: v || undefined }))}
           />
-          "
-        </h1>
+        </blockquote>
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
+          {/* Circular avatar - static in view mode, uploadable in edit mode */}
           <div
-            style={{
-              width: 80,
-              height: 80,
-              background: 'var(--neutral-200)',
-              borderRadius: '50%',
-            }}
-          />
+            style={{ position: 'relative', flexShrink: 0, width: 84, height: 84 }}
+          >
+            {/* The circle itself */}
+            <div
+              onClick={() => editing && avatarInputRef.current?.click()}
+              title={editing ? (avatarSrc ? 'Replace photo' : 'Upload author photo') : undefined}
+              style={{
+                width: 84,
+                height: 84,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                background: avatarSrc ? 'transparent' : 'var(--neutral-200)',
+                cursor: editing ? 'pointer' : 'default',
+                border: editing && !avatarSrc ? '2px dashed var(--emerald-400)' : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'border-color 0.15s',
+              }}
+            >
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt="Author"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                editing && (
+                  /* Upload hint icon shown only in edit mode when empty */
+                  <svg
+                    width="28" height="28" viewBox="0 0 24 24"
+                    fill="none" stroke="var(--emerald-500)" strokeWidth="1.8"
+                    strokeLinecap="round" strokeLinejoin="round"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                )
+              )}
+            </div>
+            {editing && avatarSrc && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit((c) => ({ ...c, avatarUrl: undefined })); }}
+                title="Remove photo"
+                aria-label="Remove photo"
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  color: '#dc2626',
+                  border: '1.5px solid #fecaca',
+                  cursor: 'pointer',
+                  fontSize: 18,
+                  lineHeight: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.14)',
+                  zIndex: 10,
+                }}
+              >
+                ×
+              </button>
+            )}
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarFile}
+              style={{ display: 'none' }}
+            />
+          </div>
+
           <div>
             <h4
               style={{
                 ...DISPLAY_HEADING_BASE,
-                fontSize: 28,
-                fontWeight: 700,
+                fontSize: 27,
+                fontWeight: 600,
                 color: 'var(--neutral-900)',
               }}
             >
@@ -1532,7 +2027,7 @@ function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
 const DEFAULT_CONTACTS = ['email@placeholder.com', '@social_handle', 'www.domain.com'];
 
 // Exit slide: inherits DISPLAY_HEADING_BASE for unified presentation style
-function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
+function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
   const contacts = content.contacts && content.contacts.length ? content.contacts : DEFAULT_CONTACTS;
   const editContact = (i: number, v: string) =>
     onEdit((c) => {
@@ -1542,7 +2037,7 @@ function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
     });
   return (
     <>
-      {/* Clean, flat design layout for SlideExit — no shadows or glow blurs */}
+      {/* Clean, flat design layout for SlideExit - no shadows or glow blurs */}
       <div
         style={{
           position: 'absolute',
@@ -1552,9 +2047,11 @@ function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
         }}
       >
         <Logo
-          ast={ast}
+          src={logoUrl}
+          editing={editing}
+          onChange={onLogoChange}
           style={
-            ast?.metadata.values.logo
+            logoUrl
               ? undefined
               : { borderColor: 'rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.6)' }
           }
@@ -1616,7 +2113,7 @@ function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
             gap: 60,
             fontFamily: 'var(--font-mono)',
             fontSize: 16,
-            color: 'var(--indigo-400)',
+            color: 'var(--emerald-400)',
           }}
         >
           {contacts.map((c, i) => (
@@ -1630,38 +2127,299 @@ function SlideExit({ ast, content, editing, onEdit }: SlideRenderProps) {
   );
 }
 
+const BLANK_LAYOUTS: { id: 'standard' | 'two-column' | 'full-bleed'; label: string }[] = [
+  { id: 'standard', label: 'Standard' },
+  { id: 'two-column', label: 'Two-Column' },
+  { id: 'full-bleed', label: 'Full-Bleed' },
+];
+
+/** Layout picker shown only in edit mode - lets a custom slide choose its shape. */
+function BlankLayoutPicker({
+  value,
+  onChange,
+}: {
+  value: 'standard' | 'two-column' | 'full-bleed';
+  onChange: (v: 'standard' | 'two-column' | 'full-bleed') => void;
+}) {
+  return (
+    <div style={{ position: 'absolute', top: 60, right: 80, zIndex: 20, display: 'flex', gap: 6 }}>
+      {BLANK_LAYOUTS.map((l) => (
+        <button
+          key={l.id}
+          onClick={() => onChange(l.id)}
+          style={{
+            height: 36,
+            padding: '0 16px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            border: '1px solid',
+            borderColor: value === l.id ? 'var(--emerald-500)' : 'var(--neutral-300)',
+            background: value === l.id ? 'var(--emerald-500)' : '#ffffff',
+            color: value === l.id ? '#ffffff' : 'var(--neutral-600)',
+            cursor: 'pointer',
+            borderRadius: 'var(--radius-sharp)',
+          }}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type BlankField = 'eyebrow' | 'heading' | 'body';
+
+/** Freeform user slide - editable eyebrow, heading, body, and an optional image,
+ *  in one of three layouts the author can switch between while editing.
+ *
+ *  Clicking a field while still in view mode enters edit mode AND focuses
+ *  that exact field in one step - no separate "Edit Content" click needed to
+ *  start typing on a fresh blank slide. */
+function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }: SlideRenderProps) {
+  const layout = content.blankLayout ?? 'standard';
+  const setLayout = (v: 'standard' | 'two-column' | 'full-bleed') =>
+    onEdit((c) => ({ ...c, blankLayout: v }));
+
+  const pendingFocusField = useRef<BlankField | null>(null);
+  useEffect(() => {
+    if (!editing || !instanceId || !pendingFocusField.current) return;
+    const field = pendingFocusField.current;
+    pendingFocusField.current = null;
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`#${instanceId} [data-field="${field}"]`);
+      if (!el) return;
+      el.focus();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    });
+  }, [editing, instanceId]);
+
+  const activate = (field: BlankField) => {
+    if (editing || !onRequestEdit) return undefined;
+    return () => {
+      pendingFocusField.current = field;
+      onRequestEdit();
+    };
+  };
+
+  const eyebrow = (
+    <EditorialLabel>
+      <E
+        value={content.eyebrow ?? 'Section'}
+        editing={editing}
+        dataField="eyebrow"
+        onActivate={activate('eyebrow')}
+        onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+      />
+    </EditorialLabel>
+  );
+  const heading = (fontSize: number) => (
+    <h2 style={{ ...DISPLAY_HEADING_BASE, fontSize, fontWeight: 600, marginBottom: 40 }}>
+      <E
+        value={content.heading ?? 'Blank Slide.'}
+        editing={editing}
+        multiline
+        dataField="heading"
+        onActivate={activate('heading')}
+        onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+      />
+    </h2>
+  );
+  const body = (maxWidth?: number) => (
+    <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth }}>
+      <E
+        value={content.body ?? 'Click to add your content…'}
+        editing={editing}
+        multiline
+        dataField="body"
+        onActivate={activate('body')}
+        onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
+      />
+    </p>
+  );
+  const image = (placeholder: string, style?: React.CSSProperties, onDeleteContainer?: () => void) => (
+    <ImageSlot
+      src={content.imageUrl}
+      editing={editing}
+      onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+      placeholder={editing ? placeholder : ''}
+      style={style}
+      onDeleteContainer={onDeleteContainer}
+    />
+  );
+  /** Two-column/full-bleed have no "optional" image slot - the layout IS the
+   *  image area - so "deleting" it means dropping back to the Standard layout. */
+  const dropToStandard = () => onEdit((c) => ({ ...c, blankLayout: 'standard', imageUrl: undefined }));
+  const hudLabel = (
+    <E
+      value={content.hudLabel ?? 'Custom Slide'}
+      editing={editing}
+      onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+    />
+  );
+
+  if (layout === 'full-bleed') {
+    return (
+      <>
+        <div style={{ position: 'absolute', inset: 0 }}>{image('Click to add a background image', { width: '100%', height: '100%' }, dropToStandard)}</div>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(0deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.15) 55%, transparent 100%)',
+            zIndex: 5,
+          }}
+        />
+        <HudTop label={<span style={{ color: '#fff' }}>{hudLabel}</span>} num={<span style={{ color: '#fff' }}>{num}</span>} />
+        {editing && <BlankLayoutPicker value={layout} onChange={setLayout} />}
+        <div style={{ position: 'absolute', left: 140, right: 140, bottom: 120, zIndex: 10, color: '#fff' }}>
+          {eyebrow}
+          {heading(72)}
+          {body(1200)}
+        </div>
+      </>
+    );
+  }
+
+  if (layout === 'two-column') {
+    return (
+      <>
+        <SlideGrid />
+        <HudTop label={hudLabel} num={num} />
+        {editing && <BlankLayoutPicker value={layout} onChange={setLayout} />}
+        <div style={{ position: 'absolute', top: 160, bottom: 0, left: 140, right: 0, zIndex: 10, display: 'flex' }}>
+          <div style={{ flex: '0 0 50%', paddingRight: 60, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            {eyebrow}
+            {heading(64)}
+            {body()}
+          </div>
+          <div style={{ flex: '0 0 50%', paddingBottom: 160 }}>
+            {image('Click to add an image', undefined, dropToStandard)}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <SlideGrid />
+      <HudTop label={hudLabel} num={num} />
+      {editing && <BlankLayoutPicker value={layout} onChange={setLayout} />}
+      <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {eyebrow}
+        <div style={{ color: 'var(--neutral-900)' }}>{heading(88)}</div>
+        {body(1200)}
+        {(content.imageUrl || editing) && !content.hideImage && (
+          <div style={{ marginTop: 48, flex: 1, minHeight: 0 }}>
+            {image('Click to add an image (optional)', undefined, () =>
+              onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))
+            )}
+          </div>
+        )}
+        {content.hideImage && editing && (
+          <div style={{ marginTop: 32 }}>
+            <AddBtn label="Add image area back" onClick={() => onEdit((c) => ({ ...c, hideImage: false }))} />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Slide type registry — maps template id → renderer
+// Slide type registry - maps template id → renderer
 // ---------------------------------------------------------------------------
 const SLIDE_RENDERERS: Record<string, (props: SlideRenderProps) => React.ReactElement> = {
-  s1:  SlideCover,
-  s2:  SlideIndex,
-  s3:  SlideExecutiveSummary,
-  s4:  SlideSectionDivider,
-  s5:  SlideTwoColumnContext,
-  s6:  SlideDataMonument,
-  s7:  SlideMetricsDashboard,
-  s8:  SlideComparativeTable,
-  s9:  SlideStrategicRoadmap,
+  s1: SlideCover,
+  s2: SlideIndex,
+  s3: SlideExecutiveSummary,
+  s4: SlideSectionDivider,
+  s5: SlideTwoColumnContext,
+  s6: SlideDataMonument,
+  s7: SlideMetricsDashboard,
+  s8: SlideComparativeTable,
+  s9: SlideStrategicRoadmap,
   s10: SlideImageEditorial,
   s11: SlideProcessArchitecture,
   s12: SlideGlobalMap,
   s13: SlideFeaturedQuote,
   s14: SlideExit,
+  blank: SlideBlank,
 };
 
 const DARK_TEMPLATES = new Set(['s4', 's14']);
 
+/**
+ * Renders a single slide at an arbitrary scale, read-only. Shared by the Review
+ * grid (thumbnails) and Present mode (full-screen). The 1920×1080 slide is scaled
+ * from its top-left into a box sized to the scaled dimensions.
+ */
+export function SlideStage({
+  slide,
+  ast,
+  num,
+  scale,
+  logoUrl,
+}: {
+  slide: SlideInstance;
+  ast: DocumentNode | null;
+  num: string;
+  scale: number;
+  logoUrl?: string;
+}) {
+  const Renderer = SLIDE_RENDERERS[slide.templateId];
+  const isDark = DARK_TEMPLATES.has(slide.templateId);
+  return (
+    <div style={{ width: 1920 * scale, height: 1080 * scale, flexShrink: 0, overflow: 'hidden' }}>
+      <div
+        className="wg-doc"
+        style={{
+          width: 1920,
+          height: 1080,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          position: 'relative',
+          overflow: 'hidden',
+          padding: 0,
+          background: isDark ? '#000000' : 'var(--pure-white)',
+          color: isDark ? '#ffffff' : 'var(--neutral-900)',
+        }}
+      >
+        {Renderer && <Renderer ast={ast} content={slide.content} num={num} editing={false} onEdit={() => { }} logoUrl={logoUrl} />}
+        <div className="footer-row" style={{ zIndex: 10 }}>
+          <span>{slide.title}</span>
+          <span>{num}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // PresentationCanvas
 // ---------------------------------------------------------------------------
-export function PresentationCanvas({ ast, deck, editing, onEditSlide }: PresentationCanvasProps) {
+export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange, onRequestEdit }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
+  // Which slide currently holds focus while editing - drives the "you're
+  // editing this one" outline so all slides don't look identically active.
+  const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editing) setActiveSlideId(null);
+  }, [editing]);
 
   const visibleSlides = deck.slides.filter((s) => !s.hidden);
 
   /**
-   * 16:9 scaling engine — mirrors the original HTML's scaleSlides() logic.
+   * 16:9 scaling engine - mirrors the original HTML's scaleSlides() logic.
    * Fits the 1920px-wide canvas to the available stage width, capped at 0.6
    * to preserve readability at typical viewport sizes.
    * Re-runs whenever the deck changes so new/duplicated slides get scaled.
@@ -1708,14 +2466,17 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide }: Presenta
         const isDark = DARK_TEMPLATES.has(slide.templateId);
         const num = String(i + 1).padStart(2, '0');
 
+        const isActiveEdit = editing && activeSlideId === slide.instanceId;
+
         return (
           <div
             key={slide.instanceId}
             id={slide.instanceId}
             data-slide
             className="page"
+            onFocus={() => editing && setActiveSlideId(slide.instanceId)}
             style={{
-              /* 1920 × 1080 base — scaled by the engine above */
+              /* 1920 × 1080 base - scaled by the engine above */
               width: 1920,
               height: 1080,
               transformOrigin: 'top center',
@@ -1725,11 +2486,44 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide }: Presenta
               background: isDark ? '#000000' : 'var(--pure-white)',
               color: isDark ? '#ffffff' : 'var(--neutral-900)',
               // Standard design system shadow used for all slides instead of custom heavy shadow
-              boxShadow: 'var(--shadow-soft)',
-              // Subtle affordance that the slide is live for editing
-              outline: editing ? '2px solid color-mix(in srgb, var(--indigo-500) 35%, transparent)' : 'none',
+              boxShadow: isActiveEdit
+                ? 'var(--shadow-soft), 0 0 0 4px color-mix(in srgb, var(--emerald-500) 18%, transparent)'
+                : 'var(--shadow-soft)',
+              // Subtle affordance that the slide is live for editing; the
+              // currently-focused slide gets a solid, brighter outline so it's
+              // clear which one your edits are landing on.
+              outline: !editing
+                ? 'none'
+                : isActiveEdit
+                  ? '2px solid var(--emerald-500)'
+                  : '2px solid color-mix(in srgb, var(--emerald-500) 20%, transparent)',
+              transition: 'outline-color .15s ease, box-shadow .15s ease',
             }}
           >
+            {editing && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  zIndex: 20,
+                  padding: '12px 26px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 22,
+                  fontWeight: 700,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  color: '#fff',
+                  background: 'var(--emerald-500)',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                  opacity: isActiveEdit ? 1 : 0,
+                  pointerEvents: 'none',
+                  transition: 'opacity .15s ease',
+                }}
+              >
+                Editing this slide
+              </span>
+            )}
             {Renderer && (
               <Renderer
                 ast={ast}
@@ -1737,10 +2531,14 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide }: Presenta
                 num={num}
                 editing={editing}
                 onEdit={(updater) => onEditSlide(slide.instanceId, updater)}
+                logoUrl={deck.logoUrl}
+                onLogoChange={onLogoChange}
+                instanceId={slide.instanceId}
+                onRequestEdit={onRequestEdit}
               />
             )}
 
-            {/* Footer row — preserved from original shell */}
+            {/* Footer row - preserved from original shell */}
             <div className="footer-row" style={{ zIndex: 10 }}>
               <span>{slide.title}</span>
               <span>
