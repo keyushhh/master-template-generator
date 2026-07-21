@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { SlideStage } from './PresentationCanvas';
 import { SaveToLibraryModal } from './SaveToLibraryModal';
-import { analyzeCoverage, analyzeContentChecklist } from '../deck/deckBuilder';
+import { analyzeCoverage } from '../deck/deckBuilder';
 import { useToast } from '../toast/Toast';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
@@ -130,7 +130,6 @@ export function ReviewModal({
   const visibleIds = visible.map((s) => s.instanceId);
   const coverage = ast ? analyzeCoverage(ast, deck) : null;
   const hasWarnings = !!coverage && (coverage.unmatchedBullets.length > 0 || coverage.insightSections.length > 0);
-  const contentChecklist = analyzeContentChecklist(deck);
 
   const runExport = async (kind: 'pdf' | 'pptx' | 'png') => {
     if (busy || visibleIds.length === 0) return;
@@ -211,38 +210,13 @@ export function ReviewModal({
                   ))}
                   {coverage.insightSections.map((s, i) => (
                     <li key={`i${i}`}>
-                      <span className="font-semibold">{s}</span> wasn’t a recognized section; rendered as an insight slide.
+                      <span className="font-semibold">"{s}"</span> section header didn’t match a specialized layout keyword (e.g., Roadmap, Metrics), so it was rendered as a standard text slide.
                     </li>
                   ))}
                 </ul>
               )}
             </div>
           )}
-
-          {/* Content check - derived from what's actually in the deck (no self-report
-              checkboxes; see memory `no-honor-system-ui` for why that shape got reverted). */}
-          {deck.slides.length > 0 && (() => {
-            const items = [
-              { ok: contentChecklist.hasMetrics, label: contentChecklist.hasMetrics ? 'Metrics / ROI data included' : 'No metrics or ROI data in this deck' },
-              { ok: contentChecklist.hasVisualProof, label: contentChecklist.hasVisualProof ? 'Visual proof (image) included' : 'No visual/image slide in this deck' },
-            ];
-            const allOk = items.every((i) => i.ok);
-            return (
-              <div className={`mb-4 sm:mb-5 border rounded-[var(--radius-sharp)] px-3.5 py-2.5 sm:px-4 sm:py-3 ${allOk ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50'}`}>
-                <div className="flex items-center gap-2 text-[12px] sm:text-[12.5px] font-bold mb-1.5">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={allOk ? '#059669' : '#d97706'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                  <span className={allOk ? 'text-emerald-800' : 'text-amber-800'}>Content check</span>
-                </div>
-                <ul className="flex flex-col gap-1 text-[11.5px] sm:text-[12px] pl-[23px]">
-                  {items.map((it, i) => (
-                    <li key={i} className={it.ok ? 'text-emerald-800/90' : 'text-amber-800/90'}>
-                      {it.ok ? '✓' : '·'} {it.label}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })()}
 
           {deck.slides.length === 0 ? (
             <div className="text-center text-[13px] text-neutral-500 py-16">No slides. Add slides to export.</div>
