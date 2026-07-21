@@ -63,7 +63,7 @@ function PlusIcon() {
   );
 }
 
-/** Arrow pointing down to a line — reads clearly as "insert below". */
+/** Arrow pointing down to a line; reads clearly as "insert below". */
 function InsertAfterIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -86,7 +86,7 @@ function TrashIcon() {
 }
 
 /**
- * Instant custom tooltip — replaces the native `title` attr which has a
+ * Instant custom tooltip; replaces the native `title` attr which has a
  * ~500ms OS delay. Black sharp box, white mono text, appears above the target.
  */
 function Tip({ label, children }: { label: string; children: React.ReactNode }) {

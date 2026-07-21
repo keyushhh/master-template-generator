@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { CONVERSION_PROMPT } from '../business-record/conversionPrompt';
 import { ImportService } from '../business-record/ImportService';
-import { SAMPLE_DECKS } from '../business-record/sampleDecks';
+import { SAMPLE_DECKS, CAMPAIGN_TYPES, type CampaignType } from '../business-record/sampleDecks';
+import { listLibraryEntries, deleteLibraryEntry, type LibraryEntry } from '../business-record/libraryStore';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { ValidationResult } from '../business-record/parser/types';
@@ -12,9 +13,18 @@ interface SourceMaterialModalProps {
   onDocumentParsed: (ast: DocumentNode | null) => void;
   /** Import a source AND build the deck in one step (so Import & Load = Generate). */
   onImport: (ast: DocumentNode) => void;
+  /** Load a saved use case library entry directly (restores its exact deck). */
+  onLoadLibraryEntry: (entry: LibraryEntry) => void;
   /** True when a Business Record is currently loaded - enables "Clear source". */
   hasSource: boolean;
 }
+
+/** One row in the merged Samples list - either a bundled seed sample (loaded
+ *  through the normal parse pipeline) or a user-saved library entry (loaded
+ *  directly, deck and all). */
+type SampleRow =
+  | { kind: 'seed'; id: string; name: string; description: string; campaignType: CampaignType }
+  | { kind: 'saved'; entry: LibraryEntry };
 
 type Tab = 'samples' | 'prompt' | 'paste' | 'upload';
 
@@ -46,7 +56,7 @@ function stripCodeFence(text: string): string {
  *  - Paste .md: drop Claude's markdown straight in - no file needed.
  *  - Upload .md: pick or drag a .md file.
  */
-export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport, hasSource }: SourceMaterialModalProps) {
+export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport, onLoadLibraryEntry, hasSource }: SourceMaterialModalProps) {
   const [tab, setTab] = useState<Tab>('prompt');
   const [copied, setCopied] = useState(false);
   const [pasteText, setPasteText] = useState('');
@@ -54,17 +64,24 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [rawTranscriptHint, setRawTranscriptHint] = useState(false);
+  const [campaignFilter, setCampaignFilter] = useState<CampaignType | 'All'>('All');
+  const [sampleSearch, setSampleSearch] = useState('');
+  const [libraryEntries, setLibraryEntries] = useState<LibraryEntry[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open);
 
-  // Reset transient state each time the modal opens.
+  // Reset transient state each time the modal opens, and pick up anything saved
+  // to the library since it was last open.
   useEffect(() => {
     if (open) {
       setTab('samples');
       setCopied(false);
       setError(null);
       setRawTranscriptHint(false);
+      setCampaignFilter('All');
+      setSampleSearch('');
+      setLibraryEntries(listLibraryEntries());
     }
   }, [open]);
 
@@ -215,31 +232,115 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {tab === 'samples' && (
-            <div className="flex flex-col gap-3">
-              <p className="text-[12.5px] text-neutral-600 leading-relaxed">
-                Start from a ready-made deck instead of a blank page. Loading one builds the deck immediately — then edit anything.
-              </p>
-              <div className="flex flex-col gap-2.5">
-                {SAMPLE_DECKS.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => importText(s.markdown, s.name)}
-                    disabled={isValidating}
-                    className="text-left flex items-start justify-between gap-4 p-4 border border-neutral-200 hover:border-neutral-900 hover:bg-neutral-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <span className="flex flex-col gap-1 min-w-0">
-                      <span className="text-[14px] font-bold text-neutral-900">{s.name}</span>
-                      <span className="text-[12px] text-neutral-500 leading-relaxed">{s.description}</span>
-                    </span>
-                    <span className="shrink-0 mt-0.5 text-neutral-400">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
-                    </span>
-                  </button>
-                ))}
+          {tab === 'samples' && (() => {
+            const query = sampleSearch.trim().toLowerCase();
+            // Saved decks first (newest first, as returned by the store), then the
+            // bundled seed samples - so a team's own decks surface before defaults.
+            const rows: SampleRow[] = [
+              ...libraryEntries.map((entry): SampleRow => ({ kind: 'saved', entry })),
+              ...SAMPLE_DECKS.map((s): SampleRow => ({ kind: 'seed', id: s.id, name: s.name, description: s.description, campaignType: s.campaignType })),
+            ];
+            const filtered = rows.filter((row) => {
+              const name = row.kind === 'saved' ? row.entry.name : row.name;
+              const description = row.kind === 'saved' ? row.entry.description : row.description;
+              const campaignType = row.kind === 'saved' ? row.entry.campaignType : row.campaignType;
+              if (campaignFilter !== 'All' && campaignType !== campaignFilter) return false;
+              if (!query) return true;
+              return name.toLowerCase().includes(query) || description.toLowerCase().includes(query);
+            });
+            return (
+              <div className="flex flex-col gap-3">
+                <p className="text-[12.5px] text-neutral-600 leading-relaxed">
+                  Start from a ready-made deck instead of a blank page. Loading one builds the deck immediately; then edit anything.
+                </p>
+                <input
+                  type="text"
+                  value={sampleSearch}
+                  onChange={(e) => setSampleSearch(e.target.value)}
+                  placeholder="Search samples…"
+                  className="w-full h-[38px] px-3 text-[12.5px] text-neutral-700 bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] focus:outline-none focus:ring-2 focus:ring-neutral-900/10 placeholder:text-neutral-400"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {(['All', ...CAMPAIGN_TYPES] as const).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCampaignFilter(c)}
+                      className={`h-[28px] px-3 text-[11.5px] font-bold rounded-[var(--radius-sharp)] border transition-colors cursor-pointer ${
+                        campaignFilter === c
+                          ? 'bg-neutral-900 border-neutral-900 text-white'
+                          : 'bg-white border-neutral-200 text-neutral-600 hover:border-neutral-400'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  {filtered.length === 0 && (
+                    <div className="text-center text-[12.5px] text-neutral-500 py-8">No samples match.</div>
+                  )}
+                  {filtered.map((row) => {
+                    const key = row.kind === 'saved' ? row.entry.id : row.id;
+                    const name = row.kind === 'saved' ? row.entry.name : row.name;
+                    const description = row.kind === 'saved' ? row.entry.description : row.description;
+                    const campaignType = row.kind === 'saved' ? row.entry.campaignType : row.campaignType;
+                    const activate = () => {
+                      if (isValidating) return;
+                      if (row.kind === 'saved') {
+                        onLoadLibraryEntry(row.entry);
+                        onClose();
+                      } else {
+                        const sample = SAMPLE_DECKS.find((s) => s.id === row.id);
+                        if (sample) importText(sample.markdown, sample.name);
+                      }
+                    };
+                    return (
+                      // A plain <button> can't contain the nested delete <button> below
+                      // (invalid HTML, unreliable click handling) - div + role/tabIndex instead.
+                      <div
+                        key={key}
+                        role="button"
+                        tabIndex={isValidating ? -1 : 0}
+                        onClick={activate}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } }}
+                        aria-disabled={isValidating}
+                        className={`text-left flex items-start justify-between gap-4 p-4 border border-neutral-200 hover:border-neutral-900 hover:bg-neutral-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer ${isValidating ? 'opacity-50 pointer-events-none' : ''}`}
+                      >
+                        <span className="flex flex-col gap-1 min-w-0">
+                          <span className="flex items-baseline gap-1.5">
+                            <span className="text-[14px] font-bold text-neutral-900">{name}</span>
+                            <span className="shrink-0 text-[11.5px] font-medium text-neutral-400">
+                              · {campaignType}{row.kind === 'saved' ? ' · Saved' : ''}
+                            </span>
+                          </span>
+                          {description && <span className="text-[12px] text-neutral-500 leading-relaxed">{description}</span>}
+                        </span>
+                        {row.kind === 'saved' ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!window.confirm(`Remove "${name}" from the library? This can't be undone.`)) return;
+                              deleteLibraryEntry(row.entry.id);
+                              setLibraryEntries(listLibraryEntries());
+                            }}
+                            title="Remove from library"
+                            aria-label="Remove from library"
+                            className="shrink-0 mt-0.5 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                          </button>
+                        ) : (
+                          <span className="shrink-0 mt-0.5 text-neutral-400">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {tab === 'prompt' && (
             <div className="flex flex-col gap-3">

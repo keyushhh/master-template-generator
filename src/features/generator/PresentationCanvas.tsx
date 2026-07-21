@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, SlideContent, SlideInstance } from '../deck/types';
+import { autoFitHeadingFontSize, autoFitBodyFontSize } from './autoFit';
 
 interface PresentationCanvasProps {
   ast: DocumentNode | null;
@@ -375,6 +376,37 @@ function EditorialLabel({
   );
 }
 
+/** Subtle edit-only warning that a text slot's font was auto-shrunk below its
+ *  full size to keep from overflowing - a nudge toward more concise copy.
+ *  Never renders in view mode, so it can't leak into an export screenshot. */
+function FitHint({ editing, shrunk }: { editing: boolean; shrunk: boolean }) {
+  if (!editing || !shrunk) return null;
+  return (
+    <span
+      title="This text was auto-shrunk to fit its slot - consider trimming it for a cleaner slide"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '3px 10px',
+        marginLeft: 14,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: '0.04em',
+        color: '#b45309',
+        background: '#fffbeb',
+        border: '1px solid #fde68a',
+        borderRadius: 'var(--radius-sharp)',
+        whiteSpace: 'nowrap',
+        verticalAlign: 'middle',
+      }}
+    >
+      Auto-fit
+    </span>
+  );
+}
+
 /** Oversized background numeral used by dark divider / monument slides. */
 function GhostNumeral({
   num,
@@ -406,7 +438,7 @@ function GhostNumeral({
   );
 }
 
-/** Client logo slot — deck-level `logoUrl` (seeded from the Business Record's
+/** Client logo slot; deck-level `logoUrl` (seeded from the Business Record's
  *  optional `logo` frontmatter). In edit mode the slot becomes click-to-upload
  *  with a remove control, so users can set the brand logo without a URL. */
 function Logo({
@@ -495,13 +527,11 @@ function Logo({
 
 function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
   const lines = content.headingLines ?? ['Master Primary', 'Heading.'];
+  const HERO_MAX = 180;
   // Auto-fit the hero: shrink the font and tighten the top padding for longer
   // titles so the headline never overflows the fixed 1080px slide and keeps a
   // clean bottom gap. Short titles keep the full 180px display size.
-  const longestLine = Math.max(...lines.map((l) => l.length), 1);
-  const heroFont = Math.round(
-    Math.max(72, Math.min(180, 1640 / (longestLine * 0.6), 620 / (lines.length * 0.95)))
-  );
+  const heroFont = autoFitHeadingFontSize(lines.join('\n'), { min: 72, max: HERO_MAX, widthBudget: 1640, heightBudget: 620 });
   const heroTopPad = lines.length >= 4 ? 160 : lines.length === 3 ? 210 : 280;
   return (
     <>
@@ -531,6 +561,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sl
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={heroFont < HERO_MAX} />
         </EditorialLabel>
         <h1
           style={{
@@ -640,26 +671,40 @@ function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
         num={num}
       />
       <div style={{ padding: '160px 140px', display: 'flex', gap: 140, position: 'relative', zIndex: 10 }}>
-        <div style={{ flex: 1 }}>
-          <EditorialLabel>Navigation</EditorialLabel>
-          <h2
-            style={{
-              ...DISPLAY_HEADING_BASE,
-              fontSize: 100,
-              fontWeight: 600,
-              marginBottom: 60,
-              color: 'var(--neutral-900)',
-              whiteSpace: 'pre-line',
-            }}
-          >
-            <E
-              value={content.heading ?? 'Presentation\nStructure.'}
-              editing={editing}
-              multiline
-              onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
-            />
-          </h2>
-        </div>
+        {(() => {
+          const INDEX_HEADING_MAX = 100;
+          const indexHeadingFont = autoFitHeadingFontSize(content.heading ?? 'Presentation\nStructure.', {
+            min: 44,
+            max: INDEX_HEADING_MAX,
+            widthBudget: 560,
+            heightBudget: 480,
+          });
+          return (
+            <div style={{ flex: 1 }}>
+              <EditorialLabel>
+                Navigation
+                <FitHint editing={editing} shrunk={indexHeadingFont < INDEX_HEADING_MAX} />
+              </EditorialLabel>
+              <h2
+                style={{
+                  ...DISPLAY_HEADING_BASE,
+                  fontSize: indexHeadingFont,
+                  fontWeight: 600,
+                  marginBottom: 60,
+                  color: 'var(--neutral-900)',
+                  whiteSpace: 'pre-line',
+                }}
+              >
+                <E
+                  value={content.heading ?? 'Presentation\nStructure.'}
+                  editing={editing}
+                  multiline
+                  onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+                />
+              </h2>
+            </div>
+          );
+        })()}
         <div style={{ flex: 1.5, paddingTop: 20 }}>
           <div
             style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 60 }}
@@ -707,6 +752,15 @@ function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
 }
 
 function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderProps) {
+  const HEADING_MAX = 100;
+  const BODY_MAX = 32;
+  const METRIC_MAX = 56;
+  const headingText = content.heading ?? 'Core Strategic\nObjective.';
+  const bodyText = content.body ?? PLACEHOLDER;
+  const metricTextValue = content.metricText ?? '00.0%';
+  const headingFont = autoFitHeadingFontSize(headingText, { min: 56, max: HEADING_MAX, widthBudget: 1640, heightBudget: 280 });
+  const bodyFont = autoFitBodyFontSize(bodyText, { min: 20, max: BODY_MAX, widthBudget: 887, maxLines: 6 });
+  const metricFont = autoFitHeadingFontSize(metricTextValue, { min: 32, max: METRIC_MAX, widthBudget: 633, heightBudget: 160 });
   return (
     <>
       <SlideGrid />
@@ -727,11 +781,12 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={headingFont < HEADING_MAX} />
         </EditorialLabel>
         <h2
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 100,
+            fontSize: headingFont,
             fontWeight: 600,
             marginBottom: 48,
             color: 'var(--neutral-900)',
@@ -739,20 +794,21 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
           }}
         >
           <E
-            value={content.heading ?? 'Core Strategic\nObjective.'}
+            value={headingText}
             editing={editing}
             multiline
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
         </h2>
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 120 }}>
-          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
+          <p style={{ fontSize: bodyFont, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
             <E
-              value={content.body ?? PLACEHOLDER}
+              value={bodyText}
               editing={editing}
               multiline
               onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
             />
+            <FitHint editing={editing} shrunk={bodyFont < BODY_MAX} />
           </p>
           <div
             style={{
@@ -767,11 +823,12 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
                 editing={editing}
                 onCommit={(v) => onEdit((c) => ({ ...c, metricLabel: v || undefined }))}
               />
+              <FitHint editing={editing} shrunk={metricFont < METRIC_MAX} />
             </EditorialLabel>
             <p
               style={{
                 ...DISPLAY_HEADING_BASE,
-                fontSize: 56,
+                fontSize: metricFont,
                 fontWeight: 700,
                 lineHeight: 1.1,
                 color: 'var(--neutral-900)',
@@ -780,7 +837,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
               }}
             >
               <E
-                value={content.metricText ?? '00.0%'}
+                value={metricTextValue}
                 editing={editing}
                 multiline
                 onCommit={(v) => onEdit((c) => ({ ...c, metricText: v || undefined }))}
@@ -794,6 +851,12 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
 }
 
 function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
+  const HEADING_MAX = 180;
+  const SUBTITLE_MAX = 30;
+  const headingText = content.heading ?? 'Section Title.';
+  const subtitleText = content.subtitle ?? PLACEHOLDER;
+  const headingFont = autoFitHeadingFontSize(headingText, { min: 90, max: HEADING_MAX, widthBudget: 1620, heightBudget: 260 });
+  const subtitleFont = autoFitBodyFontSize(subtitleText, { min: 18, max: SUBTITLE_MAX, widthBudget: 960, maxLines: 4 });
   return (
     <>
       {/* Clean, flat design layout for SlideSectionDivider - no shadows or glow blurs */}
@@ -851,18 +914,19 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={headingFont < HEADING_MAX} />
         </EditorialLabel>
         <h1
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 180,
+            fontSize: headingFont,
             fontWeight: 700,
             color: '#ffffff',
             margin: '42px 0 48px',
           }}
         >
           <E
-            value={content.heading ?? 'Section Title.'}
+            value={headingText}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
@@ -870,14 +934,14 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
         <p
           style={{
             color: 'rgba(255,255,255,0.55)',
-            fontSize: 30,
+            fontSize: subtitleFont,
             lineHeight: 1.5,
             maxWidth: 960,
             margin: 0,
           }}
         >
           <E
-            value={content.subtitle ?? PLACEHOLDER}
+            value={subtitleText}
             editing={editing}
             multiline
             onCommit={(v) => onEdit((c) => ({ ...c, subtitle: v || undefined }))}
@@ -898,6 +962,16 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
       const arr = (c.leftAttributes ?? DEFAULT_ATTRIBUTES).map((a, j) => (j === i ? v || a : a));
       return { ...c, leftAttributes: arr };
     });
+  const COL_HEADING_MAX = 72;
+  const COL_BODY_MAX = 32;
+  const leftHeadingText = content.leftHeading ?? 'Current State\nEnvironment.';
+  const leftBodyText = content.leftBody ?? PLACEHOLDER;
+  const rightHeadingText = content.rightHeading ?? 'Strategic Pivot\nTarget State.';
+  const rightBodyText = content.rightBody ?? PLACEHOLDER;
+  const leftHeadingFont = autoFitHeadingFontSize(leftHeadingText, { min: 40, max: COL_HEADING_MAX, widthBudget: 680, heightBudget: 220 });
+  const leftBodyFont = autoFitBodyFontSize(leftBodyText, { min: 18, max: COL_BODY_MAX, widthBudget: 680, maxLines: 5 });
+  const rightHeadingFont = autoFitHeadingFontSize(rightHeadingText, { min: 40, max: COL_HEADING_MAX, widthBudget: 680, heightBudget: 220 });
+  const rightBodyFont = autoFitBodyFontSize(rightBodyText, { min: 18, max: COL_BODY_MAX, widthBudget: 680, maxLines: 5 });
   return (
     <>
       <SlideGrid />
@@ -928,11 +1002,12 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, leftLabel: v || undefined }))}
             />
+            <FitHint editing={editing} shrunk={leftHeadingFont < COL_HEADING_MAX} />
           </EditorialLabel>
           <h2
             style={{
               ...DISPLAY_HEADING_BASE,
-              fontSize: 72,
+              fontSize: leftHeadingFont,
               fontWeight: 600,
               marginBottom: 40,
               color: 'var(--neutral-900)',
@@ -940,19 +1015,20 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
             }}
           >
             <E
-              value={content.leftHeading ?? 'Current State\nEnvironment.'}
+              value={leftHeadingText}
               editing={editing}
               multiline
               onCommit={(v) => onEdit((c) => ({ ...c, leftHeading: v || undefined }))}
             />
           </h2>
-          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', marginBottom: 40, whiteSpace: 'pre-line' }}>
+          <p style={{ fontSize: leftBodyFont, lineHeight: 1.5, color: 'var(--neutral-500)', marginBottom: 40, whiteSpace: 'pre-line' }}>
             <E
-              value={content.leftBody ?? PLACEHOLDER}
+              value={leftBodyText}
               editing={editing}
               multiline
               onCommit={(v) => onEdit((c) => ({ ...c, leftBody: v || undefined }))}
             />
+            <FitHint editing={editing} shrunk={leftBodyFont < COL_BODY_MAX} />
           </p>
           <ul
             style={{
@@ -986,11 +1062,12 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, rightLabel: v || undefined }))}
             />
+            <FitHint editing={editing} shrunk={rightHeadingFont < COL_HEADING_MAX} />
           </EditorialLabel>
           <h2
             style={{
               ...DISPLAY_HEADING_BASE,
-              fontSize: 72,
+              fontSize: rightHeadingFont,
               fontWeight: 600,
               marginBottom: 40,
               color: 'var(--neutral-900)',
@@ -998,19 +1075,20 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
             }}
           >
             <E
-              value={content.rightHeading ?? 'Strategic Pivot\nTarget State.'}
+              value={rightHeadingText}
               editing={editing}
               multiline
               onCommit={(v) => onEdit((c) => ({ ...c, rightHeading: v || undefined }))}
             />
           </h2>
-          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-900)', whiteSpace: 'pre-line' }}>
+          <p style={{ fontSize: rightBodyFont, lineHeight: 1.5, color: 'var(--neutral-900)', whiteSpace: 'pre-line' }}>
             <E
-              value={content.rightBody ?? PLACEHOLDER}
+              value={rightBodyText}
               editing={editing}
               multiline
               onCommit={(v) => onEdit((c) => ({ ...c, rightBody: v || undefined }))}
             />
+            <FitHint editing={editing} shrunk={rightBodyFont < COL_BODY_MAX} />
           </p>
         </div>
       </div>
@@ -1019,6 +1097,15 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
 }
 
 function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) {
+  const VALUE_MAX = 420;
+  const HEADING_MAX = 64;
+  const BODY_MAX = 32;
+  const valueText = content.value ?? '000.0';
+  const headingText = content.heading ?? 'Primary Performance Variable Title.';
+  const bodyText = content.body ?? PLACEHOLDER;
+  const valueFont = autoFitHeadingFontSize(valueText, { min: 220, max: VALUE_MAX, widthBudget: 1500, heightBudget: 420, charWidthRatio: 0.62 });
+  const headingFont = autoFitHeadingFontSize(headingText, { min: 32, max: HEADING_MAX, widthBudget: 1500, heightBudget: 100 });
+  const bodyFont = autoFitBodyFontSize(bodyText, { min: 18, max: BODY_MAX, widthBudget: 800, maxLines: 5 });
   return (
     <>
       <SlideGrid />
@@ -1040,11 +1127,12 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={valueFont < VALUE_MAX || headingFont < HEADING_MAX} />
         </EditorialLabel>
         <div
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 420,
+            fontSize: valueFont,
             fontWeight: 700,
             lineHeight: 0.8,
             letterSpacing: '-0.07em',
@@ -1054,7 +1142,7 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
           }}
         >
           <E
-            value={content.value ?? '000.0'}
+            value={valueText}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, value: v || undefined }))}
           />
@@ -1069,25 +1157,26 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
         <h3
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 64,
+            fontSize: headingFont,
             fontWeight: 600,
             marginTop: -20,
             color: 'var(--neutral-900)',
           }}
         >
           <E
-            value={content.heading ?? 'Primary Performance Variable Title.'}
+            value={headingText}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
         </h3>
-        <p style={{ marginTop: 60, maxWidth: 800, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
+        <p style={{ marginTop: 60, maxWidth: 800, fontSize: bodyFont, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
           <E
-            value={content.body ?? PLACEHOLDER}
+            value={bodyText}
             editing={editing}
             multiline
             onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={bodyFont < BODY_MAX} />
         </p>
       </div>
       <GhostNumeral num={num} />
@@ -1395,6 +1484,14 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
     onEdit((c) => ({ ...c, phases: [...(c.phases ?? DEFAULT_PHASES), { title: 'New Phase', description: '', completed: false }] }));
   const removePhase = (i: number) =>
     onEdit((c) => ({ ...c, phases: (c.phases ?? DEFAULT_PHASES).filter((_, j) => j !== i) }));
+  const ROADMAP_HEADING_MAX = 100;
+  const roadmapHeadingText = content.heading ?? 'Pathway to Execution.';
+  const roadmapHeadingFont = autoFitHeadingFontSize(roadmapHeadingText, {
+    min: 56,
+    max: ROADMAP_HEADING_MAX,
+    widthBudget: 1640,
+    heightBudget: 150,
+  });
   return (
     <>
       <SlideGrid />
@@ -1415,18 +1512,19 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={roadmapHeadingFont < ROADMAP_HEADING_MAX} />
         </EditorialLabel>
         <h2
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 100,
+            fontSize: roadmapHeadingFont,
             fontWeight: 600,
             marginBottom: 90,
             color: 'var(--neutral-900)',
           }}
         >
           <E
-            value={content.heading ?? 'Pathway to Execution.'}
+            value={roadmapHeadingText}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
@@ -1508,6 +1606,13 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
 
 function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
   const showImage = !content.hideImage;
+  const HEADING_MAX = 100;
+  const BODY_MAX = 32;
+  const headingText = content.heading ?? 'Primary Insight Statement.';
+  const bodyText = content.body ?? PLACEHOLDER;
+  const colWidthBudget = showImage ? 560 : 760;
+  const headingFont = autoFitHeadingFontSize(headingText, { min: 44, max: HEADING_MAX, widthBudget: colWidthBudget, heightBudget: 180 });
+  const bodyFont = autoFitBodyFontSize(bodyText, { min: 18, max: BODY_MAX, widthBudget: colWidthBudget, maxLines: 6 });
   return (
     <>
       <SlideGrid />
@@ -1528,28 +1633,30 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
             />
+            <FitHint editing={editing} shrunk={headingFont < HEADING_MAX} />
           </EditorialLabel>
           <h2
             style={{
               ...DISPLAY_HEADING_BASE,
-              fontSize: 100,
+              fontSize: headingFont,
               fontWeight: 600,
               color: 'var(--neutral-900)',
             }}
           >
             <E
-              value={content.heading ?? 'Primary Insight Statement.'}
+              value={headingText}
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
             />
           </h2>
-          <p style={{ marginTop: 40, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
+          <p style={{ marginTop: 40, fontSize: bodyFont, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
             <E
-              value={content.body ?? PLACEHOLDER}
+              value={bodyText}
               editing={editing}
               multiline
               onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
             />
+            <FitHint editing={editing} shrunk={bodyFont < BODY_MAX} />
           </p>
           {!showImage && editing && (
             <div style={{ marginTop: 40 }}>
@@ -1596,6 +1703,14 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
     onEdit((c) => ({ ...c, steps: [...(c.steps ?? DEFAULT_STEPS), { title: 'New Step', description: '' }] }));
   const removeStep = (i: number) =>
     onEdit((c) => ({ ...c, steps: (c.steps ?? DEFAULT_STEPS).filter((_, j) => j !== i) }));
+  const PROCESS_HEADING_MAX = 100;
+  const processHeadingText = content.heading ?? 'Operational Flow.';
+  const processHeadingFont = autoFitHeadingFontSize(processHeadingText, {
+    min: 56,
+    max: PROCESS_HEADING_MAX,
+    widthBudget: 1640,
+    heightBudget: 150,
+  });
   return (
     <>
       <SlideGrid />
@@ -1616,18 +1731,19 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={processHeadingFont < PROCESS_HEADING_MAX} />
         </EditorialLabel>
         <h2
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 100,
+            fontSize: processHeadingFont,
             fontWeight: 600,
             marginBottom: 80,
             color: 'var(--neutral-900)',
           }}
         >
           <E
-            value={content.heading ?? 'Operational Flow.'}
+            value={processHeadingText}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
@@ -1708,6 +1824,9 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
     onEdit((c) => ({ ...c, sectors: [...(c.sectors ?? DEFAULT_SECTORS), { label: 'New Region', value: '0.0M Metric' }] }));
   const removeSector = (i: number) =>
     onEdit((c) => ({ ...c, sectors: (c.sectors ?? DEFAULT_SECTORS).filter((_, j) => j !== i) }));
+  const MAP_HEADING_MAX = 100;
+  const mapHeadingText = content.heading ?? 'Regional Impact.';
+  const mapHeadingFont = autoFitHeadingFontSize(mapHeadingText, { min: 56, max: MAP_HEADING_MAX, widthBudget: 858, heightBudget: 150 });
   return (
     <>
       <SlideGrid />
@@ -1736,17 +1855,18 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
           <h2
             style={{
               ...DISPLAY_HEADING_BASE,
-              fontSize: 100,
+              fontSize: mapHeadingFont,
               fontWeight: 600,
               marginBottom: 45,
               color: 'var(--neutral-900)',
             }}
           >
             <E
-              value={content.heading ?? 'Regional Impact.'}
+              value={mapHeadingText}
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
             />
+            <FitHint editing={editing} shrunk={mapHeadingFont < MAP_HEADING_MAX} />
           </h2>
           {content.hideImage ? (
             editing && (
@@ -1835,6 +1955,9 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
   };
 
   const avatarSrc = content.avatarUrl;
+  const QUOTE_MAX = 84;
+  const quoteText = content.quote ?? PLACEHOLDER;
+  const quoteFont = autoFitBodyFontSize(quoteText, { min: 40, max: QUOTE_MAX, widthBudget: 1440, maxLines: 4, charWidthRatio: 0.56 });
 
   return (
     <>
@@ -1875,7 +1998,7 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
         <blockquote
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 84,
+            fontSize: quoteFont,
             fontWeight: 500,
             lineHeight: 1.12,
             letterSpacing: '-0.03em',
@@ -1885,11 +2008,12 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
           }}
         >
           <E
-            value={content.quote ?? PLACEHOLDER}
+            value={quoteText}
             editing={editing}
             multiline
             onCommit={(v) => onEdit((c) => ({ ...c, quote: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={quoteFont < QUOTE_MAX} />
         </blockquote>
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
           {/* Circular avatar - static in view mode, uploadable in edit mode */}
@@ -2018,6 +2142,12 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
       const arr = base.map((x, j) => (j === i ? v || x : x));
       return { ...c, contacts: arr };
     });
+  const EXIT_HEADING_MAX = 180;
+  const EXIT_BODY_MAX = 32;
+  const exitHeadingText = content.heading ?? 'Thank You.';
+  const exitBodyText = content.body ?? PLACEHOLDER;
+  const exitHeadingFont = autoFitHeadingFontSize(exitHeadingText, { min: 90, max: EXIT_HEADING_MAX, widthBudget: 1500, heightBudget: 200 });
+  const exitBodyFont = autoFitBodyFontSize(exitBodyText, { min: 18, max: EXIT_BODY_MAX, widthBudget: 800, maxLines: 5 });
   return (
     <>
       {/* Clean, flat design layout for SlideExit - no shadows or glow blurs */}
@@ -2057,18 +2187,19 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={exitHeadingFont < EXIT_HEADING_MAX} />
         </EditorialLabel>
         <h1
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 180,
+            fontSize: exitHeadingFont,
             fontWeight: 700,
             color: '#ffffff',
             marginBottom: 40,
           }}
         >
           <E
-            value={content.heading ?? 'Thank You.'}
+            value={exitHeadingText}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
@@ -2076,18 +2207,19 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
         <p
           style={{
             color: 'rgba(255,255,255,0.5)',
-            fontSize: 32,
+            fontSize: exitBodyFont,
             maxWidth: 800,
             lineHeight: 1.5,
             whiteSpace: 'pre-line',
           }}
         >
           <E
-            value={content.body ?? PLACEHOLDER}
+            value={exitBodyText}
             editing={editing}
             multiline
             onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
           />
+          <FitHint editing={editing} shrunk={exitBodyFont < EXIT_BODY_MAX} />
         </p>
         <div
           style={{
@@ -2203,30 +2335,41 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
       />
     </EditorialLabel>
   );
-  const heading = (fontSize: number) => (
-    <h2 style={{ ...DISPLAY_HEADING_BASE, fontSize, fontWeight: 600, marginBottom: 40 }}>
-      <E
-        value={content.heading ?? 'Blank Slide.'}
-        editing={editing}
-        multiline
-        dataField="heading"
-        onActivate={activate('heading')}
-        onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
-      />
-    </h2>
-  );
-  const body = (maxWidth?: number) => (
-    <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth }}>
-      <E
-        value={content.body ?? 'Click to add your content…'}
-        editing={editing}
-        multiline
-        dataField="body"
-        onActivate={activate('body')}
-        onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
-      />
-    </p>
-  );
+  const headingText = content.heading ?? 'Blank Slide.';
+  const bodyText = content.body ?? 'Click to add your content…';
+  const heading = (maxFontSize: number, widthBudget = 1200) => {
+    const font = autoFitHeadingFontSize(headingText, { min: Math.round(maxFontSize * 0.55), max: maxFontSize, widthBudget, heightBudget: 220 });
+    return (
+      <h2 style={{ ...DISPLAY_HEADING_BASE, fontSize: font, fontWeight: 600, marginBottom: 40 }}>
+        <E
+          value={headingText}
+          editing={editing}
+          multiline
+          dataField="heading"
+          onActivate={activate('heading')}
+          onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
+        />
+        <FitHint editing={editing} shrunk={font < maxFontSize} />
+      </h2>
+    );
+  };
+  const body = (maxWidth?: number) => {
+    const BODY_MAX = 28;
+    const font = autoFitBodyFontSize(bodyText, { min: 16, max: BODY_MAX, widthBudget: maxWidth ?? 790, maxLines: 6 });
+    return (
+      <p style={{ fontSize: font, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth }}>
+        <E
+          value={bodyText}
+          editing={editing}
+          multiline
+          dataField="body"
+          onActivate={activate('body')}
+          onCommit={(v) => onEdit((c) => ({ ...c, body: v || undefined }))}
+        />
+        <FitHint editing={editing} shrunk={font < BODY_MAX} />
+      </p>
+    );
+  };
   const image = (placeholder: string, style?: React.CSSProperties, onDeleteContainer?: () => void) => (
     <ImageSlot
       src={content.imageUrl}
@@ -2280,7 +2423,7 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
         <div style={{ position: 'absolute', top: 160, bottom: 0, left: 140, right: 0, zIndex: 10, display: 'flex' }}>
           <div style={{ flex: '0 0 50%', paddingRight: 60, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             {eyebrow}
-            {heading(64)}
+            {heading(64, 790)}
             {body()}
           </div>
           <div style={{ flex: '0 0 50%', paddingBottom: 160 }}>

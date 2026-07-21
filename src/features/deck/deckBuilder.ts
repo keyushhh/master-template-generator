@@ -176,7 +176,7 @@ function classifySection(section: SectionNode): SectionKind {
 
 /** Typed-bullet prefixes each section family understands. Bullets with a
  *  `prefix:` that isn't in this set for their section are silently ignored by
- *  the builder — the coverage report flags them as potentially lost data. */
+ *  the builder; the coverage report flags them as potentially lost data. */
 const TYPED_PREFIXES: Partial<Record<SectionKind, string[]>> = {
   metrics: ['bar', 'kpi'],
   comparison: ['row'],

@@ -6,6 +6,7 @@ import { DeckSwitcher } from './DeckSwitcher';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
 import type { ProjectMeta } from '../deck/deckStore';
+import type { LibraryEntry } from '../business-record/libraryStore';
 import logoBlack from '../../assets/Logo_Black_Transparent.png';
 
 interface GeneratorSidebarProps {
@@ -20,6 +21,8 @@ interface GeneratorSidebarProps {
   onDocumentParsed: (ast: DocumentNode | null) => void;
   /** Import a source AND build the deck in one step (Import & Load in the modal). */
   onImport: (ast: DocumentNode) => void;
+  /** Load a saved use case library entry directly (restores its exact deck). */
+  onLoadLibraryEntry: (entry: LibraryEntry) => void;
   onGenerate: () => void;
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
@@ -62,6 +65,7 @@ export function GeneratorSidebar({
   dirty,
   onDocumentParsed,
   onImport,
+  onLoadLibraryEntry,
   onGenerate,
   onToggleHidden,
   onDuplicate,
@@ -168,6 +172,7 @@ export function GeneratorSidebar({
         onClose={() => setSourceOpen(false)}
         onDocumentParsed={onDocumentParsed}
         onImport={onImport}
+        onLoadLibraryEntry={onLoadLibraryEntry}
         hasSource={hasPresentation}
       />
     </aside>

@@ -7,6 +7,8 @@ import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHe
 import { useToast } from '../features/toast/Toast';
 import type { DocumentNode } from '../features/business-record/parser/ast';
 import type { Deck, SlideContent } from '../features/deck/types';
+import { saveLibraryEntry, type LibraryEntry } from '../features/business-record/libraryStore';
+import type { CampaignType } from '../features/business-record/sampleDecks';
 import {
   createTemplateDeck,
   buildDeckFromDocument,
@@ -179,10 +181,12 @@ export function MasterTemplatePage() {
 
   const handleGenerate = useCallback(() => {
     if (!ast) return;
-    commitDeck(buildDeckFromDocument(ast));
+    // 'set', not commitDeck: generating establishes a new baseline, so Undo has
+    // nothing to go back to - it shouldn't light up the moment a deck is built.
+    dispatchHistory({ type: 'set', deck: buildDeckFromDocument(ast) });
     setDraft(null);
     setDirty(false);
-  }, [ast, commitDeck]);
+  }, [ast]);
 
   /** Import path: set the source AND build the deck in one step, so "Import & Load"
    *  in the Source Material modal doubles as Generate (no separate click needed).
@@ -190,7 +194,7 @@ export function MasterTemplatePage() {
   const handleImportAndGenerate = useCallback((imported: DocumentNode) => {
     setAst(imported);
     const built = buildDeckFromDocument(imported);
-    commitDeck(built);
+    dispatchHistory({ type: 'set', deck: built });
     setDraft(null);
     setDirty(false);
     // If the deck is still unnamed, adopt the source's title so it's easy to find.
@@ -202,7 +206,31 @@ export function MasterTemplatePage() {
         setProjects(listProjects());
       }
     }
-  }, [commitDeck, projects, activeId]);
+  }, [projects, activeId]);
+
+  /** Load a saved use case library entry directly - restores the deck exactly as
+   *  saved (edits included) rather than re-running the parser/builder over its ast. */
+  const handleLoadLibraryEntry = useCallback((entry: LibraryEntry) => {
+    setAst(entry.ast);
+    dispatchHistory({ type: 'set', deck: entry.deck });
+    setDraft(null);
+    setDirty(false);
+    const current = projects.find((p) => p.id === activeId);
+    if (current && current.name === 'Untitled deck') {
+      renameProject(activeId, entry.name);
+      setProjects(listProjects());
+    }
+  }, [projects, activeId]);
+
+  const handleSaveToLibrary = useCallback(
+    (name: string, description: string, campaignType: CampaignType) => {
+      const saved = saveLibraryEntry({ name, description, campaignType, deck: displayDeck, ast });
+      if (!saved) {
+        showToast("Couldn't save to the library - browser storage is full.", 'error');
+      }
+    },
+    [displayDeck, ast, showToast]
+  );
 
   const handleReset = useCallback(() => {
     commitDeck(createTemplateDeck());
@@ -264,17 +292,6 @@ export function MasterTemplatePage() {
         slides: prev.slides.map((s) =>
           s.instanceId === instanceId ? { ...s, hidden: !s.hidden } : s
         ),
-      }));
-    },
-    [mutateDeck]
-  );
-
-  const handleBulkSetHidden = useCallback(
-    (instanceIds: string[], hidden: boolean) => {
-      const ids = new Set(instanceIds);
-      mutateDeck((prev) => ({
-        ...prev,
-        slides: prev.slides.map((s) => (ids.has(s.instanceId) ? { ...s, hidden } : s)),
       }));
     },
     [mutateDeck]
@@ -476,6 +493,7 @@ export function MasterTemplatePage() {
         dirty={dirty}
         onDocumentParsed={setAst}
         onImport={handleImportAndGenerate}
+        onLoadLibraryEntry={handleLoadLibraryEntry}
         onGenerate={handleGenerate}
         onToggleHidden={handleToggleHidden}
         onDuplicate={handleDuplicate}
@@ -673,7 +691,6 @@ export function MasterTemplatePage() {
         onPresent={() => { setReviewOpen(false); setPresentOpen(true); }}
         onReorder={handleReorder}
         onToggleHidden={handleToggleHidden}
-        onBulkSetHidden={handleBulkSetHidden}
         onBulkDelete={handleBulkDelete}
         onJumpTo={(instanceId) => {
           setReviewOpen(false);
@@ -681,6 +698,7 @@ export function MasterTemplatePage() {
             document.getElementById(instanceId)?.scrollIntoView({ behavior: 'smooth' });
           }, 80);
         }}
+        onSaveToLibrary={handleSaveToLibrary}
       />
       <PresentMode
         open={presentOpen}
