@@ -1770,23 +1770,6 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
                 placeholder={editing ? 'Click to add a map / visual' : 'Geographic Visualisation Placeholder'}
                 onDeleteContainer={() => onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))}
               />
-              {/* accent hotspots - only over the empty placeholder, not a real image */}
-              {!content.imageUrl &&
-                [{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      position: 'absolute',
-                      ...pos,
-                      width: 20,
-                      height: 20,
-                      background: 'var(--emerald-500)',
-                      borderRadius: '50%',
-                      boxShadow: '0 0 40px var(--emerald-500)',
-                      pointerEvents: 'none',
-                    }}
-                  />
-                ))}
             </div>
           )}
         </div>

@@ -814,8 +814,6 @@ async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['cont
         valign: 'middle',
         letterSpacingEm: 0.12,
       });
-      addCircle(slide, box(140 + leftW * 0.22 - 10, 305 + 645 * 0.35 - 10, 20, 20), EMERALD_500);
-      addCircle(slide, box(140 + leftW * 0.62 - 10, 305 + 645 * 0.45 - 10, 20, 20), EMERALD_500);
     }
   }
 
