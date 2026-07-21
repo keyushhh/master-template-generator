@@ -9,12 +9,12 @@ interface ToastItem {
 }
 
 interface ToastContextValue {
-  showToast: (message: string, kind?: ToastKind) => void;
+  showToast: (message: string, kind?: ToastKind, durationMs?: number) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-const DURATION_MS: Record<ToastKind, number> = { error: 7000, success: 3500, info: 4500 };
+const DURATION_MS: Record<ToastKind, number> = { error: 4000, success: 1800, info: 1800 };
 
 const KIND_COLOR: Record<ToastKind, string> = {
   error: '#dc2626',
@@ -31,10 +31,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const showToast = useCallback(
-    (message: string, kind: ToastKind = 'info') => {
+    (message: string, kind: ToastKind = 'info', durationMs?: number) => {
       const id = ++idRef.current;
       setToasts((prev) => [...prev, { id, message, kind }]);
-      setTimeout(() => dismiss(id), DURATION_MS[kind]);
+      setTimeout(() => dismiss(id), durationMs ?? DURATION_MS[kind]);
     },
     [dismiss]
   );
