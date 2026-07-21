@@ -224,6 +224,31 @@ export function analyzeCoverage(ast: DocumentNode, deck: Deck): CoverageReport {
   return { filled, total: deck.slides.length, emptySlides, insightSections, unmatchedBullets };
 }
 
+export interface ContentChecklist {
+  /** A visible Data Monument or Metrics Dashboard slide with real (non-default)
+   *  numbers - i.e. an actual `- value:` or `- bar:`/`- kpi:` bullet was parsed. */
+  hasMetrics: boolean;
+  /** A visible Image Editorial or Global Reach Map slide with an uploaded image. */
+  hasVisualProof: boolean;
+}
+
+/** Derives the Q14 "before you send this" checklist entirely from what's
+ *  actually in the deck - no self-reported checkboxes, since those verify
+ *  nothing (see memory `no-honor-system-ui`). */
+export function analyzeContentChecklist(deck: Deck): ContentChecklist {
+  const visible = deck.slides.filter((s) => !s.hidden);
+  return {
+    hasMetrics: visible.some(
+      (s) =>
+        (s.templateId === 's6' && !!s.content.value) ||
+        (s.templateId === 's7' && (!!s.content.bars?.length || !!s.content.kpis?.length))
+    ),
+    hasVisualProof: visible.some(
+      (s) => (s.templateId === 's10' || s.templateId === 's12') && !!s.content.imageUrl
+    ),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Deck builder - Business Record AST → populated Deck
 // ---------------------------------------------------------------------------
