@@ -4,15 +4,55 @@ import type { SlideInstance, ComparisonRow } from '../deck/types';
 /**
  * Native (editable) pptxgenjs equivalent of PresentationCanvas.tsx's DOM
  * renderers, one per template. The 1920x1080px slide space maps onto
- * pptxgenjs' 10x5.625in layout at a fixed 192px/inch.
+ * pptxgenjs' LAYOUT_WIDE (13.333x7.5in) layout at a fixed 144px/inch.
  */
 
-const PX_PER_IN = 192;
-const PX_TO_PT = 0.375; // 1 design-px == 0.375pt at 192px/in, 72pt/in
+// 144px/in maps the 1920x1080 design canvas onto pptxgenjs's LAYOUT_WIDE
+// (13.333in x 7.5in) - the modern PowerPoint/Google Slides/Canva "Widescreen"
+// standard - rather than the legacy 10in x 5.625in LAYOUT_16x9 preset.
+const PX_PER_IN = 144;
+const PX_TO_PT = 72 / PX_PER_IN; // pt-per-design-px, derived so box()/pt() stay canvas-size-agnostic
 
 const inch = (px: number) => px / PX_PER_IN;
 const pt = (px: number) => Math.round(px * PX_TO_PT * 100) / 100;
 const tracking = (fontPx: number, em: number) => Math.round(fontPx * em * PX_TO_PT * 100) / 100;
+
+/**
+ * Estimates how many lines bold display-weight text will wrap to at a given
+ * box width, using Space Grotesk Bold's real average advance width
+ * (~0.55em/char) as the char-width heuristic. Unlike the web renderer's flex
+ * layout, pptxgenjs text boxes have a fixed height and don't auto-grow, so
+ * headings sized off a hardcoded box height silently overflow into whatever
+ * sits below once the actual wrap count exceeds what was assumed.
+ */
+function estimateWrappedLines(text: string, fontPx: number, widthPx: number): number {
+  const charsPerLine = Math.max(1, Math.floor(widthPx / (fontPx * 0.55)));
+  // Places a word (possibly itself longer than one line) at the current cursor position,
+  // returning the extra lines it consumed and the line length it leaves behind.
+  const placeWord = (lineLen: number, wordLen: number): [extraLines: number, newLineLen: number] => {
+    const startLen = lineLen === 0 ? wordLen : lineLen + 1 + wordLen;
+    if (lineLen !== 0 && startLen <= charsPerLine) return [0, startLen];
+    const effectiveLen = lineLen === 0 ? wordLen : wordLen;
+    const brokeToNewLine = lineLen === 0 ? 0 : 1;
+    if (effectiveLen <= charsPerLine) return [brokeToNewLine, effectiveLen];
+    const extraWraps = Math.ceil(effectiveLen / charsPerLine) - 1;
+    const remainder = effectiveLen % charsPerLine || charsPerLine;
+    return [brokeToNewLine + extraWraps, remainder];
+  };
+
+  return text.split('\n').reduce((total, segment) => {
+    const words = segment.split(/\s+/).filter(Boolean);
+    if (!words.length) return total + 1;
+    let lines = 1;
+    let lineLen = 0;
+    for (const word of words) {
+      const [extraLines, newLineLen] = placeWord(lineLen, word.length);
+      lines += extraLines;
+      lineLen = newLineLen;
+    }
+    return total + lines;
+  }, 0);
+}
 
 const FONT_DISPLAY = 'Space Grotesk';
 const FONT_MONO = 'JetBrains Mono';
@@ -317,7 +357,7 @@ async function addLogo(slide: pptxgen.Slide, logoUrl: string | undefined, xPx: n
 // ---------------------------------------------------------------------------
 
 async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'], logoUrl?: string) {
-  const lines = content.headingLines?.length ? content.headingLines : ['Master Primary', 'Heading', 'Variable.'];
+  const lines = content.headingLines?.length ? content.headingLines : ['Master Primary', 'Heading.'];
   const longest = Math.max(...lines.map((l) => l.length), 1);
   const heroFont = Math.round(Math.max(72, Math.min(180, 1640 / (longest * 0.6), 620 / (lines.length * 0.95))));
   const heroTopPad = lines.length >= 4 ? 160 : lines.length === 3 ? 210 : 280;
@@ -325,7 +365,10 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
   addHudTop(slide, content.projectLabel ?? 'Project Name Placeholder', content.versionLabel ?? 'YYYY // Version 0.0');
   addEditorialLabel(slide, content.eyebrow ?? 'Presentation Subtitle', 140, heroTopPad);
 
-  const headingH = lines.length * heroFont * 0.85 * PX_TO_PT * (PX_PER_IN / 72);
+  // Multiplier is intentionally generous (vs. the ~0.85 Space Grotesk itself renders at): if the
+  // embedded font ever fails to load, PowerPoint's fallback font may have taller line metrics, and
+  // this estimate drives the tagline's Y position below - undershooting crowds the tagline into the heading.
+  const headingH = lines.length * heroFont * 1.05 * PX_TO_PT * (PX_PER_IN / 72);
   const runs: pptxgen.TextProps[] = lines.map((line, i) => ({
     text: line,
     options: {
@@ -339,11 +382,11 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
     lineSpacingMultiple: 0.9,
   });
 
-  const taglineY = heroTopPad + 55 + headingH + 100;
-  addLine(slide, 140, taglineY + 7, 260, taglineY + 7, EMERALD_500, 1);
-  addText(slide, content.tagline ?? PLACEHOLDER, box(280, taglineY - 8, 1500, 40), {
+  const taglineY = heroTopPad + 55 + headingH + 96;
+  addLine(slide, 140, taglineY + 9, 275, taglineY + 9, EMERALD_500, 1);
+  addText(slide, content.tagline ?? PLACEHOLDER, box(323, taglineY - 10, 1460, 40), {
     fontFace: FONT_MONO,
-    size: 14,
+    size: 18,
     color: NEUTRAL_500,
     letterSpacingEm: 0.25,
   });
@@ -367,8 +410,13 @@ function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num
   const parts = content.parts?.length ? content.parts : DEFAULT_INDEX_PARTS;
   addHudTop(slide, content.hudLabel ?? 'Agenda', num);
   addEditorialLabel(slide, 'Navigation', 140, 160);
-  addText(slide, content.heading ?? 'Presentation\nStructure.', box(140, 215, 620, 260), {
-    size: 100,
+  const heading = content.heading ?? 'Presentation\nStructure.';
+  const headingFont = 100;
+  const headingW = 700;
+  const headingLines = estimateWrappedLines(heading, headingFont, headingW);
+  const headingH = Math.max(260, headingLines * headingFont * 1.05);
+  addText(slide, heading, box(140, 215, headingW, headingH), {
+    size: headingFont,
     bold: true,
     lineSpacingMultiple: 0.9,
   });
@@ -396,45 +444,63 @@ function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num
 
 function buildExecutiveSummary(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   addHudTop(slide, content.hudLabel ?? 'Executive Summary', num);
-  addText(slide, content.heading ?? 'Core Strategic\nObjective.', box(140, 160, 1640, 220), {
+  addEditorialLabel(slide, content.eyebrow ?? 'Executive Summary', 140, 160);
+  addText(slide, content.heading ?? 'Core Strategic\nObjective.', box(140, 215, 1640, 220), {
     size: 100,
     bold: true,
     lineSpacingMultiple: 0.9,
   });
-  const bodyY = 460;
-  addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, 760, 400), {
+
+  // 1.4fr:1fr split (vs. an even 1fr:1fr) so the recommendation reads as the
+  // primary content and the metric as a supporting aside, matching the source layout.
+  const bodyY = 500;
+  const gap = 120;
+  const contentW = 1640 - gap;
+  const leftW = Math.round((contentW * 1.4) / 2.4);
+  const rightX = 140 + leftW + gap;
+  const rightW = 1640 - leftW - gap;
+
+  addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, leftW, 400), {
     fontFace: FONT_DISPLAY,
     size: 32,
     color: NEUTRAL_500,
     lineSpacingMultiple: 1.5,
   });
-  addRect(slide, box(1020, bodyY, 760, 400), NEUTRAL_50, { color: NEUTRAL_200, widthPx: 1 });
-  addEditorialLabel(slide, content.metricLabel ?? 'Variable Metric', 1080, bodyY + 60);
-  addText(slide, content.metricText ?? PLACEHOLDER, box(1080, bodyY + 110, 640, 260), {
-    fontFace: FONT_DISPLAY,
-    size: 32,
+
+  const rightPadLeft = 66;
+  addLine(slide, rightX, bodyY, rightX, bodyY + 340, NEUTRAL_200, 1);
+  addEditorialLabel(slide, content.metricLabel ?? 'Variable Metric', rightX + rightPadLeft, bodyY + 100);
+  addText(slide, content.metricText ?? '00.0%', box(rightX + rightPadLeft, bodyY + 150, rightW - rightPadLeft, 140), {
+    size: 56,
+    bold: true,
     color: NEUTRAL_900,
-    lineSpacingMultiple: 1.5,
+    lineSpacingMultiple: 1.1,
   });
 }
 
 async function buildSectionDivider(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, logoUrl?: string) {
   await addLogo(slide, logoUrl, 80, 60, true);
-  addEditorialLabel(slide, content.eyebrow ?? 'Section Marker', 960, 380, { center: true, color: EMERALD_400 });
-  addText(slide, content.heading ?? 'Section Title.', box(160, 440, 1600, 260), {
-    size: 240,
+  addText(slide, content.hudLabel ?? 'Section Marker', box(1400, 60, 420, 30), {
+    fontFace: FONT_MONO,
+    size: 15,
+    color: WHITE,
+    transparency: 60,
+    align: 'right',
+    letterSpacingEm: 0.2,
+  });
+
+  addEditorialLabel(slide, content.eyebrow ?? 'Part 02', 150, 400, { color: EMERALD_400 });
+  addText(slide, content.heading ?? 'Section Title.', box(150, 463, 1620, 260), {
+    size: 180,
     bold: true,
     color: WHITE,
-    align: 'center',
   });
-  addText(slide, content.subtitle ?? PLACEHOLDER, box(460, 720, 1000, 80), {
-    fontFace: FONT_MONO,
-    size: 20,
-    color: 'CCCCCC',
-    transparency: 60,
-    align: 'center',
-    letterSpacingEm: 0.38,
-    lineSpacingMultiple: 1.4,
+  addText(slide, content.subtitle ?? PLACEHOLDER, box(150, 730, 960, 100), {
+    fontFace: FONT_DISPLAY,
+    size: 30,
+    color: WHITE,
+    transparency: 45,
+    lineSpacingMultiple: 1.5,
   });
   void num;
 }
@@ -617,7 +683,7 @@ function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['con
   addEditorialLabel(slide, content.eyebrow ?? 'Milestone Projection', 140, 260);
   addText(slide, content.heading ?? 'Pathway to Execution.', box(140, 315, 1640, 100), { size: 100, bold: true });
 
-  const railY = 512;
+  const railY = 490;
   addLine(slide, 140, railY, 1780, railY, NEUTRAL_200, 2);
 
   const itemW = 320;
@@ -626,7 +692,7 @@ function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['con
   const spacing = n > 1 ? (totalW - itemW) / (n - 1) : 0;
   phases.forEach((p, i) => {
     const x = 140 + i * spacing;
-    addCircle(slide, box(x, railY - 12, 24, 24), p.completed ? EMERALD_500 : NEUTRAL_300);
+    addCircle(slide, box(x, railY - 10, 20, 20), p.completed ? EMERALD_500 : NEUTRAL_300);
     addEditorialLabel(slide, `Phase ${String(i + 1).padStart(2, '0')}`, x, railY + 42, { size: 12 });
     addText(slide, p.title, box(x, railY + 85, itemW, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05 });
     addText(slide, p.description || PLACEHOLDER, box(x, railY + 140, itemW, 140), {
@@ -642,13 +708,19 @@ async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance[
   const showImage = !content.hideImage;
   const leftW = showImage ? 873 : 1920;
   const textPad = showImage ? 140 : 360;
+  const heading = content.heading ?? 'Primary Insight Statement.';
+  const headingFont = 100;
+  const headingW = leftW - textPad;
+  const headingLines = estimateWrappedLines(heading, headingFont, headingW);
+  const headingH = Math.max(260, headingLines * headingFont * 1.05);
   addEditorialLabel(slide, content.eyebrow ?? 'Visual Narrative', 140, 400);
-  addText(slide, content.heading ?? 'Primary Insight Statement.', box(140, 455, leftW - textPad, 260), {
-    size: 100,
+  addText(slide, heading, box(140, 455, headingW, headingH), {
+    size: headingFont,
     bold: true,
     lineSpacingMultiple: 0.95,
   });
-  addText(slide, content.body ?? PLACEHOLDER, box(140, 700, leftW - textPad - 60, 260), {
+  const bodyY = 455 + headingH + 40;
+  addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, headingW - 60, 260), {
     fontFace: FONT_DISPLAY,
     size: 32,
     color: NEUTRAL_500,
@@ -716,11 +788,19 @@ const DEFAULT_SECTORS = [
 async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const sectors = content.sectors?.length ? content.sectors : DEFAULT_SECTORS;
   addHudTop(slide, content.hudLabel ?? 'Reach Distribution', num);
-  addText(slide, content.heading ?? 'Regional Impact.', box(140, 160, 1640, 100), { size: 100, bold: true });
+
+  // 1.2fr:1fr split - image column left, stats column right (vertically centered), matching the source layout.
+  const gap = 105;
+  const contentW = 1640 - gap;
+  const leftW = Math.round((contentW * 1.2) / 2.2);
+  const rightX = 140 + leftW + gap;
+  const rightW = 1640 - leftW - gap;
+
+  addText(slide, content.heading ?? 'Regional Impact.', box(140, 160, leftW, 100), { size: 100, bold: true });
 
   const showMap = !content.hideImage;
   if (showMap) {
-    const mapBox = box(140, 320, 1640, 480);
+    const mapBox = box(140, 305, leftW, 645);
     if (content.imageUrl) {
       addImageCover(slide, content.imageUrl, mapBox);
       addRect(slide, mapBox, undefined, { color: NEUTRAL_200, widthPx: 1 });
@@ -734,38 +814,53 @@ async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['cont
         valign: 'middle',
         letterSpacingEm: 0.12,
       });
-      addCircle(slide, box(140 + 1640 * 0.22 - 10, 320 + 480 * 0.35 - 10, 20, 20), EMERALD_500);
-      addCircle(slide, box(140 + 1640 * 0.62 - 10, 320 + 480 * 0.45 - 10, 20, 20), EMERALD_500);
+      addCircle(slide, box(140 + leftW * 0.22 - 10, 305 + 645 * 0.35 - 10, 20, 20), EMERALD_500);
+      addCircle(slide, box(140 + leftW * 0.62 - 10, 305 + 645 * 0.45 - 10, 20, 20), EMERALD_500);
     }
   }
 
-  const sectorY = showMap ? 840 : 340;
-  const gap = 100;
-  const colW = (1640 - gap * (sectors.length - 1)) / Math.max(sectors.length, 1);
+  const blockH = 190;
+  const totalH = blockH * sectors.length;
+  const startY = 160 + Math.max(0, (860 - totalH) / 2);
   sectors.forEach((s, i) => {
-    const x = 140 + i * (colW + gap);
-    addEditorialLabel(slide, s.label, x, sectorY, { size: 10 });
-    addText(slide, s.value, box(x, sectorY + 40, colW, 50), { size: 24, bold: true });
+    const y = startY + i * blockH;
+    addLine(slide, rightX, y, rightX + rightW, y, NEUTRAL_200, 1);
+    addEditorialLabel(slide, s.label, rightX, y + 30, { size: 10 });
+    addText(slide, s.value, box(rightX, y + 68, rightW, 90), { size: 72, bold: true });
   });
   void num;
 }
 
-async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['content']) {
-  addEditorialLabel(slide, content.eyebrow ?? 'Key Insight', 140, 300);
-  addText(slide, `“${content.quote ?? PLACEHOLDER}”`, box(140, 355, 1640, 380), {
-    size: 110,
+async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
+  addHudTop(slide, content.eyebrow ?? 'Key Insight', num);
+
+  // Giant decorative quotation mark (vs. the previous inline quote-mark-in-heading treatment) -
+  // this is what let the source design run the actual quote text at a much saner size.
+  addText(slide, '“', box(195, 160, 300, 160), {
+    size: 300,
     bold: true,
-    lineSpacingMultiple: 0.95,
+    color: EMERALD_500,
+    lineSpacingMultiple: 0.5,
   });
 
-  const avatarY = 800;
+  const quote = content.quote ?? PLACEHOLDER;
+  const quoteFont = 84;
+  const quoteW = 1440;
+  const quoteLines = estimateWrappedLines(quote, quoteFont, quoteW);
+  const quoteH = Math.max(200, quoteLines * quoteFont * 1.2);
+  addText(slide, quote, box(195, 330, quoteW, quoteH), {
+    size: quoteFont,
+    lineSpacingMultiple: 1.12,
+  });
+
+  const avatarY = 330 + quoteH + 72;
   if (content.avatarUrl) {
-    slide.addImage({ data: content.avatarUrl, x: inch(140), y: inch(avatarY), w: inch(80), h: inch(80), rounding: true });
+    slide.addImage({ data: content.avatarUrl, x: inch(195), y: inch(avatarY), w: inch(84), h: inch(84), rounding: true });
   } else {
-    addCircle(slide, box(140, avatarY, 80, 80), NEUTRAL_200);
+    addCircle(slide, box(195, avatarY, 84, 84), NEUTRAL_200);
   }
-  addText(slide, content.author ?? 'Author Name', box(245, avatarY + 4, 700, 50), { size: 28, bold: true });
-  addText(slide, content.role ?? 'Author Title Placeholder', box(245, avatarY + 46, 700, 40), {
+  addText(slide, content.author ?? 'Author Name', box(304, avatarY + 6, 700, 50), { size: 27, bold: true });
+  addText(slide, content.role ?? 'Author Title Placeholder', box(304, avatarY + 50, 700, 40), {
     fontFace: FONT_MONO,
     size: 18,
     color: NEUTRAL_500,
@@ -923,7 +1018,7 @@ export async function addNativeSlide(
       await buildGlobalMap(slide, c, num);
       break;
     case 's13':
-      await buildFeaturedQuote(slide, c);
+      await buildFeaturedQuote(slide, c, num);
       break;
     case 's14':
       await buildExit(slide, c, logoUrl);

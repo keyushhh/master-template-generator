@@ -376,7 +376,15 @@ function EditorialLabel({
 }
 
 /** Oversized background numeral used by dark divider / monument slides. */
-function GhostNumeral({ num, dark }: { num: string; dark?: boolean }) {
+function GhostNumeral({
+  num,
+  dark,
+  style,
+}: {
+  num: string;
+  dark?: boolean;
+  style?: React.CSSProperties;
+}) {
   return (
     <div
       style={{
@@ -390,6 +398,7 @@ function GhostNumeral({ num, dark }: { num: string; dark?: boolean }) {
         lineHeight: 1,
         pointerEvents: 'none',
         zIndex: 0,
+        ...style,
       }}
     >
       {num}
@@ -485,7 +494,7 @@ function Logo({
 // ---------------------------------------------------------------------------
 
 function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
-  const lines = content.headingLines ?? ['Master Primary', 'Heading', 'Variable.'];
+  const lines = content.headingLines ?? ['Master Primary', 'Heading.'];
   // Auto-fit the hero: shrink the font and tighten the top padding for longer
   // titles so the headline never overflows the fixed 1080px slide and keeps a
   // clean bottom gap. Short titles keep the full 180px display size.
@@ -559,12 +568,12 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sl
             ))
           )}
         </h1>
-        <div style={{ marginTop: 100, display: 'flex', alignItems: 'center', gap: 40 }}>
-          <div style={{ width: 120, height: 1, background: 'var(--emerald-500)' }} />
+        <div style={{ marginTop: 96, display: 'flex', alignItems: 'center', gap: 48 }}>
+          <div style={{ width: 135, height: 1, background: 'var(--emerald-500)' }} />
           <p
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: 14,
+              fontSize: 18,
               textTransform: 'uppercase',
               letterSpacing: '0.25em',
               color: 'var(--neutral-500)',
@@ -712,12 +721,19 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
         num={num}
       />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
+        <EditorialLabel>
+          <E
+            value={content.eyebrow ?? 'Executive Summary'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        </EditorialLabel>
         <h2
           style={{
             ...DISPLAY_HEADING_BASE,
             fontSize: 100,
             fontWeight: 600,
-            marginBottom: 80,
+            marginBottom: 48,
             color: 'var(--neutral-900)',
             whiteSpace: 'pre-line',
           }}
@@ -729,7 +745,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
         </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 120 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 120 }}>
           <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
             <E
               value={content.body ?? PLACEHOLDER}
@@ -740,9 +756,9 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
           </p>
           <div
             style={{
-              background: 'var(--neutral-50)',
-              border: '1px solid var(--neutral-200)',
-              padding: 60,
+              borderLeft: '1px solid var(--neutral-200)',
+              paddingLeft: 66,
+              alignSelf: 'center',
             }}
           >
             <EditorialLabel>
@@ -752,9 +768,19 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
                 onCommit={(v) => onEdit((c) => ({ ...c, metricLabel: v || undefined }))}
               />
             </EditorialLabel>
-            <p style={{ color: 'var(--neutral-900)', fontSize: 32, fontWeight: 500, lineHeight: 1.5 }}>
+            <p
+              style={{
+                ...DISPLAY_HEADING_BASE,
+                fontSize: 56,
+                fontWeight: 700,
+                lineHeight: 1.1,
+                color: 'var(--neutral-900)',
+                whiteSpace: 'pre-line',
+                margin: '18px 0 24px',
+              }}
+            >
               <E
-                value={content.metricText ?? PLACEHOLDER}
+                value={content.metricText ?? '00.0%'}
                 editing={editing}
                 multiline
                 onCommit={(v) => onEdit((c) => ({ ...c, metricText: v || undefined }))}
@@ -792,19 +818,36 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
       </div>
       <div
         style={{
+          position: 'absolute',
+          top: 60,
+          right: 80,
+          zIndex: 10,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 15,
+          letterSpacing: '0.2em',
+          color: 'rgba(255,255,255,0.4)',
+        }}
+      >
+        <E
+          value={content.hudLabel ?? 'Section Marker'}
+          editing={editing}
+          onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
+        />
+      </div>
+      <div
+        style={{
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          alignItems: 'center',
-          textAlign: 'center',
           position: 'relative',
+          padding: '0 150px',
           zIndex: 10,
         }}
       >
-        <EditorialLabel style={{ justifyContent: 'center' }}>
+        <EditorialLabel style={{ color: 'var(--emerald-500)' }}>
           <E
-            value={content.eyebrow ?? 'Section Marker'}
+            value={content.eyebrow ?? 'Part 02'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
@@ -812,9 +855,10 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
         <h1
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 240,
+            fontSize: 180,
             fontWeight: 700,
             color: '#ffffff',
+            margin: '42px 0 48px',
           }}
         >
           <E
@@ -825,13 +869,11 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
         </h1>
         <p
           style={{
-            color: 'rgba(255,255,255,0.4)',
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: '0.38em',
-            textTransform: 'uppercase',
-            marginTop: 40,
-            fontSize: 20,
-            maxWidth: 1400,
+            color: 'rgba(255,255,255,0.55)',
+            fontSize: 30,
+            lineHeight: 1.5,
+            maxWidth: 960,
+            margin: 0,
           }}
         >
           <E
@@ -842,7 +884,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
           />
         </p>
       </div>
-      <GhostNumeral num={num} dark />
+      <GhostNumeral num={num} dark style={{ bottom: -105, right: -45, fontSize: 630, color: 'rgba(255,255,255,0.03)' }} />
     </>
   );
 }
@@ -1379,7 +1421,7 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
             ...DISPLAY_HEADING_BASE,
             fontSize: 100,
             fontWeight: 600,
-            marginBottom: 120,
+            marginBottom: 90,
             color: 'var(--neutral-900)',
           }}
         >
@@ -1390,11 +1432,11 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
           />
         </h2>
         <div style={{ position: 'relative', paddingTop: 60 }}>
-          {/* timeline rail */}
+          {/* timeline rail - centered on the 20px phase dots, which sit at paddingTop (60) */}
           <div
             style={{
               position: 'absolute',
-              top: 12,
+              top: 69,
               left: 0,
               right: 0,
               height: 2,
@@ -1412,8 +1454,8 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
                   onClick={() => editing && toggleDone(i)}
                   title={editing ? 'Toggle completed' : undefined}
                   style={{
-                    width: 24,
-                    height: 24,
+                    width: 20,
+                    height: 20,
                     background: p.completed ? 'var(--emerald-500)' : 'var(--neutral-300)',
                     borderRadius: '50%',
                     position: 'relative',
@@ -1681,75 +1723,81 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
       />
       <div
         style={{
-          padding: '160px 140px',
+          padding: '160px 140px 0',
           height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
+          display: 'grid',
+          gridTemplateColumns: '1.2fr 1fr',
+          gap: 105,
           position: 'relative',
           zIndex: 10,
         }}
       >
-        <h2
-          style={{
-            ...DISPLAY_HEADING_BASE,
-            fontSize: 100,
-            fontWeight: 600,
-            marginBottom: 60,
-            color: 'var(--neutral-900)',
-          }}
-        >
-          <E
-            value={content.heading ?? 'Regional Impact.'}
-            editing={editing}
-            onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
-          />
-        </h2>
-        {content.hideImage ? (
-          editing && (
-            <div style={{ marginBottom: 10 }}>
-              <AddBtn label="Add map / visual back" onClick={() => onEdit((c) => ({ ...c, hideImage: false }))} />
-            </div>
-          )
-        ) : (
-          <div
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <h2
             style={{
-              flex: 1,
-              position: 'relative',
-              border: '1px solid var(--neutral-200)',
-              overflow: 'hidden',
+              ...DISPLAY_HEADING_BASE,
+              fontSize: 100,
+              fontWeight: 600,
+              marginBottom: 45,
+              color: 'var(--neutral-900)',
             }}
           >
-            <ImageSlot
-              src={content.imageUrl}
+            <E
+              value={content.heading ?? 'Regional Impact.'}
               editing={editing}
-              onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
-              placeholder={editing ? 'Click to add a map / visual' : 'Geographic Visualisation Placeholder'}
-              onDeleteContainer={() => onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))}
+              onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
             />
-            {/* accent hotspots - only over the empty placeholder, not a real image */}
-            {!content.imageUrl &&
-              [{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
-                <div
-                  key={i}
-                  style={{
-                    position: 'absolute',
-                    ...pos,
-                    width: 20,
-                    height: 20,
-                    background: 'var(--emerald-500)',
-                    borderRadius: '50%',
-                    boxShadow: '0 0 40px var(--emerald-500)',
-                    pointerEvents: 'none',
-                  }}
-                />
-              ))}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 100, marginTop: 40, alignItems: 'flex-start' }}>
+          </h2>
+          {content.hideImage ? (
+            editing && (
+              <div style={{ marginBottom: 10 }}>
+                <AddBtn label="Add map / visual back" onClick={() => onEdit((c) => ({ ...c, hideImage: false }))} />
+              </div>
+            )
+          ) : (
+            <div
+              style={{
+                flex: 1,
+                position: 'relative',
+                border: '1px solid var(--neutral-200)',
+                overflow: 'hidden',
+              }}
+            >
+              <ImageSlot
+                src={content.imageUrl}
+                editing={editing}
+                onChange={(v) => onEdit((c) => ({ ...c, imageUrl: v }))}
+                placeholder={editing ? 'Click to add a map / visual' : 'Geographic Visualisation Placeholder'}
+                onDeleteContainer={() => onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))}
+              />
+              {/* accent hotspots - only over the empty placeholder, not a real image */}
+              {!content.imageUrl &&
+                [{ top: '35%', left: '22%' }, { top: '45%', left: '62%' }].map((pos, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      position: 'absolute',
+                      ...pos,
+                      width: 20,
+                      height: 20,
+                      background: 'var(--emerald-500)',
+                      borderRadius: '50%',
+                      boxShadow: '0 0 40px var(--emerald-500)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                ))}
+            </div>
+          )}
+        </div>
+        <div style={{ alignSelf: 'center', display: 'flex', flexDirection: 'column' }}>
           {sectors.map((s, i) => (
-            <div key={i} style={{ position: 'relative' }}>
+            <div
+              key={i}
+              style={{ position: 'relative', borderTop: '1px solid var(--neutral-200)', padding: '39px 0' }}
+            >
               {editing && (
-                <RemoveBtn onClick={() => removeSector(i)} style={{ position: 'absolute', top: -12, right: -40, zIndex: 20 }} />
+                <RemoveBtn onClick={() => removeSector(i)} style={{ position: 'absolute', top: 15, right: -40, zIndex: 20 }} />
               )}
               <EditorialLabel style={{ fontSize: 10 }}>
                 <E
@@ -1761,8 +1809,9 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
               <h4
                 style={{
                   ...DISPLAY_HEADING_BASE,
-                  fontSize: 24,
+                  fontSize: 72,
                   fontWeight: 600,
+                  marginTop: 12,
                   color: 'var(--neutral-900)',
                 }}
               >
@@ -1774,7 +1823,11 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
               </h4>
             </div>
           ))}
-          {editing && <AddBtn label="Add region" onClick={addSector} style={{ height: 44 }} />}
+          {editing && (
+            <div style={{ paddingTop: 20 }}>
+              <AddBtn label="Add region" onClick={addSector} style={{ height: 44 }} />
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -1782,7 +1835,7 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
 }
 
 // Quote slide: inherits DISPLAY_HEADING_BASE for large-scale typography alignment
-function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
+function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps) {
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1804,54 +1857,69 @@ function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
     <>
       <SlideGrid />
       <Glow style={{ bottom: -500, left: -500 }} />
+      <HudTop
+        label={
+          <E
+            value={content.eyebrow ?? 'Key Insight'}
+            editing={editing}
+            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+          />
+        }
+        num={num}
+      />
       <div
         style={{
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          padding: '0 140px',
+          padding: '0 195px',
           position: 'relative',
           zIndex: 10,
         }}
       >
-        <EditorialLabel>
-          <E
-            value={content.eyebrow ?? 'Key Insight'}
-            editing={editing}
-            onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
-          />
-        </EditorialLabel>
-        <h1
+        <div
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 110,
-            fontWeight: 700,
-            marginBottom: 60,
-            color: 'var(--neutral-900)',
+            fontSize: 300,
+            lineHeight: 0.5,
+            color: 'var(--emerald-500)',
+            height: 105,
           }}
         >
           "
+        </div>
+        <blockquote
+          style={{
+            ...DISPLAY_HEADING_BASE,
+            fontSize: 84,
+            fontWeight: 500,
+            lineHeight: 1.12,
+            letterSpacing: '-0.03em',
+            margin: '0 0 72px',
+            maxWidth: 1440,
+            color: 'var(--neutral-900)',
+          }}
+        >
           <E
             value={content.quote ?? PLACEHOLDER}
             editing={editing}
             multiline
             onCommit={(v) => onEdit((c) => ({ ...c, quote: v || undefined }))}
           />
-          "
-        </h1>
+        </blockquote>
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
           {/* Circular avatar - static in view mode, uploadable in edit mode */}
           <div
-            style={{ position: 'relative', flexShrink: 0, width: 80, height: 80 }}
+            style={{ position: 'relative', flexShrink: 0, width: 84, height: 84 }}
           >
             {/* The circle itself */}
             <div
               onClick={() => editing && avatarInputRef.current?.click()}
               title={editing ? (avatarSrc ? 'Replace photo' : 'Upload author photo') : undefined}
               style={{
-                width: 80,
-                height: 80,
+                width: 84,
+                height: 84,
                 borderRadius: '50%',
                 overflow: 'hidden',
                 background: avatarSrc ? 'transparent' : 'var(--neutral-200)',
@@ -1925,8 +1993,8 @@ function SlideFeaturedQuote({ content, editing, onEdit }: SlideRenderProps) {
             <h4
               style={{
                 ...DISPLAY_HEADING_BASE,
-                fontSize: 28,
-                fontWeight: 700,
+                fontSize: 27,
+                fontWeight: 600,
                 color: 'var(--neutral-900)',
               }}
             >

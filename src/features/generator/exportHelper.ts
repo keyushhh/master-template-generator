@@ -3,6 +3,7 @@ import pptxgen from 'pptxgenjs';
 import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
 import { addNativeSlide } from './pptxNative';
+import { embedPptxFonts } from './pptxFontEmbed';
 import type { SlideInstance } from '../deck/types';
 
 /**
@@ -148,7 +149,7 @@ export async function exportToPPTX(
   onProgress?: (current: number, total: number) => void
 ) {
   const pptx = new pptxgen();
-  pptx.layout = 'LAYOUT_16x9';
+  pptx.layout = 'LAYOUT_WIDE';
 
   const total = slides.length;
   if (total === 0) return;
@@ -161,7 +162,24 @@ export async function exportToPPTX(
   }
 
   onProgress?.(total, total);
-  await pptx.writeFile({ fileName: `${sanitize(deckTitle)}.pptx` });
+
+  const rawBuffer = (await pptx.write({ outputType: 'arraybuffer' })) as ArrayBuffer;
+  let finalBuffer = rawBuffer;
+  try {
+    finalBuffer = await embedPptxFonts(rawBuffer);
+  } catch (err) {
+    console.error('Font embedding failed, exporting without embedded fonts:', err);
+  }
+
+  const blob = new Blob([finalBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${sanitize(deckTitle)}.pptx`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /**
