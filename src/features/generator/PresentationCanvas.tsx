@@ -1196,6 +1196,213 @@ const DEFAULT_KPIS = [
   { label: 'Metric Gamma', value: '-00%' },
 ];
 
+type MetricsChartType = 'bar' | 'donut' | 'line' | 'funnel';
+const CHART_TYPES: { id: MetricsChartType; label: string }[] = [
+  { id: 'bar', label: 'Bar' },
+  { id: 'donut', label: 'Donut' },
+  { id: 'line', label: 'Line' },
+  { id: 'funnel', label: 'Funnel' },
+];
+
+/** Layout picker for the Metrics Dashboard's chart type - edit-mode only, same
+ *  convention as BlankLayoutPicker. All four types read the same `bars` data. */
+function ChartTypePicker({ value, onChange }: { value: MetricsChartType; onChange: (v: MetricsChartType) => void }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
+      {CHART_TYPES.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          style={{
+            height: 36,
+            padding: '0 16px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            border: '1px solid',
+            borderColor: value === t.id ? 'var(--emerald-500)' : 'var(--neutral-300)',
+            background: value === t.id ? 'var(--emerald-500)' : '#ffffff',
+            color: value === t.id ? '#ffffff' : 'var(--neutral-600)',
+            cursor: 'pointer',
+            borderRadius: 'var(--radius-sharp)',
+          }}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** One highlighted bar reads emerald (the brand accent); the rest step through a
+ *  light neutral ramp - same semantic the original bar chart used, generalized
+ *  so all four chart types agree on "which one is the story." Brand-locked: no
+ *  hue beyond the app's own emerald/neutral scale. */
+const NEUTRAL_RAMP = ['var(--neutral-300)', 'var(--neutral-400)', 'var(--neutral-200)'];
+function metricColor(bar: { active?: boolean }, i: number): string {
+  return bar.active ? 'var(--emerald-500)' : NEUTRAL_RAMP[i % NEUTRAL_RAMP.length];
+}
+
+/** The original bar chart, unchanged - extracted so SlideMetricsDashboard can
+ *  switch between chart components while keeping the same editable data. */
+function BarsChart({ bars, editing, onEditLabel }: { bars: (typeof DEFAULT_BARS); editing: boolean; onEditLabel: (i: number, v: string) => void }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 20,
+        height: 350,
+        borderBottom: '2px solid var(--neutral-900)',
+        marginTop: 60,
+      }}
+    >
+      {bars.map((b, i) => (
+        <div
+          key={i}
+          style={{
+            flex: 1,
+            background: metricColor(b, i),
+            height: `${b.pct}%`,
+            position: 'relative',
+          }}
+        >
+          <span
+            style={{
+              position: 'absolute',
+              top: -40,
+              left: 0,
+              width: '100%',
+              textAlign: 'center',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 14,
+              color: 'var(--neutral-500)',
+            }}
+          >
+            <E value={b.label} editing={editing} onCommit={(v) => onEditLabel(i, v)} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Percentage breakdown as an SVG donut - stroke-dasharray segments starting at
+ *  12 o'clock, direct percent + label row beneath (a legend box isn't needed
+ *  for a single data series per the dataviz skill's rule). */
+function DonutChart({ bars, editing, onEditLabel }: { bars: (typeof DEFAULT_BARS); editing: boolean; onEditLabel: (i: number, v: string) => void }) {
+  const total = bars.reduce((s, b) => s + Math.max(0, b.pct), 0) || 1;
+  const r = 80;
+  const circumference = 2 * Math.PI * r;
+  let cumulative = 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 70, marginTop: 60 }}>
+      <svg width={280} height={280} viewBox="0 0 200 200" style={{ flexShrink: 0, transform: 'rotate(-90deg)' }}>
+        <circle cx={100} cy={100} r={r} fill="none" stroke="var(--neutral-150, #eee)" strokeWidth={32} />
+        {bars.map((b, i) => {
+          const frac = Math.max(0, b.pct) / total;
+          const dash = frac * circumference;
+          const gap = circumference - dash;
+          const offset = -cumulative * circumference;
+          cumulative += frac;
+          return (
+            <circle
+              key={i}
+              cx={100}
+              cy={100}
+              r={r}
+              fill="none"
+              stroke={metricColor(b, i)}
+              strokeWidth={32}
+              strokeDasharray={`${dash} ${gap}`}
+              strokeDashoffset={offset}
+              strokeLinecap={bars.length > 1 ? 'butt' : 'round'}
+            />
+          );
+        })}
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {bars.map((b, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span style={{ width: 14, height: 14, borderRadius: '50%', background: metricColor(b, i), flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 20, color: 'var(--neutral-900)', fontWeight: 700, minWidth: 60 }}>
+              {b.pct}%
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--neutral-500)' }}>
+              <E value={b.label} editing={editing} onCommit={(v) => onEditLabel(i, v)} />
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Trend line - thin 2px emerald stroke, markers on each point, shared baseline
+ *  with the bar chart so switching types doesn't reflow the slide. */
+function LineChart({ bars, editing, onEditLabel }: { bars: (typeof DEFAULT_BARS); editing: boolean; onEditLabel: (i: number, v: string) => void }) {
+  const W = 1640;
+  const H = 350;
+  const n = Math.max(bars.length, 1);
+  const points = bars.map((b, i) => {
+    const x = n === 1 ? W / 2 : (i / (n - 1)) * W;
+    const y = H - (Math.max(0, Math.min(100, b.pct)) / 100) * H;
+    return { x, y, b, i };
+  });
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  return (
+    <div style={{ marginTop: 60, borderBottom: '2px solid var(--neutral-900)', paddingBottom: 0 }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'visible' }}>
+        <path d={path} fill="none" stroke="var(--emerald-500)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((p) => (
+          <circle key={p.i} cx={p.x} cy={p.y} r={p.b.active ? 9 : 6} fill={metricColor(p.b, p.i)} stroke="#fff" strokeWidth={2} />
+        ))}
+      </svg>
+      <div style={{ display: 'flex', marginTop: 10 }}>
+        {bars.map((b, i) => (
+          <span
+            key={i}
+            style={{
+              flex: 1,
+              textAlign: 'center',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 14,
+              color: 'var(--neutral-500)',
+            }}
+          >
+            <E value={b.label} editing={editing} onCommit={(v) => onEditLabel(i, v)} />
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Stages narrow top-to-bottom in authored order (order carries meaning - not
+ *  re-sorted), each a full-width bar scaled to its own pct so the taper reads
+ *  as a funnel rather than a bar chart lying on its side. */
+function FunnelChart({ bars, editing, onEditLabel }: { bars: (typeof DEFAULT_BARS); editing: boolean; onEditLabel: (i: number, v: string) => void }) {
+  const maxW = 1200;
+  return (
+    <div style={{ marginTop: 60, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+      {bars.map((b, i) => {
+        const w = Math.max(8, (Math.max(0, Math.min(100, b.pct)) / 100) * maxW);
+        return <div key={i} style={{ width: w, height: 56, background: metricColor(b, i) }} />;
+      })}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, width: maxW }}>
+        {bars.map((b, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--neutral-500)' }}>
+            <E value={b.label} editing={editing} onCommit={(v) => onEditLabel(i, v)} />
+            <span style={{ color: 'var(--neutral-900)', fontWeight: 700 }}>{b.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderProps) {
   const bars = content.bars ?? DEFAULT_BARS;
   const kpis = content.kpis ?? DEFAULT_KPIS;
@@ -1216,6 +1423,9 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
     onEdit((c) => ({ ...c, kpis: [...(c.kpis ?? DEFAULT_KPIS), { label: 'New Metric', value: '000' }] }));
   const removeKpi = (i: number) =>
     onEdit((c) => ({ ...c, kpis: (c.kpis ?? DEFAULT_KPIS).filter((_, j) => j !== i) }));
+  const chartType = content.chartType ?? 'bar';
+  const setChartType = (v: MetricsChartType) => onEdit((c) => ({ ...c, chartType: v }));
+  const chartProps = { bars, editing, onEditLabel: editBar };
   return (
     <>
       <SlideGrid />
@@ -1237,44 +1447,17 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
           />
         </EditorialLabel>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-end',
-            gap: 20,
-            height: 350,
-            borderBottom: '2px solid var(--neutral-900)',
-            marginTop: 60,
-          }}
-        >
-          {bars.map((b, i) => (
-            <div
-              key={i}
-              style={{
-                flex: 1,
-                background: b.active ? 'var(--emerald-500)' : 'var(--neutral-200)',
-                height: `${b.pct}%`,
-                position: 'relative',
-              }}
-            >
-              <span
-                style={{
-                  position: 'absolute',
-                  top: -40,
-                  left: 0,
-                  width: '100%',
-                  textAlign: 'center',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 14,
-                  color: 'var(--neutral-500)',
-                }}
-              >
-                <E value={b.label} editing={editing} onCommit={(v) => editBar(i, v)} />
-              </span>
-            </div>
-          ))}
-        </div>
-        {/* Per-bar edit controls (value, highlight, remove), aligned under each bar. */}
+        {editing && <ChartTypePicker value={chartType} onChange={setChartType} />}
+        {chartType === 'donut' ? (
+          <DonutChart {...chartProps} />
+        ) : chartType === 'line' ? (
+          <LineChart {...chartProps} />
+        ) : chartType === 'funnel' ? (
+          <FunnelChart {...chartProps} />
+        ) : (
+          <BarsChart {...chartProps} />
+        )}
+        {/* Per-bar edit controls (value, highlight, remove) - shared across all chart types, they all read the same `bars` data. */}
         {editing && (
           <div style={{ display: 'flex', gap: 20, marginTop: 18 }}>
             {bars.map((b, i) => (

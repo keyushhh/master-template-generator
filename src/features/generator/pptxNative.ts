@@ -581,31 +581,86 @@ const DEFAULT_KPIS = [
   { label: 'Metric Gamma', value: '-00%' },
 ];
 
+/** Same "one highlighted, rest neutral" semantic as the DOM chart's `metricColor` -
+ *  brand-locked to the app's own emerald/neutral hex steps, no other hue. */
+const NEUTRAL_RAMP_HEX = [NEUTRAL_300, NEUTRAL_400, NEUTRAL_200];
+function metricColorHex(bar: { active?: boolean }, i: number): string {
+  return bar.active ? EMERALD_500 : NEUTRAL_RAMP_HEX[i % NEUTRAL_RAMP_HEX.length];
+}
+
+/** Native (editable, `pptx.addChart()`) chart for the Metrics Dashboard - a real
+ *  PowerPoint chart object with its own data table, not drawn shapes, so the
+ *  numbers stay editable in PowerPoint while type/color stay locked. PowerPoint
+ *  has no funnel chart type, so 'funnel' renders as a horizontal bar chart
+ *  (the standard substitute) sorted so the first stage reads at the top. */
+function buildMetricsChart(slide: pptxgen.Slide, bars: SlideInstance['content']['bars'], chartType: string, b: Box) {
+  const data = bars ?? [];
+  const isFunnel = chartType === 'funnel';
+  const labels = isFunnel ? [...data].reverse().map((x) => x.label) : data.map((x) => x.label);
+  const values = isFunnel ? [...data].reverse().map((x) => x.pct) : data.map((x) => x.pct);
+  const shared: pptxgen.IChartOpts = {
+    ...b,
+    showValue: true,
+    dataLabelFontFace: FONT_MONO,
+    dataLabelFontSize: pt(14),
+    dataLabelColor: NEUTRAL_500,
+    dataLabelFormatCode: '0"%"',
+    catAxisLabelFontFace: FONT_MONO,
+    catAxisLabelFontSize: pt(13),
+    catAxisLabelColor: NEUTRAL_500,
+    catAxisLineColor: NEUTRAL_300,
+    valAxisHidden: true,
+    showLegend: false,
+    chartColors: [EMERALD_500],
+  };
+
+  if (chartType === 'donut') {
+    slide.addChart('doughnut', [{ name: 'Series 1', labels, values }], {
+      ...shared,
+      chartColors: data.map((x, i) => metricColorHex(x, i)),
+      holeSize: 55,
+      showLegend: true,
+      legendPos: 'r',
+      legendColor: NEUTRAL_500,
+      legendFontFace: FONT_MONO,
+      legendFontSize: pt(13),
+      dataLabelPosition: 'outEnd',
+    });
+    return;
+  }
+  if (chartType === 'line') {
+    slide.addChart('line', [{ name: 'Series 1', labels, values }], {
+      ...shared,
+      lineSize: pt(3),
+      lineDataSymbolSize: 8,
+      lineDataSymbolLineColor: EMERALD_500,
+      dataLabelPosition: 't',
+    });
+    return;
+  }
+  if (isFunnel) {
+    slide.addChart('bar', [{ name: 'Series 1', labels, values }], {
+      ...shared,
+      barDir: 'bar',
+      dataLabelPosition: 'outEnd',
+    });
+    return;
+  }
+  // 'bar' (default)
+  slide.addChart('bar', [{ name: 'Series 1', labels, values }], {
+    ...shared,
+    barGapWidthPct: 40,
+    dataLabelPosition: 'outEnd',
+  });
+}
+
 function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const bars = content.bars?.length ? content.bars : DEFAULT_BARS;
   const kpis = content.kpis?.length ? content.kpis : DEFAULT_KPIS;
   addHudTop(slide, content.hudLabel ?? 'Metrics Dashboard', num);
   addEditorialLabel(slide, content.eyebrow ?? 'Temporal Performance', 140, 260);
 
-  const chartTop = 320;
-  const chartBottom = 670;
-  const chartH = chartBottom - chartTop;
-  const chartX = 140;
-  const chartW = 1640;
-  const gap = 20;
-  const barW = (chartW - gap * (bars.length - 1)) / bars.length;
-  addLine(slide, chartX, chartBottom, chartX + chartW, chartBottom, NEUTRAL_900, 2);
-  bars.forEach((b, i) => {
-    const h = Math.max(4, (b.pct / 100) * chartH);
-    const x = chartX + i * (barW + gap);
-    addRect(slide, box(x, chartBottom - h, barW, h), b.active ? EMERALD_500 : NEUTRAL_200);
-    addText(slide, b.label, box(x - 10, chartTop - 40, barW + 20, 30), {
-      fontFace: FONT_MONO,
-      size: 14,
-      color: NEUTRAL_500,
-      align: 'center',
-    });
-  });
+  buildMetricsChart(slide, bars, content.chartType ?? 'bar', box(140, 300, 1640, 400));
 
   const kpiY = 750;
   const kpiColW = (1640 - 40 * 2) / 3;

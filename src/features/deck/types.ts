@@ -93,6 +93,9 @@ export interface SlideContent {
   // s7 Metrics Dashboard
   bars?: MetricBar[];
   kpis?: Kpi[];
+  /** Which native visualization renders `bars` - all four read the same
+   *  label/pct/active data, just drawn differently. Defaults to 'bar'. */
+  chartType?: 'bar' | 'donut' | 'line' | 'funnel';
 
   // s8 Comparative Table
   rows?: ComparisonRow[];
