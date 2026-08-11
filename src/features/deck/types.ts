@@ -160,6 +160,14 @@ export interface OverlayShape {
   chartType?: OverlayChartType;
   chartCategories?: string[];
   chartSeries?: OverlayChartSeries[];
+  /** Ties this shape to one of the 'blank' template's layouts (see
+   *  `SlideContent.blankLayout`) - it renders and exports only while the
+   *  slide is on that layout. Undefined (the default, and the only value
+   *  every other template ever sees) means "always visible", same as before
+   *  this field existed. Exists for elements a layout seeds for itself, like
+   *  two-column's table, which would otherwise leak into Standard/Full-bleed
+   *  since overlay shapes are normally layout-agnostic. */
+  blankLayoutOnly?: 'standard' | 'two-column' | 'full-bleed';
 }
 
 /**

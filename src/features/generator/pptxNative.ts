@@ -1215,7 +1215,13 @@ async function buildImported(slide: pptxgen.Slide, content: SlideInstance['conte
  * last. That reproduces what the canvas shows in the only way the format allows.
  */
 async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['content'], phase: 'behind' | 'front') {
-  const shapes = (content.overlay ?? []).filter((s) => (phase === 'behind' ? s.behind : !s.behind));
+  const blankLayout = content.blankLayout ?? 'standard';
+  const shapes = (content.overlay ?? [])
+    .filter((s) => (phase === 'behind' ? s.behind : !s.behind))
+    // A shape pinned to one 'blank' layout (two-column's table) must not
+    // export while the slide is showing a different layout - see
+    // OverlayShape.blankLayoutOnly.
+    .filter((s) => !s.blankLayoutOnly || s.blankLayoutOnly === blankLayout);
 
   for (const s of shapes) {
     const b = box(s.x, s.y, s.w, s.h);

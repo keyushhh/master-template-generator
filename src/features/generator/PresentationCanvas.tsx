@@ -1,12 +1,21 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { DocumentNode } from '../business-record/parser/ast';
-import type { Deck, ImportedShape, SlideContent, SlideInstance, SlotOffset, SlotStyle } from '../deck/types';
+import type { Deck, ImportedShape, OverlayShape, SlideContent, SlideInstance, SlotOffset, SlotStyle } from '../deck/types';
 import { applyToCss, offsetFor, shiftOffsets, styleFor } from '../formatting/resolve';
 import { clampToSlide, FINE, guidesFromSiblings, SLIDE_W, snapMove, snapResize, snapValue, type ExtraGuides, type Handle, type Rect } from '../formatting/snap';
 import { shapeIdsOf, slotsOf, type Selection } from '../formatting/selection';
 import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
 import { ShapeOverlay } from '../formatting/ShapeOverlay';
 import { createOverlayShape, overlayOf, withOverlay } from '../formatting/overlayModel';
+
+/** Overlay shapes actually shown for this slide right now - everything, minus
+ *  any shape pinned to a different 'blank' layout than the one in effect
+ *  (see `OverlayShape.blankLayoutOnly`). A no-op filter for every non-blank
+ *  template, since only blank ever sets that field. */
+function visibleOverlay(content: SlideContent): OverlayShape[] {
+  const layout = content.blankLayout ?? 'standard';
+  return overlayOf(content).filter((s) => !s.blankLayoutOnly || s.blankLayoutOnly === layout);
+}
 
 interface PresentationCanvasProps {
   ast: DocumentNode | null;
@@ -2752,11 +2761,15 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
       // Two-column's right-hand table is a real OverlayShape (draggable,
       // resizable, editable like any inserted table) rather than fixed
       // template content - seed one the first time this layout is picked, so
-      // switching to it doesn't hand the user an empty column. Nudged left of
-      // where the old image slot sat, so it doesn't hug the slide's edge.
-      if (v === 'two-column' && !(c.overlay ?? []).some((s) => s.kind === 'table')) {
+      // switching to it doesn't hand the user an empty column. `blankLayoutOnly`
+      // keeps it from leaking into Standard/Full-bleed once seeded. Sized and
+      // centred on the same vertical mid-line as the left column's text (see
+      // the two-column render below: top:160, bottom:0 → centre at y=620), and
+      // nudged left of where the old image slot sat so it doesn't hug the edge.
+      if (v === 'two-column' && !(c.overlay ?? []).some((s) => s.blankLayoutOnly === 'two-column')) {
         const tableShape = createOverlayShape('table', (c.overlay ?? []).length);
-        Object.assign(tableShape, { x: 940, y: 260, w: 620, h: 560 });
+        const h = 560;
+        Object.assign(tableShape, { x: 940, y: 620 - h / 2, w: 620, h, blankLayoutOnly: 'two-column' });
         return withOverlay(next, [...overlayOf(next), tableShape]);
       }
       return next;
@@ -3422,7 +3435,7 @@ export function SlideStage({
         {/* Inserted shapes must appear here too, or Present mode and the Review
             thumbnails would disagree with the editor (and with the export). */}
         <ShapeOverlay
-          shapes={overlayOf(slide.content)}
+          shapes={visibleOverlay(slide.content)}
           editing={false}
           onSelect={() => { }}
           onPatch={() => { }}
@@ -3625,7 +3638,7 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
                   inside each renderer so every template - all 14, plus blank and
                   imported - gets them from one place. */}
               <ShapeOverlay
-                shapes={overlayOf(slide.content)}
+                shapes={visibleOverlay(slide.content)}
                 editing={editing}
                 selectedId={
                   selection?.kind === 'overlay' && selection.instanceId === slide.instanceId
