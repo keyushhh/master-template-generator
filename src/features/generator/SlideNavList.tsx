@@ -5,6 +5,8 @@ interface SlideNavListProps {
   slides: SlideInstance[];
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
+  /** Open the layout switcher for this slide. */
+  onChangeLayout: (instanceId: string) => void;
   onDelete: (instanceId: string) => void;
   onRename: (instanceId: string, title: string) => void;
   /** Move `fromId` to sit just before `toId` in the deck order. */
@@ -50,6 +52,17 @@ function EyeIcon({ off }: { off?: boolean }) {
           <circle cx="12" cy="12" r="3" />
         </>
       )}
+    </svg>
+  );
+}
+
+/** A panel split into unequal regions — reads as "rearrange this layout". */
+function LayoutIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="1" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <line x1="11" y1="10" x2="11" y2="20" />
     </svg>
   );
 }
@@ -103,7 +116,7 @@ function Tip({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, onRename, onReorder, onAddBlank, onInsertAfter }: SlideNavListProps) {
+export function SlideNavList({ slides, onToggleHidden, onDuplicate, onChangeLayout, onDelete, onRename, onReorder, onAddBlank, onInsertAfter }: SlideNavListProps) {
   const [activeId, setActiveId] = useState<string>(slides[0]?.instanceId ?? '');
   // Double-click-to-rename state: which row is being renamed + its draft text.
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -292,6 +305,16 @@ export function SlideNavList({ slides, onToggleHidden, onDuplicate, onDelete, on
                           }`}
                         >
                           <EyeIcon off={slide.hidden} />
+                        </button>
+                      </Tip>
+                      <Tip label="Change layout">
+                        <button
+                          type="button"
+                          aria-label="Change slide layout"
+                          onClick={() => onChangeLayout(slide.instanceId)}
+                          className="flex items-center justify-center w-6 h-6 rounded-[var(--radius-sharp)] cursor-pointer border-none bg-transparent text-neutral-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        >
+                          <LayoutIcon />
                         </button>
                       </Tip>
                       <Tip label="Duplicate">

@@ -20,6 +20,9 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0 }: Presen
   const visible = deck.slides.filter((s) => !s.hidden);
   const [index, setIndex] = useState(startIndex);
   const [scale, setScale] = useState(0.5);
+  /** Speaker notes panel. Off by default - the whole point of Present mode is
+   *  the slide, and notes are for the presenter's own screen. */
+  const [notesOpen, setNotesOpen] = useState(false);
 
   const clampedTotal = visible.length;
   const next = useCallback(() => setIndex((i) => Math.min(i + 1, clampedTotal - 1)), [clampedTotal]);
@@ -49,6 +52,8 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0 }: Presen
       if (e.key === 'Escape') onClose();
       else if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); next(); }
       else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+      // 'N' for notes - the convention in Keynote and PowerPoint alike.
+      else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setNotesOpen((o) => !o); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -94,6 +99,54 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0 }: Presen
       <button onClick={next} disabled={atEnd} aria-label="Next slide" style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', ...arrow, opacity: atEnd ? 0.3 : 1 }}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
       </button>
+
+      {/* Speaker notes. Toggle is only offered when the deck actually has notes
+          somewhere, so a deck without them carries no extra chrome. */}
+      {deck.slides.some((s) => s.notes?.trim()) && (
+        <button
+          onClick={() => setNotesOpen((o) => !o)}
+          aria-label="Toggle speaker notes"
+          aria-pressed={notesOpen}
+          title="Speaker notes (N)"
+          style={{
+            position: 'absolute', top: 20, right: 74,
+            ...arrow, width: 40, height: 40,
+            background: notesOpen ? 'var(--emerald-500)' : 'rgba(255,255,255,0.10)',
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 5h16M4 10h16M4 15h10" />
+          </svg>
+        </button>
+      )}
+
+      {notesOpen && (
+        <div
+          style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            maxHeight: '30vh', overflowY: 'auto',
+            padding: '18px 32px 46px',
+            background: 'rgba(0,0,0,0.86)',
+            borderTop: '1px solid rgba(255,255,255,0.14)',
+            color: 'rgba(255,255,255,0.9)',
+            fontFamily: 'var(--font-sans)', fontSize: 16, lineHeight: 1.6,
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 10,
+              textTransform: 'uppercase', letterSpacing: '0.14em',
+              color: 'rgba(255,255,255,0.4)', marginBottom: 8,
+            }}
+          >
+            Notes — {slide.title}
+          </div>
+          {slide.notes?.trim() || (
+            <span style={{ color: 'rgba(255,255,255,0.35)' }}>No notes on this slide.</span>
+          )}
+        </div>
+      )}
 
       {/* Counter */}
       <div style={{ position: 'absolute', bottom: 22, left: '50%', transform: 'translateX(-50%)', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.6)' }}>

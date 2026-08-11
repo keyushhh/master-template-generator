@@ -5,6 +5,9 @@ import { SAMPLE_DECKS } from '../business-record/sampleDecks';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { ValidationResult } from '../business-record/parser/types';
+import { parsePptx } from '../pptx-import/pptxParser';
+import { buildDeckFromImport } from '../pptx-import/pptxDeckBuilder';
+import type { Deck } from '../deck/types';
 
 interface SourceMaterialModalProps {
   open: boolean;
@@ -12,18 +15,27 @@ interface SourceMaterialModalProps {
   onDocumentParsed: (ast: DocumentNode | null) => void;
   /** Import a source AND build the deck in one step (so Import & Load = Generate). */
   onImport: (ast: DocumentNode) => void;
+  /** Load a deck built from an uploaded .pptx, bypassing the Business Record
+   *  path entirely - an imported deck has no AST behind it. */
+  onImportDeck: (deck: Deck, name: string, warnings: string[]) => void;
   /** True when a Business Record is currently loaded - enables "Clear source". */
   hasSource: boolean;
 }
 
-type Tab = 'samples' | 'prompt' | 'paste' | 'upload';
+type Tab = 'samples' | 'prompt' | 'paste' | 'upload' | 'pptx';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'samples', label: 'Samples' },
   { id: 'prompt', label: 'Conversion Prompt' },
   { id: 'paste', label: 'Paste .md' },
   { id: 'upload', label: 'Upload .md' },
+  { id: 'pptx', label: 'Upload .pptx' },
 ];
+
+/** How an uploaded .pptx should be treated.
+ *  'keep'    - original layout preserved shape for shape, brand theme applied.
+ *  'refresh' - re-flowed onto the 14 master templates (not yet built). */
+type PptxMode = 'keep' | 'refresh';
 
 /**
  * Strip a wrapping ```markdown / ``` code fence if pasted text still carries one
@@ -46,7 +58,7 @@ function stripCodeFence(text: string): string {
  *  - Paste .md: drop Claude's markdown straight in - no file needed.
  *  - Upload .md: pick or drag a .md file.
  */
-export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport, hasSource }: SourceMaterialModalProps) {
+export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport, onImportDeck, hasSource }: SourceMaterialModalProps) {
   const [tab, setTab] = useState<Tab>('prompt');
   const [copied, setCopied] = useState(false);
   const [pasteText, setPasteText] = useState('');
@@ -55,6 +67,9 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   const [isDragging, setIsDragging] = useState(false);
   const [rawTranscriptHint, setRawTranscriptHint] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pptxInputRef = useRef<HTMLInputElement>(null);
+  const [pptxMode, setPptxMode] = useState<PptxMode>('keep');
+  const [pptxDragging, setPptxDragging] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open);
 
@@ -138,6 +153,42 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
     reader.onload = (e) => importText((e.target?.result as string) ?? '', file.name);
     reader.onerror = () => setError('Error reading file.');
     reader.readAsText(file);
+  };
+
+  /** Reads an uploaded .pptx, lifts every slide into the deck model, and hands
+   *  the finished deck up. Content is never altered - only fill, line and type
+   *  are mapped onto the brand palette. */
+  const processPptx = async (file: File) => {
+    setError(null);
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'pptx') {
+      setError(file.name.toLowerCase().endsWith('.ppt')
+        ? 'Legacy .ppt files are not supported. Save it as .pptx in PowerPoint and try again.'
+        : 'Please choose a .pptx file.');
+      return;
+    }
+    if (pptxMode === 'refresh') {
+      setError('The refreshed-layout option is not available yet - it re-flows your '
+        + 'slides onto the 14 master templates. Use "Keep my layout" for now.');
+      return;
+    }
+    setIsValidating(true);
+    try {
+      const { slides, warnings } = await parsePptx(file);
+      const deck = buildDeckFromImport(slides);
+      onImportDeck(deck, file.name.replace(/\.pptx$/i, ''), warnings);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'This .pptx could not be read.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handlePptxDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setPptxDragging(false);
+    if (e.dataTransfer.files?.length) void processPptx(e.dataTransfer.files[0]);
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -319,6 +370,72 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                   {isValidating ? 'Parsing Document…' : 'Drop or click to upload'}
                 </div>
                 <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-500">Markdown (.md) or plain text (.txt)</div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'pptx' && (
+            <div className="flex flex-col gap-3">
+              <p className="text-[12.5px] text-neutral-600 leading-relaxed">
+                Upload an existing deck and it comes back on the Wozku theme - grid, ambient
+                orbs, brand type and palette. <span className="font-semibold text-neutral-900">Your
+                words are never changed</span>, and every slide stays editable here afterwards.
+              </p>
+
+              <div className="flex flex-col gap-2">
+                <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-500">
+                  Layout
+                </div>
+                {([
+                  { id: 'keep' as PptxMode, title: 'Keep my layout',
+                    body: 'Every slide keeps its original arrangement, shape for shape. Only the theme changes.' },
+                  { id: 'refresh' as PptxMode, title: 'Give me a refreshed look',
+                    body: 'Re-flows your content onto the 14 master templates. Coming soon.' },
+                ]).map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setPptxMode(opt.id)}
+                    className={`text-left p-3 border transition-colors cursor-pointer rounded-[var(--radius-sharp)] ${
+                      pptxMode === opt.id
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-neutral-200 hover:border-neutral-300'
+                    }`}
+                  >
+                    <div className="text-[13px] font-bold text-neutral-900 flex items-center gap-2">
+                      {opt.title}
+                      {opt.id === 'refresh' && (
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400">
+                          soon
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[12px] text-neutral-600 leading-relaxed mt-0.5">{opt.body}</div>
+                  </button>
+                ))}
+              </div>
+
+              <div
+                className={`upload-zone rounded-[var(--radius-sharp)] ${pptxDragging ? ' dragging' : ''}`}
+                style={{ minHeight: '20vh' }}
+                onDragOver={(e) => { e.preventDefault(); setPptxDragging(true); }}
+                onDragLeave={() => setPptxDragging(false)}
+                onDrop={handlePptxDrop}
+                onClick={() => pptxInputRef.current?.click()}
+              >
+                <input
+                  type="file"
+                  ref={pptxInputRef}
+                  className="hidden"
+                  accept=".pptx"
+                  onChange={(e) => { if (e.target.files?.length) void processPptx(e.target.files[0]); }}
+                />
+                <svg className={`w-6 h-6 mb-3 transition-colors ${pptxDragging ? 'text-emerald-500' : 'text-neutral-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <div className="text-[13px] font-bold text-neutral-900 mb-1.5">
+                  {isValidating ? 'Reading presentation…' : 'Drop or click to upload'}
+                </div>
+                <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-500">
+                  PowerPoint (.pptx)
+                </div>
               </div>
             </div>
           )}

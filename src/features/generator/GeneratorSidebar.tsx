@@ -20,9 +20,12 @@ interface GeneratorSidebarProps {
   onDocumentParsed: (ast: DocumentNode | null) => void;
   /** Import a source AND build the deck in one step (Import & Load in the modal). */
   onImport: (ast: DocumentNode) => void;
+  /** Load a deck built from an uploaded .pptx (no Business Record behind it). */
+  onImportDeck: (deck: Deck, name: string, warnings: string[]) => void;
   onGenerate: () => void;
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
+  onChangeLayout: (instanceId: string) => void;
   onDelete: (instanceId: string) => void;
   onRename: (instanceId: string, title: string) => void;
   onReorder: (fromId: string, toId: string) => void;
@@ -62,9 +65,11 @@ export function GeneratorSidebar({
   dirty,
   onDocumentParsed,
   onImport,
+  onImportDeck,
   onGenerate,
   onToggleHidden,
   onDuplicate,
+  onChangeLayout,
   onDelete,
   onRename,
   onReorder,
@@ -104,6 +109,7 @@ export function GeneratorSidebar({
           slides={deck.slides}
           onToggleHidden={onToggleHidden}
           onDuplicate={onDuplicate}
+          onChangeLayout={onChangeLayout}
           onDelete={onDelete}
           onRename={onRename}
           onReorder={onReorder}
@@ -168,6 +174,7 @@ export function GeneratorSidebar({
         onClose={() => setSourceOpen(false)}
         onDocumentParsed={onDocumentParsed}
         onImport={onImport}
+        onImportDeck={onImportDeck}
         hasSource={hasPresentation}
       />
     </aside>

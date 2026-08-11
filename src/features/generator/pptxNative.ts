@@ -1,5 +1,6 @@
 import type pptxgen from 'pptxgenjs';
-import type { SlideInstance, ComparisonRow } from '../deck/types';
+import type { SlideInstance, ComparisonRow, SlotOffset, SlotStyle } from '../deck/types';
+import { applyToPptx, offsetFor, styleFor } from '../formatting/resolve';
 
 /**
  * Native (editable) pptxgenjs equivalent of PresentationCanvas.tsx's DOM
@@ -92,11 +93,14 @@ interface DecorConfig {
   base: string; // hex, no '#'
   grid?: boolean;
   glow?: GlowSpec;
+  /** Overrides the hairline colour. A dark slide needs light-on-dark rules -
+   *  the default near-white grid is invisible on black. */
+  gridColor?: string;
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number) {
+function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, color?: string) {
   ctx.save();
-  ctx.strokeStyle = 'rgba(245,245,245,0.8)';
+  ctx.strokeStyle = color ?? 'rgba(245,245,245,0.8)';
   ctx.lineWidth = 1;
   for (let x = 0; x <= w; x += 120) {
     ctx.beginPath();
@@ -135,7 +139,7 @@ function buildDecorBackground(cfg: DecorConfig): string | undefined {
   if (!ctx) return undefined;
   ctx.fillStyle = `#${cfg.base}`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  if (cfg.grid) drawGrid(ctx, canvas.width, canvas.height);
+  if (cfg.grid) drawGrid(ctx, canvas.width, canvas.height, cfg.gridColor);
   if (cfg.glow) drawGlow(ctx, cfg.glow);
   return canvas.toDataURL('image/png');
 }
@@ -180,6 +184,7 @@ interface TextOpts {
   size: number; // px
   bold?: boolean;
   italic?: boolean;
+  underline?: boolean;
   color?: string;
   align?: 'left' | 'center' | 'right';
   valign?: 'top' | 'middle' | 'bottom';
@@ -187,6 +192,50 @@ interface TextOpts {
   letterSpacingEm?: number;
   charSpacing?: number; // pt, takes precedence over letterSpacingEm
   transparency?: number;
+  /** Slot name this text belongs to, matching the `slot` on the corresponding
+   *  <E> in PresentationCanvas.tsx. Supplying it is what makes the user's
+   *  formatting overrides survive the export - a call site without one exports
+   *  at template styling regardless of what the editor shows. */
+  slot?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Per-slide formatting overrides
+//
+// The override for a slot has to reach addText(), which sits many call frames
+// below the slide being exported. Rather than thread a styles map through every
+// build function and all ~60 call sites, the active slide's map is bound here
+// for the duration of that slide.
+//
+// This is only safe because slides are exported strictly sequentially (see the
+// awaited for-loop in exportHelper.ts). The re-entrancy guard below turns a
+// future attempt to parallelise the export into a loud failure instead of
+// silently cross-applying one slide's formatting onto another.
+// ---------------------------------------------------------------------------
+
+let activeStyles: Record<string, SlotStyle> | undefined;
+let activeOffsets: Record<string, SlotOffset> | undefined;
+let activeSlideOpen = false;
+
+function beginSlideStyles(
+  styles: Record<string, SlotStyle> | undefined,
+  offsets: Record<string, SlotOffset> | undefined
+) {
+  if (activeSlideOpen) {
+    throw new Error(
+      'pptxNative: addNativeSlide re-entered before the previous slide finished. '
+      + 'Slide export must stay sequential, or formatting overrides will be applied to the wrong slide.'
+    );
+  }
+  activeSlideOpen = true;
+  activeStyles = styles;
+  activeOffsets = offsets;
+}
+
+function endSlideStyles() {
+  activeSlideOpen = false;
+  activeStyles = undefined;
+  activeOffsets = undefined;
 }
 
 /** Splits on "\n" into runs joined by `<a:br/>` (via `softBreakBefore`) inside
@@ -205,19 +254,35 @@ function addText(
   slide: pptxgen.Slide,
   text: string | pptxgen.TextProps[],
   b: Box,
-  o: TextOpts
+  opts: TextOpts
 ) {
+  // The user's per-slot override wins over whatever the template specified.
+  // Merged through the shared resolver so the canvas and this exporter can
+  // never disagree about what an override means.
+  const o = applyToPptx(opts, styleFor(activeStyles, opts.slot));
+
+  // A slot the user dragged in the editor has to land in the same place here.
+  // The canvas moves it with a CSS translate; this is the same delta converted
+  // from design px to inches and added to the box origin.
+  const off = offsetFor(activeOffsets, opts.slot);
+  const placed = off ? { ...b, x: b.x + inch(off.dx), y: b.y + inch(off.dy) } : b;
+
   const runs = typeof text === 'string' && text.includes('\n') ? splitLines(text) : text;
   slide.addText(runs, {
-    ...b,
+    ...placed,
     fontFace: o.fontFace ?? FONT_DISPLAY,
     fontSize: pt(o.size),
     bold: o.bold,
     italic: o.italic,
+    underline: o.underline ? { style: 'sng' } : undefined,
     color: o.color ?? NEUTRAL_900,
     align: o.align ?? 'left',
     valign: o.valign ?? 'top',
     lineSpacingMultiple: o.lineSpacingMultiple,
+    // Tracking is derived from the font size, so it has to follow the override
+    // rather than the template's original size - otherwise resizing a tracked
+    // label (an eyebrow, a HUD line) keeps the old letter-spacing and the text
+    // either crowds or falls apart.
     charSpacing: o.charSpacing ?? (o.letterSpacingEm ? tracking(o.size, o.letterSpacingEm) : undefined),
     transparency: o.transparency,
     wrap: true,
@@ -225,6 +290,31 @@ function addText(
     margin: 0,
     autoFit: false,
   });
+}
+
+/**
+ * A slot's override expressed as per-run text options.
+ *
+ * Some templates pack several editable slots into a single PowerPoint text box
+ * (the two-column slide's attribute list, the data monument's value + unit, the
+ * exit slide's contact line). Those slots each have their own <E> in the canvas,
+ * so each needs its own formatting - which means the override has to be applied
+ * run by run rather than to the box.
+ *
+ * Alignment is deliberately absent: in OOXML alignment is a paragraph property,
+ * not a run property, so it cannot vary between runs sharing a paragraph. The
+ * canvas has the same constraint for the same reason.
+ */
+function runOpts(slot: string): pptxgen.TextPropsOptions {
+  const s = styleFor(activeStyles, slot);
+  if (!s) return {};
+  const o: pptxgen.TextPropsOptions = {};
+  if (s.sizePx !== undefined) o.fontSize = pt(s.sizePx);
+  if (s.bold !== undefined) o.bold = s.bold;
+  if (s.italic !== undefined) o.italic = s.italic;
+  if (s.underline !== undefined) o.underline = s.underline ? { style: 'sng' } : undefined;
+  if (s.color !== undefined) o.color = s.color;
+  return o;
 }
 
 function addLine(slide: pptxgen.Slide, x1: number, y1: number, x2: number, y2: number, color: string, widthPx = 1) {
@@ -259,14 +349,23 @@ function addCircle(slide: pptxgen.Slide, b: Box, fill: string, line?: { color: s
   });
 }
 
-/** Top HUD bar shared by most light templates: label left, slide number right, hairline rule below. */
-function addHudTop(slide: pptxgen.Slide, label: string, num: string) {
+/** Top HUD bar shared by most light templates: label left, slide number right, hairline rule below.
+ *  `slots` names the content fields the two texts came from, so their formatting
+ *  overrides apply. The slide number is generated, not content, so most callers
+ *  only pass a label slot. */
+function addHudTop(
+  slide: pptxgen.Slide,
+  label: string,
+  num: string,
+  slots?: { label?: string; num?: string }
+) {
   addText(slide, label.toUpperCase(), box(80, 55, 800, 30), {
     fontFace: FONT_MONO,
     size: 12,
     color: NEUTRAL_500,
     letterSpacingEm: 0.12,
     valign: 'bottom',
+    slot: slots?.label,
   });
   addText(slide, num.toUpperCase(), box(1040, 55, 800, 30), {
     fontFace: FONT_MONO,
@@ -275,12 +374,13 @@ function addHudTop(slide: pptxgen.Slide, label: string, num: string) {
     align: 'right',
     letterSpacingEm: 0.12,
     valign: 'bottom',
+    slot: slots?.num,
   });
   addLine(slide, 80, 92, 1840, 92, NEUTRAL_200, 1);
 }
 
 /** Editorial eyebrow label: short emerald rule + tracked mono uppercase text. */
-function addEditorialLabel(slide: pptxgen.Slide, text: string, xPx: number, yPx: number, opts?: { size?: number; center?: boolean; color?: string }) {
+function addEditorialLabel(slide: pptxgen.Slide, text: string, xPx: number, yPx: number, opts?: { size?: number; center?: boolean; color?: string; slot?: string }) {
   const size = opts?.size ?? 14;
   const color = opts?.color ?? EMERALD_600;
   if (opts?.center) {
@@ -291,15 +391,24 @@ function addEditorialLabel(slide: pptxgen.Slide, text: string, xPx: number, yPx:
       align: 'center',
       letterSpacingEm: 0.25,
       bold: true,
+      slot: opts?.slot,
     });
   } else {
-    addLine(slide, xPx, yPx + size / 2 + 3, xPx + 40, yPx + size / 2 + 3, EMERALD_500, 1);
+    // The rule is decoration belonging to the text, not an independent object,
+    // so it has to carry the slot's drag offset too - addText applies that
+    // offset itself, and without this the rule would stay behind on export even
+    // though the canvas moved both together.
+    const off = offsetFor(activeOffsets, opts?.slot);
+    const rx = xPx + (off?.dx ?? 0);
+    const ry = yPx + (off?.dy ?? 0) + size / 2 + 3;
+    addLine(slide, rx, ry, rx + 40, ry, EMERALD_500, 1);
     addText(slide, text.toUpperCase(), box(xPx + 55, yPx, 900, size + 14), {
       fontFace: FONT_MONO,
       size,
       color,
       letterSpacingEm: 0.25,
       bold: true,
+      slot: opts?.slot,
     });
   }
 }
@@ -338,9 +447,21 @@ function addImageCover(slide: pptxgen.Slide, dataUrl: string, b: Box) {
 }
 
 /** Client logo (or a placeholder pill) top-left/bottom-right depending on caller. */
-async function addLogo(slide: pptxgen.Slide, logoUrl: string | undefined, xPx: number, yPx: number, dark = false) {
+async function addLogo(
+  slide: pptxgen.Slide,
+  logoUrl: string | undefined,
+  xPx: number,
+  yPx: number,
+  dark = false,
+  scale = 1
+) {
   if (logoUrl) {
-    await addImageContain(slide, logoUrl, box(xPx, yPx, 260, 42));
+    // Grown around the box's centre, not its top-left: the cover anchors its
+    // logo near the bottom-right, so expanding from the origin would push a
+    // scaled-up mark off the slide.
+    const w = 260 * scale;
+    const h = 42 * scale;
+    await addImageContain(slide, logoUrl, box(xPx + (260 - w) / 2, yPx + (42 - h) / 2, w, h));
     return;
   }
   addText(slide, 'CLIENT LOGO', box(xPx, yPx, 200, 30), {
@@ -356,14 +477,15 @@ async function addLogo(slide: pptxgen.Slide, logoUrl: string | undefined, xPx: n
 // Per-template builders
 // ---------------------------------------------------------------------------
 
-async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'], logoUrl?: string) {
+async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'], logoUrl?: string, logoScale = 1) {
   const lines = content.headingLines?.length ? content.headingLines : ['Master Primary', 'Heading.'];
   const longest = Math.max(...lines.map((l) => l.length), 1);
   const heroFont = Math.round(Math.max(72, Math.min(180, 1640 / (longest * 0.6), 620 / (lines.length * 0.95))));
   const heroTopPad = lines.length >= 4 ? 160 : lines.length === 3 ? 210 : 280;
 
-  addHudTop(slide, content.projectLabel ?? 'Project Name Placeholder', content.versionLabel ?? 'YYYY // Version 0.0');
-  addEditorialLabel(slide, content.eyebrow ?? 'Presentation Subtitle', 140, heroTopPad);
+  addHudTop(slide, content.projectLabel ?? 'Project Name Placeholder', content.versionLabel ?? 'YYYY // Version 0.0',
+    { label: 'projectLabel', num: 'versionLabel' });
+  addEditorialLabel(slide, content.eyebrow ?? 'Presentation Subtitle', 140, heroTopPad, { slot: 'eyebrow' });
 
   // Multiplier is intentionally generous (vs. the ~0.85 Space Grotesk itself renders at): if the
   // embedded font ever fails to load, PowerPoint's fallback font may have taller line metrics, and
@@ -380,6 +502,7 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
     size: heroFont,
     bold: true,
     lineSpacingMultiple: 0.9,
+    slot: 'headingLines',
   });
 
   const taglineY = heroTopPad + 55 + headingH + 96;
@@ -389,14 +512,19 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
     size: 18,
     color: NEUTRAL_500,
     letterSpacingEm: 0.25,
+    slot: 'tagline',
   });
 
-  addText(slide, 'PROPRIETARY AND CONFIDENTIAL', box(80, 1000, 500, 26), {
-    fontFace: FONT_MONO,
-    size: 11,
-    color: NEUTRAL_400,
-  });
-  await addLogo(slide, logoUrl, 1580, 995);
+  const confidential = content.confidentialLabel ?? 'PROPRIETARY AND CONFIDENTIAL';
+  if (confidential !== '') {
+    addText(slide, confidential, box(80, 1000, 500, 26), {
+      fontFace: FONT_MONO,
+      size: 11,
+      color: NEUTRAL_400,
+      slot: 'confidentialLabel',
+    });
+  }
+  await addLogo(slide, logoUrl, 1580, 995, false, logoScale);
 }
 
 const DEFAULT_INDEX_PARTS = [
@@ -408,7 +536,7 @@ const DEFAULT_INDEX_PARTS = [
 
 function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const parts = content.parts?.length ? content.parts : DEFAULT_INDEX_PARTS;
-  addHudTop(slide, content.hudLabel ?? 'Agenda', num);
+  addHudTop(slide, content.hudLabel ?? 'Agenda', num, { label: 'hudLabel' });
   addEditorialLabel(slide, 'Navigation', 140, 160);
   const heading = content.heading ?? 'Presentation\nStructure.';
   const headingFont = 100;
@@ -419,6 +547,7 @@ function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num
     size: headingFont,
     bold: true,
     lineSpacingMultiple: 0.9,
+    slot: 'heading',
   });
 
   const cols = 2;
@@ -433,22 +562,24 @@ function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num
     const cy = startY + Math.floor(i / cols) * (rowH + gapY);
     addLine(slide, cx, cy, cx, cy + rowH, i === 0 ? EMERALD_500 : NEUTRAL_200, 2);
     addEditorialLabel(slide, `Part 0${i + 1}`, cx + 30, cy, { size: 10 });
-    addText(slide, part.title, box(cx + 30, cy + 30, colW - 30, 50), { size: 32, bold: true, lineSpacingMultiple: 1.05 });
+    addText(slide, part.title, box(cx + 30, cy + 30, colW - 30, 50), { size: 32, bold: true, lineSpacingMultiple: 1.05, slot: `parts.${i}.title` });
     addText(slide, part.description, box(cx + 30, cy + 85, colW - 30, 120), {
       size: 18,
       color: NEUTRAL_500,
       lineSpacingMultiple: 1.5,
+      slot: `parts.${i}.description`,
     });
   });
 }
 
 function buildExecutiveSummary(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
-  addHudTop(slide, content.hudLabel ?? 'Executive Summary', num);
-  addEditorialLabel(slide, content.eyebrow ?? 'Executive Summary', 140, 160);
+  addHudTop(slide, content.hudLabel ?? 'Executive Summary', num, { label: 'hudLabel' });
+  addEditorialLabel(slide, content.eyebrow ?? 'Executive Summary', 140, 160, { slot: 'eyebrow' });
   addText(slide, content.heading ?? 'Core Strategic\nObjective.', box(140, 215, 1640, 220), {
     size: 100,
     bold: true,
     lineSpacingMultiple: 0.9,
+    slot: 'heading',
   });
 
   // 1.4fr:1fr split (vs. an even 1fr:1fr) so the recommendation reads as the
@@ -465,21 +596,23 @@ function buildExecutiveSummary(slide: pptxgen.Slide, content: SlideInstance['con
     size: 32,
     color: NEUTRAL_500,
     lineSpacingMultiple: 1.5,
+    slot: 'body',
   });
 
   const rightPadLeft = 66;
   addLine(slide, rightX, bodyY, rightX, bodyY + 340, NEUTRAL_200, 1);
-  addEditorialLabel(slide, content.metricLabel ?? 'Variable Metric', rightX + rightPadLeft, bodyY + 100);
+  addEditorialLabel(slide, content.metricLabel ?? 'Variable Metric', rightX + rightPadLeft, bodyY + 100, { slot: 'metricLabel' });
   addText(slide, content.metricText ?? '00.0%', box(rightX + rightPadLeft, bodyY + 150, rightW - rightPadLeft, 140), {
     size: 56,
     bold: true,
     color: NEUTRAL_900,
     lineSpacingMultiple: 1.1,
+    slot: 'metricText',
   });
 }
 
-async function buildSectionDivider(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, logoUrl?: string) {
-  await addLogo(slide, logoUrl, 80, 60, true);
+async function buildSectionDivider(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, logoUrl?: string, logoScale = 1) {
+  await addLogo(slide, logoUrl, 80, 60, true, logoScale);
   addText(slide, content.hudLabel ?? 'Section Marker', box(1400, 60, 420, 30), {
     fontFace: FONT_MONO,
     size: 15,
@@ -487,13 +620,15 @@ async function buildSectionDivider(slide: pptxgen.Slide, content: SlideInstance[
     transparency: 60,
     align: 'right',
     letterSpacingEm: 0.2,
+    slot: 'hudLabel',
   });
 
-  addEditorialLabel(slide, content.eyebrow ?? 'Part 02', 150, 400, { color: EMERALD_400 });
+  addEditorialLabel(slide, content.eyebrow ?? 'Part 02', 150, 400, { color: EMERALD_400, slot: 'eyebrow' });
   addText(slide, content.heading ?? 'Section Title.', box(150, 463, 1620, 260), {
     size: 180,
     bold: true,
     color: WHITE,
+    slot: 'heading',
   });
   addText(slide, content.subtitle ?? PLACEHOLDER, box(150, 730, 960, 100), {
     fontFace: FONT_DISPLAY,
@@ -501,6 +636,7 @@ async function buildSectionDivider(slide: pptxgen.Slide, content: SlideInstance[
     color: WHITE,
     transparency: 45,
     lineSpacingMultiple: 1.5,
+    slot: 'subtitle',
   });
   void num;
 }
@@ -509,23 +645,25 @@ const DEFAULT_ATTRIBUTES = ['Placeholder Attribute', 'Placeholder Attribute', 'P
 
 function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const attributes = content.leftAttributes?.length ? content.leftAttributes : DEFAULT_ATTRIBUTES;
-  addHudTop(slide, content.hudLabel ?? 'Strategic Context', num);
+  addHudTop(slide, content.hudLabel ?? 'Strategic Context', num, { label: 'hudLabel' });
   addLine(slide, 960, 0, 960, 1080, NEUTRAL_200, 1);
 
-  addEditorialLabel(slide, content.leftLabel ?? 'Condition A', 140, 250);
+  addEditorialLabel(slide, content.leftLabel ?? 'Condition A', 140, 250, { slot: 'leftLabel' });
   addText(slide, content.leftHeading ?? 'Current State\nEnvironment.', box(140, 305, 700, 200), {
     size: 72,
     bold: true,
     lineSpacingMultiple: 0.9,
+    slot: 'leftHeading',
   });
   addText(slide, content.leftBody ?? PLACEHOLDER, box(140, 515, 700, 160), {
     fontFace: FONT_DISPLAY,
     size: 32,
     color: NEUTRAL_500,
     lineSpacingMultiple: 1.5,
+    slot: 'leftBody',
   });
   const attrRuns: pptxgen.TextProps[] = attributes.flatMap((a, i) => [
-    { text: `[${String(i + 1).padStart(2, '0')}] ${a}`, options: { breakLine: true } },
+    { text: `[${String(i + 1).padStart(2, '0')}] ${a}`, options: { breakLine: true, ...runOpts(`leftAttributes.${i}`) } },
   ]);
   addText(slide, attrRuns, box(140, 690, 700, 180), {
     fontFace: FONT_MONO,
@@ -535,37 +673,41 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
   });
 
   addRect(slide, box(960, 0, 960, 1080), NEUTRAL_50);
-  addEditorialLabel(slide, content.rightLabel ?? 'Condition B', 1000, 250);
+  addEditorialLabel(slide, content.rightLabel ?? 'Condition B', 1000, 250, { slot: 'rightLabel' });
   addText(slide, content.rightHeading ?? 'Strategic Pivot\nTarget State.', box(1000, 305, 780, 200), {
     size: 72,
     bold: true,
     lineSpacingMultiple: 0.9,
+    slot: 'rightHeading',
   });
   addText(slide, content.rightBody ?? PLACEHOLDER, box(1000, 515, 780, 300), {
     fontFace: FONT_DISPLAY,
     size: 32,
     color: NEUTRAL_900,
     lineSpacingMultiple: 1.5,
+    slot: 'rightBody',
   });
 }
 
 function buildDataMonument(slide: pptxgen.Slide, content: SlideInstance['content']) {
-  addEditorialLabel(slide, content.eyebrow ?? 'Performance Metric', 140, 260);
+  addEditorialLabel(slide, content.eyebrow ?? 'Performance Metric', 140, 260, { slot: 'eyebrow' });
   const runs: pptxgen.TextProps[] = [
-    { text: content.value ?? '000.0', options: {} },
-    { text: ` ${content.unit ?? 'M'}`, options: { color: EMERALD_500, fontSize: pt(420 * 0.3) } },
+    { text: content.value ?? '000.0', options: { ...runOpts('value') } },
+    { text: ` ${content.unit ?? 'M'}`, options: { color: EMERALD_500, fontSize: pt(420 * 0.3), ...runOpts('unit') } },
   ];
   addText(slide, runs, box(140, 305, 1600, 330), { size: 420, bold: true, lineSpacingMultiple: 0.8 });
   addText(slide, content.heading ?? 'Primary Performance Variable Title.', box(140, 630, 1600, 100), {
     size: 64,
     bold: true,
     lineSpacingMultiple: 0.95,
+    slot: 'heading',
   });
   addText(slide, content.body ?? PLACEHOLDER, box(140, 745, 800, 220), {
     fontFace: FONT_DISPLAY,
     size: 32,
     color: NEUTRAL_500,
     lineSpacingMultiple: 1.5,
+    slot: 'body',
   });
 }
 
@@ -584,8 +726,8 @@ const DEFAULT_KPIS = [
 function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const bars = content.bars?.length ? content.bars : DEFAULT_BARS;
   const kpis = content.kpis?.length ? content.kpis : DEFAULT_KPIS;
-  addHudTop(slide, content.hudLabel ?? 'Metrics Dashboard', num);
-  addEditorialLabel(slide, content.eyebrow ?? 'Temporal Performance', 140, 260);
+  addHudTop(slide, content.hudLabel ?? 'Metrics Dashboard', num, { label: 'hudLabel' });
+  addEditorialLabel(slide, content.eyebrow ?? 'Temporal Performance', 140, 260, { slot: 'eyebrow' });
 
   const chartTop = 320;
   const chartBottom = 670;
@@ -604,6 +746,7 @@ function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['con
       size: 14,
       color: NEUTRAL_500,
       align: 'center',
+      slot: `bars.${i}.label`,
     });
   });
 
@@ -611,8 +754,8 @@ function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['con
   const kpiColW = (1640 - 40 * 2) / 3;
   kpis.slice(0, 3).forEach((k, i) => {
     const x = 140 + i * (kpiColW + 40);
-    addEditorialLabel(slide, k.label, x, kpiY, { size: 10 });
-    addText(slide, k.value, box(x, kpiY + 40, kpiColW, 90), { size: 64, bold: true, lineSpacingMultiple: 0.95 });
+    addEditorialLabel(slide, k.label, x, kpiY, { size: 10, slot: `kpis.${i}.label` });
+    addText(slide, k.value, box(x, kpiY + 40, kpiColW, 90), { size: 64, bold: true, lineSpacingMultiple: 0.95, slot: `kpis.${i}.value` });
   });
 }
 
@@ -625,8 +768,8 @@ const DEFAULT_ROWS: ComparisonRow[] = [
 
 function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const rows = content.rows?.length ? content.rows : DEFAULT_ROWS;
-  addHudTop(slide, content.hudLabel ?? 'Comparative Framework', num);
-  addEditorialLabel(slide, content.eyebrow ?? 'Benchmark Comparison', 140, 260);
+  addHudTop(slide, content.hudLabel ?? 'Comparative Framework', num, { label: 'hudLabel' });
+  addEditorialLabel(slide, content.eyebrow ?? 'Benchmark Comparison', 140, 260, { slot: 'eyebrow' });
 
   const cellFont = rows.length > 6 ? 18 : rows.length > 4 ? 22 : 26;
   const headers = ['Analysis Category', 'Current Variable', 'Target Variable', 'Performance Delta'];
@@ -645,21 +788,31 @@ function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['con
     },
   }));
 
-  const bodyRows: pptxgen.TableRow[] = rows.map((r) => [
-    { text: r.dim, options: {} },
-    { text: r.cur, options: {} },
-    { text: r.tgt, options: {} },
-    { text: r.delta, options: { color: EMERALD_600 } },
-  ].map((c) => ({
-    text: c.text,
-    options: {
-      fontFace: FONT_DISPLAY,
-      fontSize: pt(cellFont),
-      color: c.options.color ?? NEUTRAL_900,
-      border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: NEUTRAL_200, pt: 0.75 }, { type: 'none' }],
-      valign: 'top',
-    },
-  })));
+  // Table cells bypass addText(), so their overrides are merged in here. Cell
+  // options do accept `align`, so unlike the shared-box run cases above, table
+  // cells support the full set of controls the toolbar offers.
+  const bodyRows: pptxgen.TableRow[] = rows.map((r, i) => [
+    { text: r.dim, options: {}, slot: `rows.${i}.dim` },
+    { text: r.cur, options: {}, slot: `rows.${i}.cur` },
+    { text: r.tgt, options: {}, slot: `rows.${i}.tgt` },
+    { text: r.delta, options: { color: EMERALD_600 }, slot: `rows.${i}.delta` },
+  ].map((c) => {
+    const ov = styleFor(activeStyles, c.slot);
+    return {
+      text: c.text,
+      options: {
+        fontFace: FONT_DISPLAY,
+        fontSize: pt(ov?.sizePx ?? cellFont),
+        color: ov?.color ?? c.options.color ?? NEUTRAL_900,
+        bold: ov?.bold,
+        italic: ov?.italic,
+        underline: ov?.underline ? { style: 'sng' as const } : undefined,
+        align: ov?.align,
+        border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: NEUTRAL_200, pt: 0.75 }, { type: 'none' }],
+        valign: 'top',
+      },
+    };
+  }));
 
   slide.addTable([headerRow, ...bodyRows], {
     x: inch(140),
@@ -679,9 +832,9 @@ const DEFAULT_PHASES = [
 
 function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const phases = content.phases?.length ? content.phases : DEFAULT_PHASES;
-  addHudTop(slide, content.hudLabel ?? 'Execution Timeline', num);
-  addEditorialLabel(slide, content.eyebrow ?? 'Milestone Projection', 140, 260);
-  addText(slide, content.heading ?? 'Pathway to Execution.', box(140, 315, 1640, 100), { size: 100, bold: true });
+  addHudTop(slide, content.hudLabel ?? 'Execution Timeline', num, { label: 'hudLabel' });
+  addEditorialLabel(slide, content.eyebrow ?? 'Milestone Projection', 140, 260, { slot: 'eyebrow' });
+  addText(slide, content.heading ?? 'Pathway to Execution.', box(140, 315, 1640, 100), { size: 100, bold: true, slot: 'heading' });
 
   const railY = 490;
   addLine(slide, 140, railY, 1780, railY, NEUTRAL_200, 2);
@@ -694,12 +847,13 @@ function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['con
     const x = 140 + i * spacing;
     addCircle(slide, box(x, railY - 10, 20, 20), p.completed ? EMERALD_500 : NEUTRAL_300);
     addEditorialLabel(slide, `Phase ${String(i + 1).padStart(2, '0')}`, x, railY + 42, { size: 12 });
-    addText(slide, p.title, box(x, railY + 85, itemW, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05 });
+    addText(slide, p.title, box(x, railY + 85, itemW, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05, slot: `phases.${i}.title` });
     addText(slide, p.description || PLACEHOLDER, box(x, railY + 140, itemW, 140), {
       fontFace: FONT_DISPLAY,
       size: 18,
       color: NEUTRAL_500,
       lineSpacingMultiple: 1.5,
+      slot: `phases.${i}.description`,
     });
   });
 }
@@ -713,11 +867,12 @@ async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance[
   const headingW = leftW - textPad;
   const headingLines = estimateWrappedLines(heading, headingFont, headingW);
   const headingH = Math.max(260, headingLines * headingFont * 1.05);
-  addEditorialLabel(slide, content.eyebrow ?? 'Visual Narrative', 140, 400);
+  addEditorialLabel(slide, content.eyebrow ?? 'Visual Narrative', 140, 400, { slot: 'eyebrow' });
   addText(slide, heading, box(140, 455, headingW, headingH), {
     size: headingFont,
     bold: true,
     lineSpacingMultiple: 0.95,
+    slot: 'heading',
   });
   const bodyY = 455 + headingH + 40;
   addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, headingW - 60, 260), {
@@ -725,6 +880,7 @@ async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance[
     size: 32,
     color: NEUTRAL_500,
     lineSpacingMultiple: 1.5,
+    slot: 'body',
   });
   if (!showImage) return;
   const imgBox = box(leftW, 0, 1920 - leftW, 1080);
@@ -751,9 +907,9 @@ const DEFAULT_STEPS = [
 
 function buildProcessArchitecture(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const steps = content.steps?.length ? content.steps : DEFAULT_STEPS;
-  addHudTop(slide, content.hudLabel ?? 'System Logic', num);
-  addEditorialLabel(slide, content.eyebrow ?? 'Architectural Protocol', 140, 260);
-  addText(slide, content.heading ?? 'Operational Flow.', box(140, 315, 1640, 100), { size: 100, bold: true });
+  addHudTop(slide, content.hudLabel ?? 'System Logic', num, { label: 'hudLabel' });
+  addEditorialLabel(slide, content.eyebrow ?? 'Architectural Protocol', 140, 260, { slot: 'eyebrow' });
+  addText(slide, content.heading ?? 'Operational Flow.', box(140, 315, 1640, 100), { size: 100, bold: true, slot: 'heading' });
 
   const n = steps.length;
   const gap = 40;
@@ -769,12 +925,13 @@ function buildProcessArchitecture(slide: pptxgen.Slide, content: SlideInstance['
       size: 48,
       color: EMERALD_500,
     });
-    addText(slide, s.title, box(x + 40, top + 110, colW - 80, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05 });
+    addText(slide, s.title, box(x + 40, top + 110, colW - 80, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05, slot: `steps.${i}.title` });
     addText(slide, s.description || PLACEHOLDER, box(x + 40, top + 170, colW - 80, h - 200), {
       fontFace: FONT_DISPLAY,
       size: 18,
       color: NEUTRAL_500,
       lineSpacingMultiple: 1.5,
+      slot: `steps.${i}.description`,
     });
   });
 }
@@ -787,7 +944,7 @@ const DEFAULT_SECTORS = [
 
 async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const sectors = content.sectors?.length ? content.sectors : DEFAULT_SECTORS;
-  addHudTop(slide, content.hudLabel ?? 'Reach Distribution', num);
+  addHudTop(slide, content.hudLabel ?? 'Reach Distribution', num, { label: 'hudLabel' });
 
   // 1.2fr:1fr split - image column left, stats column right (vertically centered), matching the source layout.
   const gap = 105;
@@ -796,7 +953,7 @@ async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['cont
   const rightX = 140 + leftW + gap;
   const rightW = 1640 - leftW - gap;
 
-  addText(slide, content.heading ?? 'Regional Impact.', box(140, 160, leftW, 100), { size: 100, bold: true });
+  addText(slide, content.heading ?? 'Regional Impact.', box(140, 160, leftW, 100), { size: 100, bold: true, slot: 'heading' });
 
   const showMap = !content.hideImage;
   if (showMap) {
@@ -823,14 +980,14 @@ async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['cont
   sectors.forEach((s, i) => {
     const y = startY + i * blockH;
     addLine(slide, rightX, y, rightX + rightW, y, NEUTRAL_200, 1);
-    addEditorialLabel(slide, s.label, rightX, y + 30, { size: 10 });
-    addText(slide, s.value, box(rightX, y + 68, rightW, 90), { size: 72, bold: true });
+    addEditorialLabel(slide, s.label, rightX, y + 30, { size: 10, slot: `sectors.${i}.label` });
+    addText(slide, s.value, box(rightX, y + 68, rightW, 90), { size: 72, bold: true, slot: `sectors.${i}.value` });
   });
   void num;
 }
 
 async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
-  addHudTop(slide, content.eyebrow ?? 'Key Insight', num);
+  addHudTop(slide, content.eyebrow ?? 'Key Insight', num, { label: 'eyebrow' });
 
   // Giant decorative quotation mark (vs. the previous inline quote-mark-in-heading treatment) -
   // this is what let the source design run the actual quote text at a much saner size.
@@ -849,39 +1006,51 @@ async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['
   addText(slide, quote, box(195, 330, quoteW, quoteH), {
     size: quoteFont,
     lineSpacingMultiple: 1.12,
+    slot: 'quote',
   });
 
   const avatarY = 330 + quoteH + 72;
+  const avatarD = 84 * (content.avatarScale ?? 1);
+  const avatarPad = (84 - avatarD) / 2;
   if (content.avatarUrl) {
-    slide.addImage({ data: content.avatarUrl, x: inch(195), y: inch(avatarY), w: inch(84), h: inch(84), rounding: true });
+    slide.addImage({
+      data: content.avatarUrl,
+      x: inch(195 + avatarPad),
+      y: inch(avatarY + avatarPad),
+      w: inch(avatarD),
+      h: inch(avatarD),
+      rounding: true,
+    });
   } else {
     addCircle(slide, box(195, avatarY, 84, 84), NEUTRAL_200);
   }
-  addText(slide, content.author ?? 'Author Name', box(304, avatarY + 6, 700, 50), { size: 27, bold: true });
+  addText(slide, content.author ?? 'Author Name', box(304, avatarY + 6, 700, 50), { size: 27, bold: true, slot: 'author' });
   addText(slide, content.role ?? 'Author Title Placeholder', box(304, avatarY + 50, 700, 40), {
     fontFace: FONT_MONO,
     size: 18,
     color: NEUTRAL_500,
+    slot: 'role',
   });
 }
 
 const DEFAULT_CONTACTS = ['email@placeholder.com', '@social_handle', 'www.domain.com'];
 
-async function buildExit(slide: pptxgen.Slide, content: SlideInstance['content'], logoUrl?: string) {
-  await addLogo(slide, logoUrl, 80, 60, true);
-  addEditorialLabel(slide, content.eyebrow ?? 'Conclusion', 140, 360, { color: EMERALD_400 });
-  addText(slide, content.heading ?? 'Thank You.', box(140, 415, 1600, 280), { size: 180, bold: true, color: WHITE });
+async function buildExit(slide: pptxgen.Slide, content: SlideInstance['content'], logoUrl?: string, logoScale = 1) {
+  await addLogo(slide, logoUrl, 80, 60, true, logoScale);
+  addEditorialLabel(slide, content.eyebrow ?? 'Conclusion', 140, 360, { color: EMERALD_400, slot: 'eyebrow' });
+  addText(slide, content.heading ?? 'Thank You.', box(140, 415, 1600, 280), { size: 180, bold: true, color: WHITE, slot: 'heading' });
   addText(slide, content.body ?? PLACEHOLDER, box(140, 700, 800, 200), {
     fontFace: FONT_DISPLAY,
     size: 32,
     color: 'CCCCCC',
     transparency: 50,
     lineSpacingMultiple: 1.5,
+    slot: 'body',
   });
 
   const contacts = content.contacts?.length ? content.contacts : DEFAULT_CONTACTS;
   const runs: pptxgen.TextProps[] = contacts.flatMap((c, i) => [
-    { text: c + (i < contacts.length - 1 ? '   ' : ''), options: {} },
+    { text: c + (i < contacts.length - 1 ? '   ' : ''), options: { ...runOpts(`contacts.${i}`) } },
   ]);
   addText(slide, runs, box(140, 920, 1600, 40), { fontFace: FONT_MONO, size: 16, color: EMERALD_400 });
 }
@@ -901,28 +1070,31 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
       size: 12,
       color: WHITE,
       letterSpacingEm: 0.12,
+      slot: 'hudLabel',
     });
     addText(slide, num, box(1040, 55, 800, 30), { fontFace: FONT_MONO, size: 12, color: WHITE, align: 'right' });
-    addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 780, { color: EMERALD_400 });
-    addText(slide, content.heading ?? 'Blank Slide.', box(140, 835, 1600, 110), { size: 72, bold: true, color: WHITE });
+    addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 780, { color: EMERALD_400, slot: 'eyebrow' });
+    addText(slide, content.heading ?? 'Blank Slide.', box(140, 835, 1600, 110), { size: 72, bold: true, color: WHITE, slot: 'heading' });
     addText(slide, content.body ?? 'Click to add your content…', box(140, 955, 1200, 100), {
       fontFace: FONT_DISPLAY,
       size: 28,
       color: 'DDDDDD',
       lineSpacingMultiple: 1.5,
+      slot: 'body',
     });
     return;
   }
 
   if (layout === 'two-column') {
-    addHudTop(slide, content.hudLabel ?? 'Custom Slide', num);
-    addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200);
-    addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 780, 180), { size: 64, bold: true, lineSpacingMultiple: 0.95 });
+    addHudTop(slide, content.hudLabel ?? 'Custom Slide', num, { label: 'hudLabel' });
+    addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200, { slot: 'eyebrow' });
+    addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 780, 180), { size: 64, bold: true, lineSpacingMultiple: 0.95, slot: 'heading' });
     addText(slide, content.body ?? 'Click to add your content…', box(140, 460, 780, 400), {
       fontFace: FONT_DISPLAY,
       size: 28,
       color: NEUTRAL_500,
       lineSpacingMultiple: 1.5,
+      slot: 'body',
     });
     const imgBox = box(1000, 160, 780, 760);
     if (content.imageUrl) {
@@ -942,17 +1114,135 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
   }
 
   // standard
-  addHudTop(slide, content.hudLabel ?? 'Custom Slide', num);
-  addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200);
-  addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 1640, 130), { size: 88, bold: true });
+  addHudTop(slide, content.hudLabel ?? 'Custom Slide', num, { label: 'hudLabel' });
+  addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200, { slot: 'eyebrow' });
+  addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 1640, 130), { size: 88, bold: true, slot: 'heading' });
   addText(slide, content.body ?? 'Click to add your content…', box(140, 400, 1200, 200), {
     fontFace: FONT_DISPLAY,
     size: 28,
     color: NEUTRAL_500,
     lineSpacingMultiple: 1.5,
+    slot: 'body',
   });
   if (content.imageUrl && !content.hideImage) {
     addImageCover(slide, content.imageUrl, box(140, 620, 1640, 380));
+  }
+}
+
+/**
+ * Rebuilds an imported .pptx slide as native pptxgenjs objects - one editable
+ * text box or shape per imported shape, at its original coordinates.
+ *
+ * Text is emitted run by run so mixed formatting inside a line survives the
+ * round trip, and every box lands as a real PowerPoint text box the client can
+ * edit after download.
+ */
+async function buildImported(slide: pptxgen.Slide, content: SlideInstance['content']) {
+  for (const sh of content.shapes ?? []) {
+    const b = box(sh.x, sh.y, sh.w, sh.h);
+
+    if (sh.kind === 'image' && sh.imageUrl) {
+      await addImageContain(slide, sh.imageUrl, b);
+      continue;
+    }
+
+    if (sh.fill || sh.line) {
+      const line = sh.line ? { color: sh.line.color, widthPx: sh.line.widthPx } : undefined;
+      if (sh.kind === 'ellipse') {
+        addCircle(slide, b, sh.fill ?? WHITE, line);
+      } else {
+        addRect(slide, b, sh.fill, line);
+      }
+    }
+
+    const paragraphs = sh.paragraphs ?? [];
+    if (!paragraphs.length) continue;
+
+    const runs: pptxgen.TextProps[] = [];
+    paragraphs.forEach((para, pi) => {
+      if (!para.runs.length) {
+        runs.push({ text: ' ', options: pi > 0 ? { breakLine: true } : {} });
+        return;
+      }
+      para.runs.forEach((run, ri) => {
+        runs.push({
+          text: run.text,
+          options: {
+            ...(pi > 0 && ri === 0 ? { breakLine: true } : {}),
+            fontFace: run.font ?? FONT_DISPLAY,
+            fontSize: pt(run.sizePx ?? 18),
+            bold: run.bold,
+            italic: run.italic,
+            underline: run.underline ? { style: 'sng' } : undefined,
+            color: run.color ?? NEUTRAL_900,
+            align: para.align ?? 'left',
+          },
+        });
+      });
+    });
+
+    slide.addText(runs, {
+      ...b,
+      valign: sh.vAlign ?? 'top',
+      align: paragraphs[0]?.align ?? 'left',
+      wrap: true,
+      fit: 'none',
+      margin: 0,
+      autoFit: false,
+    });
+  }
+}
+
+/**
+ * Emits the user-inserted overlay shapes for a slide.
+ *
+ * Called for every template, after its own content, so array order becomes
+ * paint order. PowerPoint has no "behind the layout" concept to map `behind`
+ * onto - z-order there is simply shape order within the slide - so behind-shapes
+ * are emitted first (painting under everything the template added) and the rest
+ * last. That reproduces what the canvas shows in the only way the format allows.
+ */
+async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['content'], phase: 'behind' | 'front') {
+  const shapes = (content.overlay ?? []).filter((s) => (phase === 'behind' ? s.behind : !s.behind));
+
+  for (const s of shapes) {
+    const b = box(s.x, s.y, s.w, s.h);
+
+    if (s.kind === 'image') {
+      if (s.imageUrl) await addImageContain(slide, s.imageUrl, b);
+      continue;
+    }
+
+    if (s.kind === 'text') {
+      // A text box with no text would export as an invisible empty shape that
+      // the client can still click - skip it rather than ship the confusion.
+      const text = s.text ?? '';
+      if (!text.trim()) continue;
+      addText(slide, text, b, {
+        size: s.style?.sizePx ?? 32,
+        bold: s.style?.bold,
+        italic: s.style?.italic,
+        underline: s.style?.underline,
+        color: s.style?.color ?? NEUTRAL_900,
+        align: s.style?.align ?? 'left',
+        valign: s.vAlign ?? 'top',
+        lineSpacingMultiple: 1.3,
+      });
+      continue;
+    }
+
+    const line = s.line ? { color: s.line.color, widthPx: s.line.widthPx } : undefined;
+    if (s.kind === 'ellipse') {
+      // addCircle demands a fill; an outlined ellipse has none, so it goes
+      // through the generic shape call with an explicit no-fill instead.
+      slide.addShape('ellipse', {
+        ...b,
+        fill: s.fill ? { color: s.fill } : { type: 'none' },
+        line: line ? { color: line.color, width: Math.max(0.25, pt(line.widthPx)) } : { type: 'none' },
+      });
+    } else {
+      addRect(slide, b, s.fill, line);
+    }
   }
 }
 
@@ -967,20 +1257,57 @@ export async function addNativeSlide(
   instance: SlideInstance,
   num: string,
   logoUrl?: string,
-  pageLabel?: string
+  pageLabel?: string,
+  logoScale = 1
+): Promise<void> {
+  const c = instance.content;
+  beginSlideStyles(c.styles, c.offsets);
+  try {
+    await buildSlideBody(slide, instance, num, logoUrl, pageLabel, logoScale);
+  } finally {
+    // Released even if a build function throws, so one bad slide cannot leak
+    // its overrides onto every slide after it.
+    endSlideStyles();
+  }
+}
+
+async function buildSlideBody(
+  slide: pptxgen.Slide,
+  instance: SlideInstance,
+  num: string,
+  logoUrl?: string,
+  pageLabel?: string,
+  logoScale = 1
 ): Promise<void> {
   const c = instance.content;
 
-  if (instance.templateId === 'blank') {
+  // Speaker notes land in PowerPoint's own notes pane, never on the slide.
+  if (instance.notes?.trim()) slide.addNotes(instance.notes);
+
+  if (instance.templateId === 'imported') {
+    const base = (c.importedBase ?? 'FFFFFF').replace('#', '').toUpperCase();
+    const lum = (0.2126 * parseInt(base.slice(0, 2), 16)
+      + 0.7152 * parseInt(base.slice(2, 4), 16)
+      + 0.0722 * parseInt(base.slice(4, 6), 16)) / 255;
+    applyBackground(slide, {
+      base,
+      grid: true,
+      gridColor: lum < 0.5 ? 'rgba(255,255,255,0.11)' : undefined,
+      glow: { cx: 1520, cy: 320, r: 700 },
+    });
+  } else if (instance.templateId === 'blank') {
     const layout = c.blankLayout ?? 'standard';
     applyBackground(slide, layout === 'full-bleed' ? { base: WHITE } : { base: WHITE, grid: true });
   } else {
     applyBackground(slide, DECOR[instance.templateId] ?? { base: WHITE });
   }
 
+  // Behind-shapes first, so the template's own content paints over them.
+  await addOverlayShapes(slide, c, 'behind');
+
   switch (instance.templateId) {
     case 's1':
-      await buildCover(slide, c, logoUrl);
+      await buildCover(slide, c, logoUrl, logoScale);
       break;
     case 's2':
       buildIndex(slide, c, num);
@@ -989,7 +1316,7 @@ export async function addNativeSlide(
       buildExecutiveSummary(slide, c, num);
       break;
     case 's4':
-      await buildSectionDivider(slide, c, num, logoUrl);
+      await buildSectionDivider(slide, c, num, logoUrl, logoScale);
       break;
     case 's5':
       buildTwoColumnContext(slide, c, num);
@@ -1019,16 +1346,22 @@ export async function addNativeSlide(
       await buildFeaturedQuote(slide, c, num);
       break;
     case 's14':
-      await buildExit(slide, c, logoUrl);
+      await buildExit(slide, c, logoUrl, logoScale);
       break;
     case 'blank':
       await buildBlank(slide, c, num);
+      break;
+    case 'imported':
+      await buildImported(slide, c);
       break;
     default:
       break;
   }
 
-  if (pageLabel) {
+  // Front-shapes last, so they sit over everything the template drew.
+  await addOverlayShapes(slide, c, 'front');
+
+  if (pageLabel && !c.hideFooter) {
     addText(slide, instance.title, box(64, 1032, 700, 24), {
       fontFace: FONT_MONO,
       size: 10.5,
