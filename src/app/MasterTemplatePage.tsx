@@ -196,7 +196,22 @@ export function MasterTemplatePage() {
     future: [],
   }));
   const draft = draftHistory.present;
-  const [dirty, setDirty] = useState<boolean>(boot.session.dirty ?? false);
+  const [dirtyFlag, setDirty] = useState<boolean>(boot.session.dirty ?? false);
+
+  /**
+   * Whether the draft actually differs from the committed deck.
+   *
+   * The raw flag is sticky - anything that mutates the draft sets it and
+   * nothing ever unsets it - so undoing every change still left the header
+   * claiming "Unsaved changes" and Save emphasised over a deck identical to the
+   * one on disk. Undo restores the exact object the draft was opened with, so a
+   * reference check settles it for free.
+   *
+   * The flag still has to gate it: after a reload the draft is deserialised
+   * into a different object than the deck, so identity alone would report every
+   * restored session as dirty.
+   */
+  const dirty = draft !== null && dirtyFlag && draft !== deck;
 
   const editing = draft !== null;
   // Which stack the buttons and Cmd+Z act on depends on whether the deck is

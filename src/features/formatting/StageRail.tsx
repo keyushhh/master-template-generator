@@ -26,94 +26,98 @@ interface StageRailProps {
 }
 
 /**
- * Duotone icons: a neutral outline plus exactly one emerald element.
+ * Ionicons (outline set), inlined rather than pulled in as a web component.
  *
- * The single-accent rule is the house idiom - it is what the slide templates do
- * with their eyebrow rules and metric highlights - and it is what stops these
- * reading as stock outline glyphs. Each accent also says something: the shapes
- * carry the same corner handles the canvas draws on a selection, the chart's
- * tallest bar is the one being called out, the table's header row is filled.
+ * The `<ion-icon>` element fetches each glyph at runtime from a CDN, which
+ * would put a network dependency in front of the editor's chrome. These are the
+ * exact path data from the `ionicons` package, so they match the named icons
+ * without shipping a loader.
  *
- * `accent` is passed in rather than hardcoded because the active button inverts
- * to a solid emerald background, where an emerald detail would vanish.
+ * Their native canvas is 512x512 with a 32px stroke, so they are drawn at that
+ * viewBox and scaled by the <svg> box - rescaling the paths into a 24 grid
+ * would throw the stroke weight off against the rest of the set.
  */
-type IconFn = (accent: string) => React.ReactNode;
-
-const TOOLS: { kind: OverlayShape['kind']; label: string; icon: IconFn }[] = [
+const TOOLS: { kind: OverlayShape['kind']; label: string; icon: React.ReactNode }[] = [
   {
     kind: 'text',
     label: 'Text box',
-    icon: (a) => (
+    icon: (
       <>
-        <path d="M5 5.5h14M12 5.5V17" />
-        <path d="M8.5 19.5h7" stroke={a} strokeWidth="2.4" />
+        <path d="m32 415.5 120-320 120 320M230 303.5H74M326 239.5c12.19-28.69 41-48 74-48h0c46 0 80 32 80 80v144" />
+        <path d="M320 358.5c0 36 26.86 58 60 58 54 0 100-27 100-106v-15c-20 0-58 1-92 5-32.77 3.86-68 19-68 58" />
       </>
     ),
   },
   {
     kind: 'rect',
     label: 'Rectangle',
-    icon: (a) => (
-      <>
-        <rect x="4.5" y="6" width="15" height="12" />
-        <rect x="2.9" y="4.4" width="3.2" height="3.2" fill={a} stroke="none" />
-        <rect x="17.9" y="16.4" width="3.2" height="3.2" fill={a} stroke="none" />
-      </>
-    ),
+    icon: <rect width="352" height="480" x="80" y="16" rx="48" ry="48" transform="rotate(-90 256 256)" />,
   },
   {
     kind: 'ellipse',
-    label: 'Oval',
-    icon: (a) => (
-      <>
-        <ellipse cx="12" cy="12" rx="7.5" ry="6" />
-        <rect x="2.9" y="4.4" width="3.2" height="3.2" fill={a} stroke="none" />
-        <rect x="17.9" y="16.4" width="3.2" height="3.2" fill={a} stroke="none" />
-      </>
-    ),
+    label: 'Ellipse',
+    icon: <circle cx="256" cy="256" r="192" />,
   },
   {
     kind: 'image',
     label: 'Image',
-    icon: (a) => (
+    icon: (
       <>
-        <rect x="3.5" y="5" width="17" height="14" />
-        <path d="M3.5 15.5l4.5-4 3.5 3.2" />
-        <circle cx="15.8" cy="9.8" r="1.9" fill={a} stroke="none" />
+        <rect width="416" height="352" x="48" y="80" rx="48" ry="48" />
+        <circle cx="336" cy="176" r="32" />
+        <path d="m304 335.79-90.66-90.49a32 32 0 0 0-43.87-1.3L48 352M224 432l123.34-123.34a32 32 0 0 1 43.11-2L464 368" />
       </>
     ),
   },
   {
     kind: 'table',
     label: 'Table',
-    icon: (a) => (
+    icon: (
       <>
-        {/* Fill first: painted after the outline it would cover the top border
-            and the header divider. */}
-        <rect x="3.5" y="5" width="17" height="4.6" fill={a} stroke="none" />
-        <rect x="3.5" y="5" width="17" height="14" />
-        <path d="M3.5 9.6h17M3.5 14.3h17M9.7 9.6V19M15.2 9.6V19" />
+        <path d="M160 144h288M160 256h288M160 368h288" />
+        <circle cx="80" cy="144" r="16" />
+        <circle cx="80" cy="256" r="16" />
+        <circle cx="80" cy="368" r="16" />
       </>
     ),
   },
   {
     kind: 'chart',
     label: 'Chart',
-    icon: (a) => (
+    icon: (
       <>
-        <path d="M4.6 19.5v-5.8M19.4 19.5v-7.4" />
-        <path d="M12 19.5V5.6" stroke={a} strokeWidth="2.6" />
+        <path d="M256.05 80.65Q263.94 80 272 80c106 0 192 86 192 192s-86 192-192 192A192.09 192.09 0 0 1 89.12 330.65" />
+        <path d="M256 48C141.12 48 48 141.12 48 256a207.3 207.3 0 0 0 18.09 85L256 256Z" />
       </>
     ),
   },
 ];
 
-const NOTES_ICON: IconFn = (a) => (
+const NOTES_ICON = (
   <>
-    <path d="M4.5 6.5h15M4.5 11.5h15" />
-    <path d="M4.5 16.5h8" stroke={a} strokeWidth="2.4" />
+    <path d="M416 221.25V416a48 48 0 0 1-48 48H144a48 48 0 0 1-48-48V96a48 48 0 0 1 48-48h98.75a32 32 0 0 1 22.62 9.37l141.26 141.26a32 32 0 0 1 9.37 22.62Z" />
+    <path d="M256 56v120a32 32 0 0 0 32 32h120M176 288h160M176 368h160" />
   </>
 );
+
+/** Shared frame so every glyph keeps Ionicons' own proportions and weight. */
+function Icon({ children }: { children: React.ReactNode }) {
+  return (
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 512 512"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="32"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {children}
+    </svg>
+  );
+}
 
 function RailButton({
   label,
@@ -126,12 +130,9 @@ function RailButton({
   active?: boolean;
   badge?: boolean;
   onClick: () => void;
-  children: (accent: string) => React.ReactNode;
+  children: React.ReactNode;
 }) {
   const [hover, setHover] = useState(false);
-  // On the active button the background is solid emerald, so the accent has to
-  // step out of the way; on hover it brightens instead.
-  const accent = active ? 'rgba(255,255,255,0.72)' : hover ? 'var(--emerald-400)' : 'var(--emerald-500)';
   return (
     <div style={{ position: 'relative', display: 'flex' }}>
       <button
@@ -151,7 +152,7 @@ function RailButton({
           position: 'relative',
         }}
       >
-        {children(accent)}
+        {children}
         {badge && !active && (
           <span
             style={{
@@ -208,22 +209,14 @@ export function StageRail({ onInsert, hasNotes, notesOpen, onToggleNotes }: Stag
     >
       {TOOLS.map((t) => (
         <RailButton key={t.kind} label={t.label} onClick={() => onInsert(t.kind)}>
-          {(accent) => (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              {t.icon(accent)}
-            </svg>
-          )}
+          <Icon>{t.icon}</Icon>
         </RailButton>
       ))}
 
       <span style={{ width: 20, height: 1, background: 'var(--neutral-200)', margin: '4px 0' }} />
 
       <RailButton label="Speaker notes" active={notesOpen} badge={hasNotes} onClick={onToggleNotes}>
-        {(accent) => (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            {NOTES_ICON(accent)}
-          </svg>
-        )}
+        <Icon>{NOTES_ICON}</Icon>
       </RailButton>
     </div>
   );

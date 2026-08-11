@@ -29,7 +29,9 @@ const DEFAULTS: Record<OverlayShape['kind'], Rect> = {
   // easier to drag a small box bigger than to work out why a huge one is empty.
   text: { x: 240, y: 480, w: 480, h: 60 },
   rect: { x: 240, y: 480, w: 480, h: 240 },
-  ellipse: { x: 240, y: 480, w: 240, h: 240 },
+  // Wider than tall, so an inserted ellipse is visibly an ellipse. At 240x240
+  // it was a circle, which made the tool's name a lie.
+  ellipse: { x: 240, y: 460, w: 420, h: 260 },
   image: { x: 240, y: 360, w: 600, h: 360 },
   table: { x: 240, y: 360, w: 900, h: 300 },
   chart: { x: 240, y: 300, w: 800, h: 480 },
