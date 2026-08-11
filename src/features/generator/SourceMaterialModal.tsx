@@ -9,7 +9,7 @@ import { parsePptx } from '../pptx-import/pptxParser';
 import { buildDeckFromImport } from '../pptx-import/pptxDeckBuilder';
 import type { Deck } from '../deck/types';
 import { MarkdownCodeEditor } from './MarkdownCodeEditor';
-import { ArrowForwardIcon, CheckIcon, CloseIcon, CopyIcon, TrashIcon } from '../ui/icons';
+import { ArrowForwardIcon, CheckIcon, CloseIcon, CloudUploadIcon, CopyIcon, TrashIcon } from '../ui/icons';
 
 interface SourceMaterialModalProps {
   open: boolean;
@@ -368,7 +368,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                 onClick={() => fileInputRef.current?.click()}
               >
                 <input type="file" ref={fileInputRef} className="hidden" accept=".md,.markdown,.txt" onChange={handleFileChange} />
-                <svg className={`w-6 h-6 mb-3 transition-colors ${isDragging ? 'text-emerald-500' : 'text-neutral-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <span className={`mb-3 transition-colors ${isDragging ? 'text-emerald-500' : 'text-neutral-400'}`}><CloudUploadIcon size={26} /></span>
                 <div className="text-[13px] font-bold text-neutral-900 mb-1.5">
                   {isValidating ? 'Parsing Document…' : 'Drop or click to upload'}
                 </div>
@@ -438,7 +438,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                   accept=".pptx"
                   onChange={(e) => { if (e.target.files?.length) void processPptx(e.target.files[0]); }}
                 />
-                <svg className={`w-6 h-6 mb-3 transition-colors ${pptxDragging ? 'text-emerald-500' : 'text-neutral-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <span className={`mb-3 transition-colors ${pptxDragging ? 'text-emerald-500' : 'text-neutral-400'}`}><CloudUploadIcon size={26} /></span>
                 <div className="text-[13px] font-bold text-neutral-900 mb-1.5">
                   {isValidating ? 'Reading presentation…' : 'Drop or click to upload'}
                 </div>

@@ -38,6 +38,7 @@ import {
 import { layerBounds, type LayerMove } from './overlayModel';
 import { GROUP_ALIGNMENTS, type GroupAlign } from './group';
 import { TrashIcon } from '../ui/icons';
+import { EyedropIcon, RefreshIcon } from '../ui/icons';
 
 const BAR_H = 44;
 
@@ -385,10 +386,7 @@ function ColorMenu({
                   border: '1px solid var(--neutral-200)',
                 }}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="m2 22 1-1h3l9-9" /><path d="M3 21v-3l9-9" />
-                  <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z" />
-                </svg>
+<EyedropIcon size={14} />
               </button>
             )}
           </div>
@@ -724,9 +722,7 @@ export function EditToolbar({
                 : 'Return this text to template styling'}
               aria-label="Reset formatting"
               onClick={onReset} style={{ ...ctl, ...mono, gap: 5 }}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
-              </svg>
+              <RefreshIcon size={12} />
               Reset
             </button>
           )}
