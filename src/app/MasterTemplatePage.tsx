@@ -8,12 +8,15 @@ import { alignDelta, measureGroup, type GroupAlign } from '../features/formattin
 import { ReviewModal } from '../features/generator/ReviewModal';
 import { PresentMode } from '../features/generator/PresentMode';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
+import { StudioHeader } from '../features/generator/StudioHeader';
 import { useToast } from '../features/toast/Toast';
 import type { DocumentNode } from '../features/business-record/parser/ast';
 import type { Deck, OverlayChartSeries, OverlayChartType, OverlayShape, SlideContent, SlideTemplateId, SlotStyle } from '../features/deck/types';
 import { applySwitch } from '../features/deck/templateSwitch';
 import { TemplateSwitchModal } from '../features/generator/TemplateSwitchModal';
 import { EditToolbar } from '../features/formatting/EditToolbar';
+import { StageRail } from '../features/formatting/StageRail';
+import { NotesPanel } from '../features/formatting/NotesPanel';
 import { ChartDataEditor } from '../features/formatting/ChartDataEditor';
 import {
   createOverlayShape,
@@ -227,22 +230,9 @@ export function MasterTemplatePage() {
     handleReset();
   };
 
-  // Keep toolbar horizontally aligned with the first slide's visual left edge.
-  const toolbarRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function align() {
-      const slide = document.querySelector<HTMLElement>('[data-slide]');
-      const tb = toolbarRef.current;
-      if (!slide || !tb) return;
-      tb.style.left = `${slide.getBoundingClientRect().left}px`;
-    }
-    // Run after the scaler has applied transforms.
-    requestAnimationFrame(align);
-    const book = document.querySelector('.book');
-    const ro = new ResizeObserver(() => requestAnimationFrame(align));
-    if (book) ro.observe(book);
-    return () => ro.disconnect();
-  }, [displayDeck]);
+  // The old top bar was pinned to the first slide's measured left edge, which
+  // needed a ResizeObserver to stay in sync. StudioHeader spans the canvas
+  // instead, so its position is pure CSS and that machinery is gone.
 
   // Persist the working session (including an unsaved draft and a capped
   // undo/redo window) into the active deck's slot on every change.
@@ -372,6 +362,19 @@ export function MasterTemplatePage() {
    *  looking at rather than the first one in the deck. */
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
 
+  /** The slide on the stage - the canvas shows one at a time, so this is the
+   *  deck's cursor: the rail selects it, the canvas renders it. */
+  const [currentSlideId, setCurrentSlideId] = useState<string | null>(null);
+
+  // Keep the cursor on something that exists and is visible.
+  useEffect(() => {
+    const visible = displayDeck.slides.filter((s) => !s.hidden);
+    if (!visible.length) { setCurrentSlideId(null); return; }
+    if (!visible.some((s) => s.instanceId === currentSlideId)) {
+      setCurrentSlideId(visible[0].instanceId);
+    }
+  }, [displayDeck, currentSlideId]);
+
   const handleSelect = useCallback((next: Selection, additive?: boolean) => {
     // Shift-click builds a group instead of replacing the selection. Slots and
     // imported shapes can each be grouped among their own kind - a box and its
@@ -430,6 +433,7 @@ export function MasterTemplatePage() {
       underline: run.underline,
       color: run.color,
       align: para?.align,
+      fontFamily: run.font,
     };
   })();
 
@@ -527,6 +531,7 @@ export function MasterTemplatePage() {
                   if ('italic' in patch) next.italic = patch.italic;
                   if ('underline' in patch) next.underline = patch.underline;
                   if ('color' in patch) next.color = patch.color;
+                  if ('fontFamily' in patch) next.font = patch.fontFamily;
                   return next;
                 }),
               };
@@ -550,7 +555,10 @@ export function MasterTemplatePage() {
     const byFocus = activeSlideId
       ? displayDeck.slides.find((s) => s.instanceId === activeSlideId)
       : undefined;
-    return byFocus ?? displayDeck.slides.find((s) => !s.hidden);
+    const onStage = currentSlideId
+      ? displayDeck.slides.find((s) => s.instanceId === currentSlideId)
+      : undefined;
+    return byFocus ?? onStage ?? displayDeck.slides.find((s) => !s.hidden);
   })();
 
   const selectedOverlayShape =
@@ -588,6 +596,16 @@ export function MasterTemplatePage() {
   const handleInsertShape = useCallback(
     (kind: OverlayShape['kind']) => {
       if (!targetSlide) return;
+      // Inserting from view mode enters edit mode rather than refusing: reaching
+      // for a shape tool *is* the intent to edit. The draft has to be opened
+      // first or the insert would be dropped - handleEditSlide dispatches to the
+      // draft, and the draft reducer ignores edits while there is no draft.
+      // Both actions queue on the same reducer in order, so the open lands
+      // before the edit applies.
+      if (draft === null) {
+        dispatchDraft({ type: 'open', deck });
+        setDirty(false);
+      }
       const id = targetSlide.instanceId;
       const shape = createOverlayShape(kind, (targetSlide.content.overlay ?? []).length);
       handleEditSlide(id, (c) => withOverlay(c, [...overlayOf(c), shape]));
@@ -595,7 +613,7 @@ export function MasterTemplatePage() {
       // worse experience than one that arrives ready to move or type into.
       setSelection({ kind: 'overlay', instanceId: id, shapeId: shape.id });
     },
-    [targetSlide, handleEditSlide]
+    [targetSlide, handleEditSlide, draft, deck]
   );
 
   /** Applies a change to the selected overlay shape. */
@@ -702,6 +720,9 @@ export function MasterTemplatePage() {
   );
 
   const [chartEditorOpen, setChartEditorOpen] = useState(false);
+  /** Speaker-notes panel. Slide-level, so it follows the stage cursor rather
+   *  than the selection. */
+  const [notesOpen, setNotesOpen] = useState(false);
 
   // Follow-the-selection: the data panel belongs to whichever chart is
   // selected, so it closes rather than silently editing whatever the user
@@ -932,6 +953,7 @@ export function MasterTemplatePage() {
       underline: undefined,
       color: undefined,
       align: undefined,
+      fontFamily: undefined,
     });
   }, [selection, handleFormatPatch, handleEditSlide]);
 
@@ -1147,10 +1169,7 @@ export function MasterTemplatePage() {
   const handleAddBlank = useCallback(() => {
     const blank = createBlankSlide();
     mutateDeck((prev) => ({ ...prev, slides: [...prev.slides, blank] }));
-    // Jump to the new slide after it renders.
-    setTimeout(() => {
-      document.getElementById(blank.instanceId)?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
+    setCurrentSlideId(blank.instanceId);
   }, [mutateDeck]);
 
   const handleInsertAfter = useCallback((instanceId: string) => {
@@ -1162,9 +1181,7 @@ export function MasterTemplatePage() {
         : [...prev.slides.slice(0, idx + 1), blank, ...prev.slides.slice(idx + 1)];
       return { ...prev, slides: next };
     });
-    setTimeout(() => {
-      document.getElementById(blank.instanceId)?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
+    setCurrentSlideId(blank.instanceId);
   }, [mutateDeck]);
 
   // ── Multiple saved decks ────────────────────────────────────────────────
@@ -1240,8 +1257,6 @@ export function MasterTemplatePage() {
         ast={ast}
         deck={displayDeck}
         deckGenerated={deck.generated}
-        editing={editing}
-        dirty={dirty}
         onDocumentParsed={setAst}
         onImport={handleImportAndGenerate}
         onImportDeck={handleImportDeck}
@@ -1254,7 +1269,33 @@ export function MasterTemplatePage() {
         onReorder={handleReorder}
         onAddBlank={handleAddBlank}
         onInsertAfter={handleInsertAfter}
+        currentId={currentSlideId}
+        onNavigate={setCurrentSlideId}
+      />
+
+      {/* One floating frosted header carries identity, mode and actions.
+          This replaced an Edit/Reset/Undo cluster measured onto the slide's
+          left edge plus a detached Present button in the opposite corner. */}
+      <StudioHeader
+        projectName={projects.find((p) => p.id === activeId)?.name ?? 'Untitled deck'}
+        onRenameProject={(name) => handleRenameDeck(activeId, name)}
+        mode={editing ? 'edit' : 'view'}
+        presenting={presentOpen}
+        dirty={dirty}
+        onEnterEdit={handleEnterEdit}
+        onExitEdit={handleSaveEdits}
+        onDiscard={handleDiscardEdits}
+        onPresent={() => setPresentOpen(true)}
+        canPresent={displayDeck.slides.some((s) => !s.hidden)}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canReset={canReset}
+        resetArmed={resetArmed}
+        onResetClick={handleResetClick}
         onOpenReview={() => setReviewOpen(true)}
+        canExport={displayDeck.slides.some((s) => !s.hidden)}
         projects={projects}
         activeId={activeId}
         onSwitchDeck={handleSwitchDeck}
@@ -1262,177 +1303,6 @@ export function MasterTemplatePage() {
         onRenameDeck={handleRenameDeck}
         onDeleteDeck={handleDeleteDeck}
       />
-
-      {/* ── Edit / Reset buttons - fixed, aligned with slide left edge ── */}
-      <div
-        ref={toolbarRef}
-        style={{
-          position: 'fixed',
-          top: 12,
-          left: 276, /* initial fallback; JS keeps it synced with the slide edge */
-          zIndex: 50,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        <button
-          id="btn-edit-content"
-          onClick={() => !editing && handleEnterEdit()}
-          disabled={editing}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            height: 34, padding: '0 14px',
-            fontSize: 12, fontWeight: 700,
-            // Long-hand, not the `border` shorthand: these buttons also set
-            // borderColor conditionally, and mixing the two makes React warn
-            // (and can drop the colour on re-render).
-            borderWidth: 1,
-            borderStyle: 'solid',
-            borderRadius: 0,
-            cursor: editing ? 'default' : 'pointer',
-            transition: 'background .15s, color .15s, border-color .15s',
-            borderColor: editing ? 'var(--emerald-200)' : '#d1d5db',
-            background: editing ? 'var(--emerald-50)' : '#ffffff',
-            color: editing ? 'var(--emerald-600)' : '#374151',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-          }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-          </svg>
-          {editing ? 'Editing…' : 'Edit Content'}
-        </button>
-
-        <button
-          id="btn-reset-deck"
-          onClick={handleResetClick}
-          disabled={!canReset}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            height: 34, padding: '0 14px',
-            fontSize: 12, fontWeight: 700,
-            // Long-hand, not the `border` shorthand: these buttons also set
-            // borderColor conditionally, and mixing the two makes React warn
-            // (and can drop the colour on re-render).
-            borderWidth: 1,
-            borderStyle: 'solid',
-            borderRadius: 0,
-            cursor: canReset ? 'pointer' : 'not-allowed',
-            transition: 'background .15s, color .15s, border-color .15s, opacity .15s',
-            opacity: canReset ? 1 : 0.4,
-            borderColor: resetArmed ? '#fecaca' : '#d1d5db',
-            background: resetArmed ? '#fef2f2' : '#ffffff',
-            color: resetArmed ? '#dc2626' : '#374151',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-          }}
-        >
-          {!resetArmed && (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-            </svg>
-          )}
-          {resetArmed ? 'Confirm Reset?' : 'Reset'}
-        </button>
-
-        {/* Undo / redo. Acts on the draft's own stack while editing, so the
-            controls stay live through an editing session rather than going dead
-            exactly when the user is making the most changes. */}
-        {(() => {
-          const iconBtn = (enabled: boolean) => ({
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 34, height: 34,
-            border: '1px solid #d1d5db',
-            borderRadius: 0,
-            cursor: enabled ? 'pointer' : 'not-allowed',
-            transition: 'background .15s, color .15s, opacity .15s',
-            opacity: enabled ? 1 : 0.4,
-            background: '#ffffff',
-            color: '#374151',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-          });
-          const undoEnabled = canUndo;
-          const redoEnabled = canRedo;
-          return (
-            <>
-              <button id="btn-undo" onClick={handleUndo} disabled={!undoEnabled} title="Undo (Cmd/Ctrl+Z)" aria-label="Undo" style={iconBtn(undoEnabled)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" /></svg>
-              </button>
-              <button id="btn-redo" onClick={handleRedo} disabled={!redoEnabled} title="Redo (Cmd/Ctrl+Shift+Z)" aria-label="Redo" style={iconBtn(redoEnabled)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" /></svg>
-              </button>
-            </>
-          );
-        })()}
-
-        {/* Session actions sit here, next to Edit Content, rather than in a
-            floating bar of their own: they end the editing session, so they
-            belong with the control that started it - not with the tools that
-            act on the current selection. */}
-        {editing && (
-          <>
-            <span style={{ width: 1, height: 22, background: '#e5e7eb', margin: '0 2px' }} />
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10,
-                textTransform: 'uppercase', letterSpacing: '0.1em',
-                color: dirty ? 'var(--emerald-600)' : '#9ca3af',
-                whiteSpace: 'nowrap', paddingRight: 2,
-              }}
-            >
-              {dirty ? 'Unsaved' : 'No changes'}
-            </span>
-            <button
-              onClick={handleSaveEdits}
-              style={{
-                height: 34, padding: '0 14px', fontSize: 12, fontWeight: 700,
-                border: 'none', borderRadius: 0, cursor: 'pointer',
-                background: dirty ? '#111827' : '#e5e7eb',
-                color: dirty ? '#fff' : '#6b7280',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-              }}
-            >
-              Save
-            </button>
-            <button
-              onClick={handleDiscardEdits}
-              style={{
-                height: 34, padding: '0 14px', fontSize: 12, fontWeight: 700,
-                borderWidth: 1, borderStyle: 'solid', borderColor: '#d1d5db',
-                borderRadius: 0, cursor: 'pointer',
-                background: '#fff', color: '#374151',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-              }}
-            >
-              {dirty ? 'Discard' : 'Done'}
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* Present - top-right of the frame, opens fullscreen slideshow. */}
-      <button
-        onClick={() => displayDeck.slides.some((s) => !s.hidden) && setPresentOpen(true)}
-        style={{
-          position: 'fixed',
-          top: 12,
-          right: 28,
-          zIndex: 50,
-          display: 'flex', alignItems: 'center', gap: 6,
-          height: 34, padding: '0 16px',
-          fontSize: 12, fontWeight: 700,
-          border: 'none',
-          borderRadius: 0,
-          cursor: 'pointer',
-          background: '#111827',
-          color: '#ffffff',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
-        }}
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3" /></svg>
-        Present
-      </button>
 
       <PresentationCanvas
         ast={ast}
@@ -1449,6 +1319,8 @@ export function MasterTemplatePage() {
         onActiveSlideChange={setActiveSlideId}
         onRenameSlide={handleRename}
         revision={textRevision}
+        currentId={currentSlideId}
+        onNavigate={setCurrentSlideId}
       />
 
       {/* One editing toolbar. This used to be three stacked bars (insert,
@@ -1459,15 +1331,17 @@ export function MasterTemplatePage() {
         <div
           style={{
             position: 'fixed',
-            bottom: 28,
-            left: 'calc(50% + 150px)', // centred over the canvas (half of --sidenav-w)
+            // Clears the stage's own nav/zoom bar along the bottom edge.
+            bottom: 74,
+            // Derived from the reserved rail column rather than a hardcoded
+            // half-width, so changing the rail can't silently push the toolbar
+            // off-centre over the stage.
+            left: 'calc(50% + (var(--sidenav-w) / 2))',
             transform: 'translateX(-50%)',
             zIndex: 101,
           }}
         >
           <EditToolbar
-            targetSlideTitle={targetSlide.title}
-            onInsert={handleInsertShape}
             textStyle={selectedStyle}
             effectiveSizePx={selection?.effectiveSizePx}
             fontName={fontLabel(selection?.effectiveFont)}
@@ -1513,10 +1387,29 @@ export function MasterTemplatePage() {
             onDeleteImportedShape={handleDeleteImportedShape}
             onSetImportedFill={handleSetImportedShapeFill}
             onSetImportedLine={handleSetImportedShapeLine}
-            notes={targetSlide.notes ?? ''}
-            onNotesChange={handleNotesChange}
           />
         </div>
+      )}
+
+      {/* Slide-level tools. Shown in both modes: speaker notes are worth
+          jotting without entering edit mode, and an insert click enters it. */}
+      {targetSlide && (
+        <StageRail
+          onInsert={handleInsertShape}
+          hasNotes={!!targetSlide.notes?.trim()}
+          notesOpen={notesOpen}
+          onToggleNotes={() => setNotesOpen((o) => !o)}
+        />
+      )}
+
+      {notesOpen && targetSlide && (
+        <NotesPanel
+          key={targetSlide.instanceId}
+          slideTitle={targetSlide.title}
+          notes={targetSlide.notes ?? ''}
+          onChange={handleNotesChange}
+          onClose={() => setNotesOpen(false)}
+        />
       )}
 
       {editing && chartEditorOpen && selectedOverlayShape?.kind === 'chart' && (
@@ -1534,6 +1427,8 @@ export function MasterTemplatePage() {
         slide={switchTargetSlide}
         onClose={() => setSwitchTargetId(null)}
         onConfirm={handleConfirmSwitch}
+        ast={ast}
+        logoUrl={displayDeck.logoUrl}
       />
 
       <ReviewModal
@@ -1548,9 +1443,7 @@ export function MasterTemplatePage() {
         onBulkDelete={handleBulkDelete}
         onJumpTo={(instanceId) => {
           setReviewOpen(false);
-          setTimeout(() => {
-            document.getElementById(instanceId)?.scrollIntoView({ behavior: 'smooth' });
-          }, 80);
+          setCurrentSlideId(instanceId);
         }}
       />
       <PresentMode

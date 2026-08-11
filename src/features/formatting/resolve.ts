@@ -11,6 +11,7 @@
  */
 
 import type { SlotOffset, SlotStyle } from '../deck/types';
+import { fontStack } from './rails';
 
 /** Reads a slot's drag offset, or undefined if it hasn't been moved. */
 export function offsetFor(
@@ -106,6 +107,7 @@ export function applyToCss(s: SlotStyle | undefined): React.CSSProperties {
   if (s.italic !== undefined) css.fontStyle = s.italic ? 'italic' : 'normal';
   if (s.underline !== undefined) css.textDecoration = s.underline ? 'underline' : 'none';
   if (s.color !== undefined) css.color = `#${s.color}`;
+  if (s.fontFamily !== undefined) css.fontFamily = fontStack(s.fontFamily) ?? s.fontFamily;
   if (s.align !== undefined) {
     css.textAlign = s.align;
     css.display = 'block';
@@ -124,6 +126,7 @@ export interface PptxTextOverride {
   underline?: boolean;
   color?: string; // hex, no '#'
   align?: 'left' | 'center' | 'right';
+  fontFace?: string;
 }
 
 /**
@@ -139,6 +142,7 @@ export function applyToPptx<T extends PptxTextOverride>(base: T, s: SlotStyle | 
   if (s.underline !== undefined) out.underline = s.underline;
   if (s.color !== undefined) out.color = s.color;
   if (s.align !== undefined) out.align = s.align;
+  if (s.fontFamily !== undefined) out.fontFace = s.fontFamily;
   return out;
 }
 

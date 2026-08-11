@@ -106,3 +106,29 @@ export function luminance(hex: string): number {
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
+
+/**
+ * The families a slot may be switched to.
+ *
+ * Deliberately short and brand-bound: these are the three faces the templates
+ * and the exporter already embed, so anything picked here survives the round
+ * trip into PowerPoint. `stack` is what the canvas renders with; `face` is the
+ * single family name the .pptx carries.
+ */
+export interface FontChoice {
+  /** Stored on the slot, and sent to PowerPoint verbatim. */
+  face: string;
+  label: string;
+  /** CSS stack used on the canvas, with fallbacks. */
+  stack: string;
+}
+
+export const FONT_CHOICES: FontChoice[] = [
+  { face: 'Space Grotesk', label: 'Display', stack: '"Space Grotesk", "Inter", sans-serif' },
+  { face: 'Satoshi', label: 'Sans', stack: '"Satoshi", "Inter", ui-sans-serif, system-ui, sans-serif' },
+  { face: 'JetBrains Mono', label: 'Mono', stack: '"JetBrains Mono", ui-monospace, SFMono-Regular, monospace' },
+];
+
+export function fontStack(face: string | undefined): string | undefined {
+  return FONT_CHOICES.find((f) => f.face === face)?.stack;
+}

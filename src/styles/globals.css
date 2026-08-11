@@ -2,6 +2,46 @@
 @import "../theme/BrandGuidelines.css";
 
 /* -------------------------------------------------------------------------
+   Modal chrome
+   One overlay treatment and one entrance for every dialog in the app, so a
+   modal can't look like it belongs to a different product depending on which
+   button opened it. Applied by class rather than repeated as utilities at
+   each call site, which is how they drifted apart in the first place.
+   ------------------------------------------------------------------------- */
+.wg-overlay {
+  /* Lighter scrim than the old neutral-900/60 but a much deeper blur: the
+     workbench stays legible underneath (so you keep your place in the deck)
+     while everything behind the dialog goes optically "out of focus". */
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  animation: wg-overlay-in 0.16s ease-out;
+}
+
+.wg-modal {
+  background: #fff;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-sharp);
+  box-shadow: 0 2px 8px rgba(15, 23, 20, 0.06), 0 32px 80px -20px rgba(15, 23, 20, 0.35);
+  animation: wg-modal-in 0.2s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+
+@keyframes wg-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes wg-modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.975); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Motion is decoration here - the dialog is just as usable without it. */
+@media (prefers-reduced-motion: reduce) {
+  .wg-overlay, .wg-modal { animation: none; }
+}
+
+/* -------------------------------------------------------------------------
    Editable slide slots (edit mode)
    Applied to contentEditable spans rendered by PresentationCanvas.
    ------------------------------------------------------------------------- */
@@ -23,3 +63,8 @@
   outline-color: var(--emerald-500);
   background: color-mix(in srgb, var(--emerald-500) 6%, transparent);
 }
+
+/* The edit toolbar scrolls horizontally when its contextual middle outgrows the
+   stage; the scrollbar itself would be chrome-on-chrome noise. */
+.wg-doc [data-edit-toolbar]::-webkit-scrollbar { height: 0; }
+.wg-doc [data-edit-toolbar] { scrollbar-width: none; }

@@ -11,6 +11,7 @@ const GLOBAL_SHORTCUTS: Shortcut[] = [
   { keys: ['Cmd/Ctrl', 'Shift', 'Z'], description: 'Redo' },
   { keys: ['Esc'], description: 'Close the open dialog' },
   { keys: ['?'], description: 'Show this shortcuts overlay' },
+  { keys: ['←', '→'], description: 'Previous / next slide on the stage' },
 ];
 
 /** Edit-mode gestures. Documented here because several of them (shift-click to
@@ -34,7 +35,7 @@ const PRESENT_SHORTCUTS: Shortcut[] = [
 
 function KeyCap({ label }: { label: string }) {
   return (
-    <kbd className="px-1.5 py-0.5 text-[11px] font-mono font-bold text-neutral-700 bg-neutral-100 border border-neutral-300 rounded-[4px]">
+    <kbd className="px-1.5 py-0.5 text-[11px] font-mono font-bold text-neutral-700 bg-neutral-100 border border-neutral-300 rounded-[var(--radius-sharp)]">
       {label}
     </kbd>
   );
@@ -70,10 +71,10 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-neutral-900/60 backdrop-blur-sm p-6" onClick={onClose}>
+    <div className="wg-overlay fixed inset-0 z-[200] flex items-center justify-center p-6" onClick={onClose}>
       <div
         ref={panelRef}
-        className="w-full max-w-sm bg-white rounded-[var(--radius-sharp)] shadow-2xl overflow-hidden"
+        className="wg-modal w-full max-w-sm overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-neutral-150">

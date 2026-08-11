@@ -19,22 +19,35 @@
   --radius-xs: 6px;
   --radius-sharp: 0px;
 
-  /* Width of the fixed left panel; the deck reserves this space then centers. */
-  --sidenav-w: 300px;
+  /* Column reserved for the floating rail: gap + rail + gap. */
+  --sidenav-w: 264px;
 
   --shadow-soft: 0 1px 2px rgba(15,23,20,0.04), 0 12px 32px -12px rgba(15,23,20,0.10);
   --shadow-lift: 0 2px 4px rgba(15,23,20,0.05), 0 24px 48px -16px rgba(15,23,20,0.16);
+  /* Multi-layered elevation for the 1920x1080 slide on the workbench: a tight
+     contact shadow plus a wide soft cast, so it reads as a sheet lifted off
+     the desk rather than a card with a drop shadow.
+     Deliberately oversized. The stage transform scales slides to ~0.6, and
+     transforms scale box-shadows too, so blurs authored at "correct" screen
+     values arrive about 40% weaker than intended and the float reads as flat. */
+  --shadow-stage: 0 1px 2px rgba(15,23,20,0.05), 0 10px 30px -12px rgba(15,23,20,0.16);
 
   --pure-black:#000000;
   --pure-white:#ffffff;
 
   font-family: var(--font-sans);
-  background: var(--neutral-100);
+  /* The stage: a dark desk with a soft pool of light behind where the slide
+     sits. The slide itself is pure white, so this has to be dark enough for it
+     to read as the artwork rather than as another panel. An earlier pass used
+     #F8F9FA here, three luminance points off the old --neutral-100, and the
+     change was invisible. */
+  background: var(--stage-bg);
   color: var(--neutral-900);
   -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   display: block;
-  /* Reserve the fixed sidebar's width so .book can center in the remaining space. */
+  /* Reserve the fixed rail's width; the stage centres in what's left. */
   padding-left: var(--sidenav-w);
 }
 
@@ -44,44 +57,104 @@
   --accent-50:#f0fdf4; --accent-100:#dcfce7; --accent-200:#bbf7d0; --accent-300:#86efac; --accent-400:#4ade80; --accent-500:#22c55e; --accent-600:#16a34a; --accent-700:#15803d; --accent-800:#166534; --accent-900:#14532d;
 }
 
-/* ================= SIDE NAV ================= */
+/* ================= FLOATING RAIL =================
+   The rail floats between the header and the CTA beneath it rather than
+   filling the window edge to edge, so the stage reads as the room and the
+   panels as tools sitting in it. */
+.wg-doc {
+  --gap: 16px;
+  --header-h: 56px;
+  --rail-w: 232px;
+  --cta-h: 46px;
+}
+
 .wg-doc .sidenav {
   position: fixed;
-  top: 0; left: 0; bottom: 0;
-  width: var(--sidenav-w);
-  background: var(--pure-white);
-  border-right: 1px solid var(--neutral-150);
+  left: var(--gap);
+  top: calc(12px + var(--header-h) + var(--gap));
+  bottom: calc(var(--gap) + var(--cta-h) + 12px);
+  width: var(--rail-w);
+  background: var(--chrome-surface);
+  border: 1px solid var(--chrome-border);
+  color: var(--chrome-text);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   z-index: 100;
 }
-.wg-doc .sidenav-brand {
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 22px 20px 18px;
-  border-bottom: 1px solid var(--neutral-150);
+.wg-doc .sidenav-head { padding: 10px 9px 8px; flex-shrink: 0; }
+/* min-height:0 is what lets this flex child actually shrink and scroll
+   instead of growing the rail past its own bounds. */
+.wg-doc .sidenav-body { position: relative; flex: 1; min-height: 0; }
+/* overflow-x is hidden, not auto: the hover tooltips are absolutely positioned
+   and nowrap, and absolutely positioned children still count toward a
+   container's scrollable width - which is what was adding a horizontal
+   scrollbar to the rail even though nothing visible was too wide. */
+.wg-doc .sidenav-scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 8px 8px;
+  scrollbar-gutter: stable;
 }
-.wg-doc .sidenav-brand img { width: 100px; height: auto; }
-.wg-doc .sidenav-brand span { font-family: var(--font-display); font-weight: 700; font-size: 14.5px; letter-spacing: 0.01em; }
-.wg-doc .sidenav-scroll { flex: 1; overflow-y: auto; padding: 16px 12px; }
+.wg-doc .sidenav-fade {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 20px;
+  background: linear-gradient(var(--chrome-surface), transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.wg-doc .sidenav-fade.is-visible { opacity: 1; }
 
-.wg-doc .sidenav-tools { padding: 18px 16px 22px; border-top: 1px solid var(--neutral-150); }
+/* The primary action floats under the rail, outside it. */
+.wg-doc .sidenav-cta {
+  position: fixed;
+  left: var(--gap);
+  bottom: var(--gap);
+  width: var(--rail-w);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+
+/* Mouse-click focus on a <button> leaves the browser's default blue ring
+ * stuck on it until something else takes focus - most visibly on
+ * StudioHeader's Present tab, which stayed ringed after the fullscreen
+ * overlay it opened was closed and focus returned to it. Keyboard users still
+ * get the ring via :focus-visible, which is the distinction this is meant to
+ * draw. */
+.wg-doc button:focus { outline: none; }
+.wg-doc button:focus-visible { outline: 2px solid var(--emerald-500); outline-offset: 2px; }
 .wg-doc .tools-label { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--neutral-400); }
 
 
 /* ================= MAIN / PAGES ================= */
 /* .wg-doc reserves the sidebar via padding-left; auto margins center the deck
    in the remaining viewport so it isn't left-pinned with dead space on the right. */
-.wg-doc .book { margin: 0 auto; padding: 40px 40px 120px; max-width: 1200px; }
+/* The stage viewport. Formerly a scrolling "book" of stacked pages; it is now a
+   fixed-height area that presents exactly one slide, centred, with the deck
+   navigated from the rail instead of by scrolling. The name is kept because the
+   print rules and the exporter both key off it. */
+.wg-doc .book {
+  position: relative;
+  height: 100vh;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
 .wg-doc .page {
   background: var(--pure-white);
   border-radius: 0;
-  box-shadow: var(--shadow-soft);
-  margin-bottom: 32px;
-  padding: 56px 64px;
+  box-shadow: var(--shadow-stage);
   position: relative;
   overflow: hidden;
-  min-height: 640px;
-  scroll-margin-top: 24px;
 }
 .wg-doc .eyebrow {
   font-family: var(--font-mono); font-size: 11px; font-weight: 500;
@@ -99,10 +172,11 @@
 }
 
 @media (max-width: 720px) {
+  /* No room for the rail beside the stage; the CTA stays, since without it
+     there is no way to bring content in. */
   .wg-doc { padding-left: 0; }
   .wg-doc .sidenav { display: none; }
-  .wg-doc .book { margin: 0; padding: 24px 16px 80px; }
-  .wg-doc .page { padding: 36px 24px; }
+  .wg-doc .sidenav-cta { left: var(--gap); right: var(--gap); width: auto; }
 }
 
 /* Upload zone - explicit values to survive the * { padding:0 } reset */
@@ -139,16 +213,20 @@
     print-color-adjust: exact !important;
   }
 
-  /* Hide UI elements during print */
+  /* Hide UI elements during print. Matched on any element rather than only
+     `div`, because the studio header is a <header> and the old div-only
+     selector would have let it print across the first exported slide. The
+     #btn-* ids the old top bar used are gone (StudioHeader owns those
+     controls now), so position:fixed is what identifies editor chrome. */
   .wg-doc .sidenav,
-  .wg-doc #btn-edit-content,
-  .wg-doc #btn-reset-deck,
-  .wg-doc div[style*="position: fixed"],
-  .wg-doc div[style*="position:fixed"] {
+  .wg-doc [style*="position: fixed"],
+  .wg-doc [style*="position:fixed"] {
     display: none !important;
   }
 
   .wg-doc .book {
+    /* The workbench's ambient radial belongs to the editor, not the artefact. */
+    background: none !important;
     margin: 0 !important;
     padding: 0 !important;
     margin-left: 0 !important;

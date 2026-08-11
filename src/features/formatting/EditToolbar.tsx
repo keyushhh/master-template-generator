@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ImportedShape, OverlayChartType, OverlayShape, SlotStyle } from '../deck/types';
 import {
   ACCENT_SWATCHES,
+  FONT_CHOICES,
   NEUTRAL_SWATCHES,
   SIZE_MAX,
   SIZE_MIN,
@@ -42,7 +43,7 @@ const ctl: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
   height: 28, padding: '0 8px',
   border: '1px solid transparent', background: 'transparent',
-  color: 'rgba(255,255,255,0.8)', cursor: 'pointer',
+  color: 'var(--neutral-600)', cursor: 'pointer',
   borderRadius: 'var(--radius-sharp)',
   fontSize: 12, fontWeight: 600, lineHeight: 1,
   whiteSpace: 'nowrap',
@@ -56,7 +57,7 @@ const mono: React.CSSProperties = {
 };
 
 function Sep() {
-  return <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.14)', flexShrink: 0 }} />;
+  return <span style={{ width: 1, height: 18, background: 'var(--neutral-200)', flexShrink: 0 }} />;
 }
 
 function Caret() {
@@ -117,7 +118,7 @@ function Menu({
       >
         {icon}
         {label}
-        {badge && <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--emerald-400)' }} />}
+        {badge && <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--emerald-500)' }} />}
         <Caret />
       </button>
       {open && (
@@ -125,9 +126,9 @@ function Menu({
           style={{
             position: 'absolute', bottom: 'calc(100% + 12px)', left: 0, zIndex: 300,
             width, padding: 8,
-            background: 'var(--neutral-900)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            boxShadow: 'var(--shadow-soft)',
+            background: '#fff',
+            border: '1px solid var(--neutral-200)',
+            boxShadow: '0 2px 4px rgba(15,23,20,0.05), 0 16px 40px -12px rgba(15,23,20,0.20)',
             borderRadius: 'var(--radius-sharp)',
           }}
         >
@@ -152,8 +153,8 @@ function Row({
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%',
         height: 32, padding: '0 8px',
-        border: 'none', background: active ? 'rgba(16,185,129,0.18)' : 'transparent',
-        color: disabled ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.88)',
+        border: 'none', background: active ? 'var(--emerald-50)' : 'transparent',
+        color: disabled ? 'var(--neutral-300)' : active ? 'var(--emerald-700)' : 'var(--neutral-700)',
         cursor: disabled ? 'default' : 'pointer',
         borderRadius: 'var(--radius-sharp)',
         fontSize: 12.5, fontWeight: 600, textAlign: 'left',
@@ -161,7 +162,7 @@ function Row({
     >
       {icon && <span style={{ display: 'inline-flex', width: 14, justifyContent: 'center' }}>{icon}</span>}
       <span style={{ flex: 1 }}>{label}</span>
-      {hint && <span style={{ ...mono, fontSize: 9, color: 'rgba(255,255,255,0.35)' }}>{hint}</span>}
+      {hint && <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)' }}>{hint}</span>}
     </button>
   );
 }
@@ -199,8 +200,8 @@ function SizeStepper({
         style={{
           width: 42, height: 28, textAlign: 'center',
           fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600,
-          color: '#fff', background: 'rgba(255,255,255,0.09)',
-          border: '1px solid rgba(255,255,255,0.16)',
+          color: 'var(--neutral-900)', background: '#fff',
+          border: '1px solid var(--neutral-200)',
           borderRadius: 'var(--radius-sharp)',
         }}
       />
@@ -225,8 +226,17 @@ function ColorMenu({
   emptySwatch?: React.ReactNode;
 }) {
   const [hex, setHex] = useState('');
+  const [recent, setRecent] = useState<string[]>(loadRecent);
   const neutrals = onDark ? [...NEUTRAL_SWATCHES].reverse() : NEUTRAL_SWATCHES;
   const custom = !!value && !isBrandColor(value);
+
+  /** Every path that sets a colour goes through here, so the memory can't
+   *  miss one (palette chip, typed hex, or eyedropper). */
+  const pick = (h: string, close?: () => void) => {
+    onPick(h);
+    setRecent(pushRecent(h));
+    close?.();
+  };
 
   const chip = (h: string, label: string, light?: boolean, close?: () => void) => {
     const on = value?.toUpperCase() === h.toUpperCase();
@@ -235,11 +245,11 @@ function ColorMenu({
         key={h}
         title={label}
         aria-label={label}
-        onClick={() => { onPick(h); close?.(); }}
+        onClick={() => pick(h, close)}
         style={{
           width: 22, height: 22, padding: 0, cursor: 'pointer', background: `#${h}`,
-          border: on ? '2px solid var(--emerald-400)'
-            : light ? '1px solid rgba(255,255,255,0.35)' : '1px solid rgba(255,255,255,0.12)',
+          border: on ? '2px solid var(--emerald-500)'
+            : light ? '1px solid var(--neutral-300)' : '1px solid var(--neutral-200)',
           borderRadius: 'var(--radius-sharp)',
         }}
       />
@@ -257,7 +267,7 @@ function ColorMenu({
             style={{
               width: 15, height: 15, flexShrink: 0, borderRadius: 2,
               background: value ? `#${value}` : 'linear-gradient(135deg,#fff 50%,#10B981 50%)',
-              border: '1px solid rgba(255,255,255,0.45)',
+              border: '1px solid var(--neutral-300)',
             }}
           />
         )
@@ -265,7 +275,7 @@ function ColorMenu({
     >
       {(close) => (
         <>
-          <div style={{ ...mono, color: 'rgba(255,255,255,0.4)', padding: '2px 4px 8px' }}>{paletteLabel}</div>
+          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 8px' }}>{paletteLabel}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
             {noneSwatch && (
               <button
@@ -275,7 +285,7 @@ function ColorMenu({
                 style={{
                   width: 22, height: 22, padding: 0, cursor: 'pointer', position: 'relative',
                   background: 'transparent',
-                  border: !value ? '2px solid var(--emerald-400)' : '1px solid rgba(255,255,255,0.35)',
+                  border: !value ? '2px solid var(--emerald-500)' : '1px solid var(--neutral-300)',
                   borderRadius: 'var(--radius-sharp)',
                 }}
               >
@@ -289,26 +299,64 @@ function ColorMenu({
           <div style={{ display: 'flex', gap: 6, marginTop: 8, padding: '0 2px' }}>
             {ACCENT_SWATCHES.map((s) => chip(s.hex, s.label, false, close))}
           </div>
+          {/* Colours this deck has actually used, most recent first. */}
+          {recent.length > 0 && (
+            <>
+              <div style={{ ...mono, color: 'var(--neutral-400)', padding: '12px 4px 6px' }}>Recent</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
+                {recent.map((h) => chip(h, `#${h}`, false, close))}
+              </div>
+            </>
+          )}
+
           <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', padding: '0 2px' }}>
-            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>#</span>
+            <span style={{ color: 'var(--neutral-400)', fontSize: 12 }}>#</span>
             <input
               value={hex}
               onChange={(e) => setHex(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter') return;
                 const h = normalizeHex(hex);
-                if (h) { onPick(h); setHex(''); close(); }
+                if (h) { pick(h, close); setHex(''); }
               }}
               placeholder={custom ? value : 'custom hex'}
               spellCheck={false}
               style={{
                 flex: 1, minWidth: 0, height: 26, padding: '0 6px',
                 fontFamily: 'var(--font-mono)', fontSize: 12,
-                color: '#fff', background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.18)',
+                color: 'var(--neutral-900)', background: '#fff',
+                border: '1px solid var(--neutral-200)',
                 borderRadius: 'var(--radius-sharp)',
               }}
             />
+            {/* Screen eyedropper. Chromium-only, so it is absent rather than
+                disabled where the API doesn't exist. */}
+            {eyeDropper() && (
+              <button
+                title="Pick a colour from anywhere on screen"
+                aria-label="Pick a colour from screen"
+                onClick={async () => {
+                  const Ctor = eyeDropper();
+                  if (!Ctor) return;
+                  try {
+                    const { sRGBHex } = await new Ctor().open();
+                    const h = normalizeHex(sRGBHex);
+                    if (h) pick(h, close);
+                  } catch {
+                    /* the user dismissed the picker - not an error */
+                  }
+                }}
+                style={{
+                  ...ctl, width: 26, height: 26, padding: 0, flexShrink: 0,
+                  border: '1px solid var(--neutral-200)',
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="m2 22 1-1h3l9-9" /><path d="M3 21v-3l9-9" />
+                  <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z" />
+                </svg>
+              </button>
+            )}
           </div>
           {value && !noneSwatch && (
             <div style={{ marginTop: 8 }}>
@@ -319,6 +367,46 @@ function ColorMenu({
       )}
     </Menu>
   );
+}
+
+/**
+ * Recently-used colours, remembered across selections and sessions.
+ *
+ * The brand rails deliberately offer a small fixed palette, but a deck often
+ * has one or two off-palette colours (a client's brand red, say) that then have
+ * to be re-typed as hex on every element they're applied to. This is the memory
+ * for exactly that: it records what was actually picked rather than widening
+ * the palette everyone starts from.
+ *
+ * Module-level so every ColorMenu in the bar shares one list, and mirrored to
+ * localStorage so it survives a reload the way the deck itself does.
+ */
+const RECENT_KEY = 'wozku.recentColors';
+const RECENT_MAX = 8;
+
+function loadRecent(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter((h) => typeof h === 'string').slice(0, RECENT_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+function pushRecent(hex: string): string[] {
+  const up = hex.toUpperCase();
+  // Most-recent-first, de-duplicated: re-picking a colour promotes it rather
+  // than adding a second copy that pushes something else out.
+  const next = [up, ...loadRecent().filter((h) => h.toUpperCase() !== up)].slice(0, RECENT_MAX);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* quota - not worth failing a colour pick over */ }
+  return next;
+}
+
+/** Chromium exposes a real screen eyedropper; everywhere else the button is
+ *  simply absent rather than present-and-broken. */
+interface EyeDropperCtor { new (): { open: () => Promise<{ sRGBHex: string }> } }
+function eyeDropper(): EyeDropperCtor | undefined {
+  return (window as unknown as { EyeDropper?: EyeDropperCtor }).EyeDropper;
 }
 
 function AlignIcon({ a }: { a: 'left' | 'center' | 'right' }) {
@@ -336,9 +424,6 @@ function AlignIcon({ a }: { a: 'left' | 'center' | 'right' }) {
 // ── The bar ─────────────────────────────────────────────────────────────────
 
 interface EditToolbarProps {
-  targetSlideTitle: string;
-  onInsert: (kind: OverlayShape['kind']) => void;
-
   /** Text formatting target, when the selection carries text. */
   textStyle?: SlotStyle;
   effectiveSizePx?: number;
@@ -389,13 +474,9 @@ interface EditToolbarProps {
   onSetImportedFill: (hex: string | undefined) => void;
   onSetImportedLine: (line: { color: string; widthPx: number } | undefined) => void;
 
-  notes: string;
-  onNotesChange: (notes: string) => void;
 }
 
 export function EditToolbar({
-  targetSlideTitle,
-  onInsert,
   textStyle,
   effectiveSizePx,
   fontName,
@@ -426,13 +507,7 @@ export function EditToolbar({
   onDeleteImportedShape,
   onSetImportedFill,
   onSetImportedLine,
-  notes,
-  onNotesChange,
 }: EditToolbarProps) {
-  const [notesDraft, setNotesDraft] = useState(notes);
-  const [notesEditing, setNotesEditing] = useState(false);
-  useEffect(() => { if (!notesEditing) setNotesDraft(notes); }, [notes, notesEditing]);
-
   const bounds = selectedShape ? layerBounds(shapes, selectedShape.id) : null;
   const shown = textStyle?.sizePx ?? effectiveSizePx;
   const grouped = selectedSlotCount > 1;
@@ -444,62 +519,47 @@ export function EditToolbar({
   return (
     <div
       // Keeps the caret in the slide: a plain click on a control would blur the
-      // field, and blur is what commits its text. The notes textarea is exempt
-      // because it needs real focus.
+      // field, and blur is what commits its text. Real inputs are exempt
+      // because they need focus of their own.
+      data-edit-toolbar
       onMouseDown={(e) => {
         if ((e.target as HTMLElement).closest('textarea, input')) return;
         e.preventDefault();
       }}
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        height: BAR_H, padding: '0 10px',
-        background: 'var(--neutral-900)',
-        boxShadow: 'var(--shadow-soft)',
-        border: '1px solid rgba(255,255,255,0.08)',
+        height: BAR_H, padding: '0 14px',
+        // Never wider than the stage it floats over: the contextual middle
+        // still expands for a table or chart selection.
+        maxWidth: 'calc(100vw - var(--sidenav-w) - 48px)',
+        overflowX: 'auto',
+        overflowY: 'hidden',
+        background: 'rgba(255,255,255,0.95)',
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        boxShadow: '0 1px 2px rgba(15,23,20,0.04), 0 12px 32px -8px rgba(15,23,20,0.14)',
+        border: '1px solid rgba(226,232,240,0.9)',
         borderRadius: 'var(--radius-sharp)',
       }}
     >
-      {/* Insert - one menu, not four buttons. Keeps the bar's left edge stable
-          regardless of what's selected. */}
-      <Menu
-        title={`Insert on “${targetSlideTitle}”`}
-        label="Insert"
-        width={190}
-        icon={
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden>
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        }
+      {/* Session banner. Anchors the bar's left edge with something that never
+          changes with the selection, and is the one place the undo/redo
+          shortcuts are advertised now that those buttons live in the header
+          rather than beside the canvas. */}
+      <span
+        title="Edit mode — Undo ⌘Z · Redo ⌘⇧Z · Esc drops the selection"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          ...mono, fontSize: 9.5, fontWeight: 700,
+          color: 'var(--emerald-700)', whiteSpace: 'nowrap', flexShrink: 0,
+        }}
       >
-        {(close) => (
-          <>
-            <Row
-              label="Text box" onClick={() => { onInsert('text'); close(); }}
-              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 6h16M12 6v13" /></svg>}
-            />
-            <Row
-              label="Rectangle" onClick={() => { onInsert('rect'); close(); }}
-              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="5" width="18" height="14" /></svg>}
-            />
-            <Row
-              label="Oval" onClick={() => { onInsert('ellipse'); close(); }}
-              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><ellipse cx="12" cy="12" rx="9" ry="7" /></svg>}
-            />
-            <Row
-              label="Image" onClick={() => { onInsert('image'); close(); }}
-              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="3" y="4" width="18" height="16" /><path d="M3 16l5-5 4 4 3-3 6 6" /></svg>}
-            />
-            <Row
-              label="Table" onClick={() => { onInsert('table'); close(); }}
-              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="4" width="18" height="16" /><path d="M3 10h18M3 16h18M9 4v16M15 4v16" /></svg>}
-            />
-            <Row
-              label="Chart" onClick={() => { onInsert('chart'); close(); }}
-              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 20V10M11 20V4M18 20v-7" /></svg>}
-            />
-          </>
-        )}
-      </Menu>
+        <span
+          className="wg-pulse"
+          style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--emerald-500)', flexShrink: 0 }}
+        />
+        Edit Mode
+      </span>
 
       <Sep />
 
@@ -513,21 +573,58 @@ export function EditToolbar({
             // is actually about to change.
             <span
               title="Formatting, nudging and dragging apply to all of these"
-              style={{ ...mono, color: 'var(--emerald-400)', whiteSpace: 'nowrap' }}
+              style={{ ...mono, color: 'var(--emerald-600)', whiteSpace: 'nowrap' }}
             >
               {selectedSlotCount} fields
             </span>
           ) : (
-            <span
-              title={fontName ? `${fontName} — ${fieldLabel}` : fieldLabel}
-              style={{
-                fontFamily: fontName ? `"${fontName}", var(--font-sans)` : 'var(--font-sans)',
-                fontSize: 12, color: 'rgba(255,255,255,0.7)',
-                maxWidth: 132, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}
+            <Menu
+              title={`Typeface — ${fieldLabel}`}
+              label=""
+              width={200}
+              active={!!textStyle?.fontFamily}
+              icon={
+                <span
+                  style={{
+                    fontFamily: fontName ? `"${fontName}", var(--font-sans)` : 'var(--font-sans)',
+                    fontSize: 12,
+                    maxWidth: 116, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {fontName ?? fieldLabel}
+                </span>
+              }
             >
-              {fontName ?? fieldLabel}
-            </span>
+              {(close) => (
+                <>
+                  {/* Each option renders in the face it applies, so the choice
+                      is made by looking rather than by reading a name. */}
+                  {FONT_CHOICES.map((f) => (
+                    <button
+                      key={f.face}
+                      onClick={() => { onPatch({ fontFamily: f.face }); close(); }}
+                      style={{
+                        display: 'flex', alignItems: 'baseline', gap: 10, width: '100%',
+                        height: 38, padding: '0 8px', border: 'none', cursor: 'pointer',
+                        background: textStyle?.fontFamily === f.face ? 'var(--emerald-50)' : 'transparent',
+                        color: textStyle?.fontFamily === f.face ? 'var(--emerald-700)' : 'var(--neutral-700)',
+                        borderRadius: 'var(--radius-sharp)', textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ fontFamily: f.stack, fontSize: 15, fontWeight: 600 }}>Ag</span>
+                      <span style={{ fontFamily: f.stack, fontSize: 12.5 }}>{f.face}</span>
+                      <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', marginLeft: 'auto' }}>{f.label}</span>
+                    </button>
+                  ))}
+                  {textStyle?.fontFamily && (
+                    <>
+                      <div style={{ height: 1, background: 'var(--neutral-200)', margin: '6px 4px' }} />
+                      <Row label="Template typeface" onClick={() => { onPatch({ fontFamily: undefined }); close(); }} />
+                    </>
+                  )}
+                </>
+              )}
+            </Menu>
           )}
 
           <SizeStepper shown={shown} onSet={(px) => onPatch({ sizePx: px })} />
@@ -560,11 +657,11 @@ export function EditToolbar({
                   {GROUP_ALIGNMENTS.map((a, i) => (
                     <span key={a.key}>
                       {/* Horizontal targets, then vertical. */}
-                      {i === 3 && <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '6px 4px' }} />}
+                      {i === 3 && <div style={{ height: 1, background: 'var(--neutral-200)', margin: '6px 4px' }} />}
                       <Row label={a.label} hint={a.hint} onClick={() => { onAlignGroup(a.key); close(); }} />
                     </span>
                   ))}
-                  <div style={{ ...mono, fontSize: 9, color: 'rgba(255,255,255,0.32)', padding: '8px 6px 2px', letterSpacing: '0.08em', textTransform: 'none', lineHeight: 1.5 }}>
+                  <div style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', padding: '8px 6px 2px', letterSpacing: '0.08em', textTransform: 'none', lineHeight: 1.5 }}>
                     Moves all {selectedSlotCount} together. Spacing between them
                     doesn’t change.
                   </div>
@@ -602,7 +699,7 @@ export function EditToolbar({
 
           {isImportedSelection && (
             <button title="Delete this text box" aria-label="Delete text box" onClick={onDeleteImportedShape}
-              style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
+              style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -615,7 +712,7 @@ export function EditToolbar({
               while a cell is the text target. */}
           {selectedShape?.kind === 'table' && (
             <button title="Delete this table" aria-label="Delete table" onClick={onDeleteShape}
-              style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
+              style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -629,7 +726,7 @@ export function EditToolbar({
             <>
               <button title="Outlined — for context and process" aria-label="Outline fill"
                 onClick={() => onSetFill(undefined)} style={{ ...ctl, padding: '0 7px' }}>
-                <span style={{ width: 14, height: 14, border: '1.5px solid rgba(255,255,255,0.8)' }} />
+                <span style={{ width: 14, height: 14, border: '1.5px solid var(--neutral-400)' }} />
               </button>
               <button title="Emerald tint — for the payoff, one per slide" aria-label="Emerald tint fill"
                 onClick={() => onSetFill('ECFDF5')} style={{ ...ctl, padding: '0 7px' }}>
@@ -647,7 +744,7 @@ export function EditToolbar({
                     <Row label="Add row" onClick={() => { onTableAddRow(); close(); }} />
                     <Row label="Delete row" disabled={tableDims.rows <= 1}
                       onClick={() => { onTableDeleteRow(); close(); }} />
-                    <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '6px 4px' }} />
+                    <div style={{ height: 1, background: 'var(--neutral-200)', margin: '6px 4px' }} />
                     <Row label="Add column" onClick={() => { onTableAddCol(); close(); }} />
                     <Row label="Delete column" disabled={tableDims.cols <= 1}
                       onClick={() => { onTableDeleteCol(); close(); }} />
@@ -692,13 +789,13 @@ export function EditToolbar({
                   onClick={() => { onLayerMove('backward'); close(); }} />
                 <Row label="Send to back" hint="⌥⇧↓" disabled={bounds?.isFirst}
                   onClick={() => { onLayerMove('back'); close(); }} />
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '6px 4px' }} />
+                <div style={{ height: 1, background: 'var(--neutral-200)', margin: '6px 4px' }} />
                 <Row
                   label="Behind slide content"
                   active={!!selectedShape.behind}
                   onClick={() => { onToggleBehind(); close(); }}
                 />
-                <div style={{ ...mono, fontSize: 9, color: 'rgba(255,255,255,0.32)', padding: '6px 6px 2px', letterSpacing: '0.08em', textTransform: 'none', lineHeight: 1.5 }}>
+                <div style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', padding: '6px 6px 2px', letterSpacing: '0.08em', textTransform: 'none', lineHeight: 1.5 }}>
                   {bounds && `Layer ${bounds.index + 1} of ${bounds.total}`}
                   {selectedShape.behind ? ' · behind the slide’s own text' : ''}
                 </div>
@@ -707,7 +804,7 @@ export function EditToolbar({
           </Menu>
 
           <button title="Delete this shape" aria-label="Delete shape" onClick={onDeleteShape}
-            style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
+            style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -718,7 +815,7 @@ export function EditToolbar({
         <>
           <span
             title="Alignment, nudging, dragging and delete apply to all of these"
-            style={{ ...mono, color: 'var(--emerald-400)', whiteSpace: 'nowrap' }}
+            style={{ ...mono, color: 'var(--emerald-600)', whiteSpace: 'nowrap' }}
           >
             {importedShapeGroupCount} shapes
           </span>
@@ -726,12 +823,12 @@ export function EditToolbar({
           <Menu title="Align the selected shapes to each other" label="Align" width={200}>
             {(close) => (
               <>
-                <div style={{ ...mono, color: 'rgba(255,255,255,0.4)', padding: '2px 4px 6px' }}>Horizontal</div>
+                <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 6px' }}>Horizontal</div>
                 <Row label="Left" onClick={() => { onAlignShapes('left'); close(); }} />
                 <Row label="Centre" onClick={() => { onAlignShapes('centerX'); close(); }} />
                 <Row label="Right" onClick={() => { onAlignShapes('right'); close(); }} />
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '8px 4px' }} />
-                <div style={{ ...mono, color: 'rgba(255,255,255,0.4)', padding: '2px 4px 6px' }}>Vertical</div>
+                <div style={{ height: 1, background: 'var(--neutral-200)', margin: '8px 4px' }} />
+                <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 6px' }}>Vertical</div>
                 <Row label="Top" onClick={() => { onAlignShapes('top'); close(); }} />
                 <Row label="Middle" onClick={() => { onAlignShapes('centerY'); close(); }} />
                 <Row label="Bottom" onClick={() => { onAlignShapes('bottom'); close(); }} />
@@ -740,7 +837,7 @@ export function EditToolbar({
           </Menu>
 
           <button title="Delete selected shapes" aria-label="Delete selected shapes" onClick={onDeleteImportedShape}
-            style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
+            style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -758,7 +855,7 @@ export function EditToolbar({
               value={importedShape.fill}
               onDark={onDark}
               onPick={onSetImportedFill}
-              emptySwatch={<span style={{ width: 15, height: 15, border: '1.5px solid rgba(255,255,255,0.55)', borderRadius: 2 }} />}
+              emptySwatch={<span style={{ width: 15, height: 15, border: '1.5px solid var(--neutral-400)', borderRadius: 2 }} />}
             />
           )}
 
@@ -771,7 +868,7 @@ export function EditToolbar({
             onDark={onDark}
             onPick={(hex) => onSetImportedLine(hex ? { color: hex, widthPx: importedShape.line?.widthPx ?? 1 } : undefined)}
             emptySwatch={
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2" aria-hidden>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--neutral-400)" strokeWidth="2" aria-hidden>
                 <rect x="4" y="4" width="16" height="16" rx="2" />
               </svg>
             }
@@ -782,7 +879,7 @@ export function EditToolbar({
               <button title="Thinner stroke" aria-label="Thinner stroke"
                 onClick={() => onSetImportedLine({ color: importedShape.line!.color, widthPx: Math.max(1, importedShape.line!.widthPx - 1) })}
                 style={{ ...ctl, padding: '0 6px' }}>−</button>
-              <span style={{ ...mono, fontSize: 10, color: 'rgba(255,255,255,0.6)', minWidth: 14, textAlign: 'center' }}>
+              <span style={{ ...mono, fontSize: 10, color: 'var(--neutral-500)', minWidth: 14, textAlign: 'center' }}>
                 {importedShape.line.widthPx}
               </span>
               <button title="Thicker stroke" aria-label="Thicker stroke"
@@ -794,7 +891,7 @@ export function EditToolbar({
           <Sep />
 
           <button title="Delete this shape" aria-label="Delete shape" onClick={onDeleteImportedShape}
-            style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
+            style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -802,46 +899,11 @@ export function EditToolbar({
           </button>
         </>
       ) : (
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
           Click any text to format it · shift-click to add more
         </span>
       )}
 
-      <Sep />
-
-      <Menu
-        title={`Speaker notes for “${targetSlideTitle}”`}
-        label="Notes"
-        width={400}
-        badge={!!notes.trim()}
-        icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden><path d="M4 5h16M4 10h16M4 15h10" /></svg>}
-      >
-        {() => (
-          <>
-            <div style={{ ...mono, color: 'rgba(255,255,255,0.4)', padding: '2px 4px 8px' }}>
-              {targetSlideTitle}
-            </div>
-            <textarea
-              value={notesDraft}
-              onFocus={() => setNotesEditing(true)}
-              onChange={(e) => setNotesDraft(e.target.value)}
-              onBlur={() => {
-                setNotesEditing(false);
-                if (notesDraft !== notes) onNotesChange(notesDraft);
-              }}
-              placeholder="What you'll say on this slide. Goes to PowerPoint's notes pane and Present mode — never onto the slide."
-              rows={6}
-              style={{
-                width: '100%', resize: 'vertical', padding: 10,
-                fontFamily: 'var(--font-sans)', fontSize: 13, lineHeight: 1.5,
-                color: '#fff', background: 'rgba(255,255,255,0.07)',
-                border: '1px solid rgba(255,255,255,0.18)',
-                borderRadius: 'var(--radius-sharp)', boxSizing: 'border-box',
-              }}
-            />
-          </>
-        )}
-      </Menu>
     </div>
   );
 }

@@ -8,19 +8,114 @@
  * legible, so the user can switch confidently instead of undoing to check.
  */
 
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
+import type { DocumentNode } from '../business-record/parser/ast';
 import type { SlideInstance, SlideTemplateId } from '../deck/types';
-import { SWITCHABLE, planSwitch } from '../deck/templateSwitch';
+import { SWITCHABLE, applySwitch, planSwitch } from '../deck/templateSwitch';
+import { SlideStage } from './PresentationCanvas';
 
 interface TemplateSwitchModalProps {
   open: boolean;
   slide: SlideInstance | undefined;
   onClose: () => void;
   onConfirm: (to: SlideTemplateId) => void;
+  /** Passed through to the preview renderers so a card shows the same client
+   *  logo the canvas does. */
+  ast?: DocumentNode | null;
+  logoUrl?: string;
 }
 
-export function TemplateSwitchModal({ open, slide, onClose, onConfirm }: TemplateSwitchModalProps) {
+/**
+ * A card previewing one candidate layout.
+ *
+ * The preview is the *result of the switch*, not a stock picture of the
+ * template: `applySwitch` is pure, so the card can run the real transform on
+ * the real slide and render what the user would actually get. That closes the
+ * gap this dialog's whole docstring is about - "carries / converts / parks" is
+ * an accurate summary, but seeing your own words land in the new layout is what
+ * makes the choice obvious.
+ *
+ * Memoised because 14 of these render at once and each one mounts a full slide
+ * renderer; without it, hovering a card would re-render every sibling.
+ */
+const TemplateCard = memo(function TemplateCard({
+  slide,
+  templateId,
+  title,
+  current,
+  active,
+  ast,
+  logoUrl,
+  onPick,
+}: {
+  slide: SlideInstance;
+  templateId: SlideTemplateId;
+  title: string;
+  current: boolean;
+  active: boolean;
+  ast?: DocumentNode | null;
+  logoUrl?: string;
+  onPick: () => void;
+}) {
+  // The switched slide is derived, never committed - nothing here touches the
+  // deck until the user confirms.
+  const preview = useMemo(
+    () => (current ? slide : applySwitch(slide, templateId)),
+    [slide, templateId, current]
+  );
+
+  return (
+    <button
+      onClick={onPick}
+      disabled={current}
+      title={current ? 'This is the current layout' : `Preview of “${slide.title}” as ${title}`}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 0,
+        padding: 0, textAlign: 'left', cursor: current ? 'default' : 'pointer',
+        background: '#fff',
+        borderWidth: active ? 2 : 1,
+        borderStyle: 'solid',
+        borderColor: active ? 'var(--emerald-500)' : 'var(--neutral-200)',
+        borderRadius: 'var(--radius-sharp)',
+        // Padding compensates for the thicker active border so the card does
+        // not shift its neighbours when it becomes selected.
+        margin: active ? 0 : 1,
+        opacity: current ? 0.55 : 1,
+        transition: 'border-color .12s, box-shadow .12s',
+        boxShadow: active ? '0 4px 14px -4px rgba(16,185,129,0.35)' : 'none',
+      }}
+    >
+      <div style={{ width: '100%', aspectRatio: '16 / 9', overflow: 'hidden', background: '#fff', position: 'relative' }}>
+        {/* 232px is the card's rendered width; the stage scales the 1920px
+            slide down by that ratio. A fixed number rather than a measured
+            one keeps 14 previews from each running a ResizeObserver. */}
+        <SlideStage slide={preview} ast={ast ?? null} num="00" scale={232 / 1920} logoUrl={logoUrl} />
+      </div>
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+          padding: '7px 9px', borderTop: '1px solid var(--neutral-150, var(--neutral-200))',
+          fontSize: 12, fontWeight: 700,
+          color: current ? 'var(--neutral-400)' : active ? 'var(--emerald-700)' : 'var(--neutral-800)',
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+        {current && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>
+            Current
+          </span>
+        )}
+      </div>
+    </button>
+  );
+});
+
+export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logoUrl }: TemplateSwitchModalProps) {
   const [target, setTarget] = useState<SlideTemplateId | null>(null);
+  /** Category filter. null means "All", which is the honest default - a user
+   *  who doesn't know the categories yet shouldn't have to pick one to see
+   *  anything. */
+  const [category, setCategory] = useState<string | null>(null);
 
   if (!open || !slide) return null;
 
@@ -30,10 +125,8 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm }: Templat
   // there is nothing meaningful to map either way.
   const isImported = slide.templateId === 'imported';
 
-  const groups = SWITCHABLE.reduce<Record<string, typeof SWITCHABLE>>((acc, t) => {
-    (acc[t.group] ??= []).push(t);
-    return acc;
-  }, {});
+  const categories = [...new Set(SWITCHABLE.map((t) => t.group))];
+  const shown = category ? SWITCHABLE.filter((t) => t.group === category) : SWITCHABLE;
 
   const sectionLabel: React.CSSProperties = {
     fontFamily: 'var(--font-mono)', fontSize: 10,
@@ -44,19 +137,19 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm }: Templat
   return (
     <div
       onClick={onClose}
+      className="wg-overlay"
       style={{
         position: 'fixed', inset: 0, zIndex: 300,
-        background: 'rgba(0,0,0,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 24,
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        className="wg-modal"
         style={{
-          width: 'min(880px, 100%)', maxHeight: '86vh', overflow: 'auto',
-          background: '#fff', boxShadow: 'var(--shadow-soft)',
-          borderRadius: 'var(--radius-sharp)', padding: 28,
+          width: 'min(1040px, 100%)', maxHeight: '88vh', overflow: 'auto',
+          padding: 28,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16 }}>
@@ -98,38 +191,59 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm }: Templat
         {!isImported && (
           <>
             <div style={{ marginTop: 22 }}>
-              <div style={sectionLabel}>Choose a layout</div>
-              {Object.entries(groups).map(([group, items]) => (
-                <div key={group} style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, color: 'var(--neutral-400)', marginBottom: 6 }}>{group}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {items.map((t) => {
-                      const current = t.id === slide.templateId;
-                      const active = t.id === target;
-                      return (
-                        <button
-                          key={t.id}
-                          disabled={current}
-                          onClick={() => setTarget(t.id)}
-                          title={current ? 'This is the current layout' : `Switch to ${t.title}`}
-                          style={{
-                            padding: '8px 14px', fontSize: 13, fontWeight: 600,
-                            cursor: current ? 'default' : 'pointer',
-                            borderWidth: 1, borderStyle: 'solid',
-                            borderColor: active ? 'var(--emerald-500)' : 'var(--neutral-300)',
-                            background: active ? 'var(--emerald-50)' : current ? 'var(--neutral-100)' : '#fff',
-                            color: current ? 'var(--neutral-400)' : active ? 'var(--emerald-700)' : 'var(--neutral-900)',
-                            borderRadius: 'var(--radius-sharp)',
-                          }}
-                        >
-                          {t.title}
-                          {current && <span style={{ marginLeft: 6, fontSize: 11 }}>(current)</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+              <div style={{ ...sectionLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span>Choose a layout — each card is your own slide in that layout</span>
+              </div>
+
+              {/* Category filters. 14 previews is a lot to scan at once; these
+                  narrow it without hiding anything behind a menu. */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                {[null, ...categories].map((c) => {
+                  const on = category === c;
+                  return (
+                    <button
+                      key={c ?? '__all'}
+                      onClick={() => setCategory(c)}
+                      style={{
+                        height: 26, padding: '0 11px',
+                        fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                        letterSpacing: '0.1em', textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        borderWidth: 1, borderStyle: 'solid',
+                        borderColor: on ? 'var(--neutral-900)' : 'var(--neutral-200)',
+                        background: on ? 'var(--neutral-900)' : '#fff',
+                        color: on ? '#fff' : 'var(--neutral-500)',
+                        borderRadius: 'var(--radius-sharp)',
+                        transition: 'background .12s, color .12s, border-color .12s',
+                      }}
+                    >
+                      {c ?? `All ${SWITCHABLE.length}`}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(232px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                {shown.map((t) => (
+                  <TemplateCard
+                    key={t.id}
+                    slide={slide}
+                    templateId={t.id}
+                    title={t.title}
+                    current={t.id === slide.templateId}
+                    active={t.id === target}
+                    ast={ast}
+                    logoUrl={logoUrl}
+                    onPick={() => setTarget(t.id)}
+                  />
+                ))}
+              </div>
             </div>
 
             {plan && (

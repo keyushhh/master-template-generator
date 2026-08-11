@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, ImportedShape, OverlayShape, SlideContent, SlideInstance, SlotOffset, SlotStyle } from '../deck/types';
 import { applyToCss, offsetFor, shiftOffsets, styleFor } from '../formatting/resolve';
@@ -51,6 +51,9 @@ interface PresentationCanvasProps {
   /** Bumped on every undo/redo, so the editable text nodes are rebuilt from the
    *  model instead of keeping whatever the user had typed into them. */
   revision?: number;
+  /** The slide on the stage. The canvas shows exactly one at a time. */
+  currentId?: string | null;
+  onNavigate?: (instanceId: string) => void;
 }
 
 /** Props every slide renderer receives: parsed document (for the logo), the
@@ -114,6 +117,10 @@ interface SlotContextValue {
   /** The selected slots on this slide - drives the focus rings. Usually one;
    *  more when the user shift-clicked to build a group. */
   selectedSlots?: string[];
+  /** The selection's anchor slot. Chrome that should appear once per selection
+   *  rather than once per member (the drag readout) is keyed off this, so a
+   *  three-slot group shows one pill instead of three identical ones. */
+  anchorSlot?: string;
   /** In-flight drag, applied on top of every selected slot's stored offset.
    *
    *  One shared delta rather than per-slot state is what makes a group move as a
@@ -274,6 +281,10 @@ function SlideSlots({
         styles: content.styles,
         offsets: content.offsets,
         selectedSlots,
+        anchorSlot:
+          selection?.kind === 'slot' && selection.instanceId === instanceId
+            ? selection.slot
+            : undefined,
         dragDelta,
         onBeginDrag,
         revision,
@@ -310,11 +321,47 @@ interface EditableProps {
   slot?: string;
 }
 
+/**
+ * Vector corner anchors on a selected slot's bounding box.
+ *
+ * Purely indicative - a text slot is sized by its own content, so there is
+ * nothing to resize by dragging a corner. They exist because a bare outline
+ * reads as a focus ring while anchored corners read as "this is an object you
+ * have hold of", which is the distinction every vector editor draws.
+ *
+ * Sized in the slide's 1920px design space (the stage transform scales them
+ * down with everything else), and pointer-transparent so they never intercept
+ * a click meant for the text or the drag grip.
+ */
+function CornerAnchors() {
+  const A = 9;
+  const corner = (pos: React.CSSProperties): React.CSSProperties => ({
+    position: 'absolute',
+    width: A,
+    height: A,
+    background: '#fff',
+    border: '1.5px solid var(--emerald-500)',
+    borderRadius: 'var(--radius-sharp)',
+    zIndex: 29,
+    ...pos,
+  });
+  const off = -(A / 2) - 2;
+  return (
+    <span contentEditable={false} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+      <span style={corner({ left: off, top: off })} />
+      <span style={corner({ right: off, top: off })} />
+      <span style={corner({ left: off, bottom: off })} />
+      <span style={corner({ right: off, bottom: off })} />
+    </span>
+  );
+}
+
 /** Renders plain text normally; in edit mode becomes a contentEditable span
  *  that commits on blur. Committing an empty string signals "revert to the
  *  template placeholder" (callers map '' → undefined). */
 function E({ value, editing, onCommit, multiline, dataField, onActivate, slot }: EditableProps) {
-  const { styles, selectedSlots, onSelectSlot, onBeginDrag, revision } = useContext(SlotContext);
+  const { styles, selectedSlots, anchorSlot, onSelectSlot, onBeginDrag, revision, dragDelta } =
+    useContext(SlotContext);
   const framedSlot = useContext(FrameContext);
   const override = styleFor(styles, slot);
   const css = applyToCss(override);
@@ -418,9 +465,11 @@ function E({ value, editing, onCommit, multiline, dataField, onActivate, slot }:
         padding: `${HIT_PAD_Y}px ${HIT_PAD_X}px`,
         margin: `${-HIT_PAD_Y}px ${-HIT_PAD_X}px`,
         // A visible target for the toolbar. Uses outline, not border, so it
-        // costs no layout space and cannot reflow the slide it sits on.
+        // costs no layout space and cannot reflow the slide it sits on. The
+        // hairline is thinner than the corner anchors it pairs with, so the
+        // corners read as the grabbable part.
         ...(selected
-          ? { outline: '2px solid var(--emerald-500)', outlineOffset: 2, borderRadius: 2 }
+          ? { outline: '1.5px solid var(--emerald-500)', outlineOffset: 2, borderRadius: 'var(--radius-sharp)' }
           : {}),
       }}
       onKeyDown={(e) => {
@@ -444,6 +493,37 @@ function E({ value, editing, onCommit, multiline, dataField, onActivate, slot }:
       }}
     >
       {value}
+      {/* Vector corner anchors on the selected slot's box. */}
+      {selected && <CornerAnchors />}
+      {/* Live displacement readout while the selection is being dragged, so a
+          move is a number the user can aim at (and match on another slide)
+          rather than pure eyeballing. Design-px, the same units the nudge
+          shortcuts and the snap grid use. */}
+      {selected && slot === anchorSlot && dragDelta && (dragDelta.dx !== 0 || dragDelta.dy !== 0) && (
+        <span
+          contentEditable={false}
+          style={{
+            position: 'absolute',
+            bottom: -14,
+            left: '50%',
+            transform: 'translate(-50%, 100%)',
+            padding: '2px 10px',
+            borderRadius: 'var(--radius-sharp)',
+            background: 'var(--emerald-600)',
+            color: '#fff',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            fontWeight: 600,
+            lineHeight: 1.6,
+            whiteSpace: 'nowrap',
+            zIndex: 31,
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        >
+          {dragDelta.dx >= 0 ? '+' : ''}{dragDelta.dx} · {dragDelta.dy >= 0 ? '+' : ''}{dragDelta.dy}
+        </span>
+      )}
       {/* Drag grip. Appears only on the selected slot, and moving is kept a
           separate gesture from typing: dragging the text itself must go on
           selecting words, or editing would break. Select first, then drag. */}
@@ -1111,7 +1191,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
             lines.map((line, i) => (
               <span key={i}>
                 {i === lines.length - 1 && lines.length > 1 ? (
-                  <span style={{ color: 'var(--neutral-300)' }}>{line}</span>
+                  <span style={{ color: 'var(--emerald-500)' }}>{line}</span>
                 ) : (
                   line
                 )}
@@ -3454,48 +3534,98 @@ export function SlideStage({
 // ---------------------------------------------------------------------------
 // PresentationCanvas
 // ---------------------------------------------------------------------------
-export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange, onLogoScaleChange, onRequestEdit, selection, onSelect, onDeselect, onActiveSlideChange, onRenameSlide, revision }: PresentationCanvasProps) {
+export function PresentationCanvas({
+  ast, deck, editing, onEditSlide, onLogoChange, onLogoScaleChange, onRequestEdit,
+  selection, onSelect, onDeselect, onActiveSlideChange, onRenameSlide, revision,
+  currentId, onNavigate,
+}: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
-  // Which slide currently holds focus while editing - drives the "you're
-  // editing this one" outline so all slides don't look identically active.
-  const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!editing) setActiveSlideId(null);
-  }, [editing]);
+  const [fit, setFit] = useState(0.5);
+  /** 1 = fit to the stage. Multiplies the fitted scale. */
+  const [zoom, setZoom] = useState(1);
 
   const visibleSlides = deck.slides.filter((s) => !s.hidden);
+  const index = Math.max(0, visibleSlides.findIndex((s) => s.instanceId === currentId));
+  const current = visibleSlides[index];
 
-  /**
-   * 16:9 scaling engine - mirrors the original HTML's scaleSlides() logic.
-   * Fits the 1920px-wide canvas to the available stage width, capped at 0.6
-   * to preserve readability at typical viewport sizes.
-   * Re-runs whenever the deck changes so new/duplicated slides get scaled.
-   */
+  // Fit the 1920x1080 slide into whatever the stage gives us, leaving room for
+  // the header above and the slide bar below.
   useEffect(() => {
-    const TARGET_W = 1920;
-    const TARGET_H = 1080;
-
-    function scaleSlides() {
-      const stage = stageRef.current;
-      if (!stage) return;
-      const viewportWidth = stage.offsetWidth;
-      let scale = (viewportWidth / TARGET_W) * 0.95;
-      if (scale > 0.6) scale = 0.6;
-      const slides = stage.querySelectorAll<HTMLElement>('[data-slide]');
-      slides.forEach((el) => {
-        el.style.transform = `scale(${scale})`;
-        const scaledHeight = TARGET_H * scale;
-        const marginAdjust = (TARGET_H - scaledHeight) * -1;
-        el.style.marginBottom = `${marginAdjust + 100}px`;
-      });
-    }
-
-    scaleSlides();
-    const ro = new ResizeObserver(scaleSlides);
-    if (stageRef.current) ro.observe(stageRef.current);
+    const el = stageRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth - 96;
+      // Header above (12 + 56) and the slide bar below, plus breathing room.
+      const h = el.clientHeight - 200;
+      if (w > 0 && h > 0) setFit(Math.min(w / SLIDE_W, h / 1080));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
     return () => ro.disconnect();
-  }, [deck]);
+  }, []);
+
+  const scale = fit * zoom;
+
+  const go = useCallback((delta: number) => {
+    const next = visibleSlides[index + delta];
+    if (next) onNavigate?.(next.instanceId);
+  }, [visibleSlides, index, onNavigate]);
+
+  // Deck navigation. Skipped whenever the user is typing or has something
+  // selected that owns the arrow keys for nudging.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.isContentEditable || t?.closest('input, textarea')) return;
+      if (editing && selection) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); go(1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [go, editing, selection]);
+
+  if (!current) {
+    return (
+      <div ref={stageRef} className="book" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', maxWidth: 340, padding: 24 }}>
+          <div
+            style={{
+              width: 92, height: 52, margin: '0 auto 18px',
+              border: '1.5px dashed var(--neutral-300)',
+              background: '#fff',
+            }}
+          />
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--neutral-700)' }}>
+            Nothing to show yet
+          </div>
+          <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.6, color: 'var(--neutral-500)' }}>
+            Every slide is hidden, or this deck is empty. Add a slide from the
+            rail, or bring in a source to build one.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const btn: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 28, height: 28, padding: 0,
+    background: 'transparent', border: 'none',
+    color: 'var(--chrome-text-dim)', cursor: 'pointer',
+    borderRadius: 'var(--radius-sharp)',
+  };
+  /** Both clusters sit on the same surface treatment so they read as one
+   *  control layer over the stage rather than loose text on the desk. */
+  const cluster: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 2,
+    pointerEvents: 'auto',
+    height: 32, padding: '0 4px',
+    background: '#fff',
+    border: '1px solid var(--neutral-200)',
+    boxShadow: '0 1px 2px rgba(15,23,20,0.05)',
+  };
 
   return (
     <div
@@ -3504,27 +3634,15 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
       onClick={(e) => {
         if (!editing || !onDeselect) return;
         const target = e.target as HTMLElement;
-        // Anything a click should actually select already lives behind a
-        // contentEditable span, a data-overlay-shape shape, or a
-        // data-selectable imported shape - if none of those are on the path
-        // to the click, it landed on plain slide background.
         if (target.closest('[contenteditable], [data-overlay-shape], [data-selectable]')) return;
         onDeselect();
-      }}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        paddingTop: 60,
-        paddingBottom: 120,
       }}
     >
       {visibleSlides.map((slide, i) => {
         const Renderer = SLIDE_RENDERERS[slide.templateId];
         const isDark = slideIsDark(slide);
         const num = String(i + 1).padStart(2, '0');
-
-        const isActiveEdit = editing && activeSlideId === slide.instanceId;
+        const isCurrent = i === index;
 
         return (
           <div
@@ -3532,80 +3650,32 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
             id={slide.instanceId}
             data-slide
             className="page"
-            onFocus={() => {
-              if (!editing) return;
-              setActiveSlideId(slide.instanceId);
-              onActiveSlideChange?.(slide.instanceId);
-            }}
-            // Pointer-down as well as focus: clicking a shape (which isn't a
-            // focusable element) has to be able to make its slide the active
-            // one, or Insert would target whichever slide was last typed in.
-            onPointerDown={() => {
-              if (!editing) return;
-              setActiveSlideId(slide.instanceId);
-              onActiveSlideChange?.(slide.instanceId);
-            }}
+            onPointerDown={() => { if (editing) onActiveSlideChange?.(slide.instanceId); }}
             style={{
-              /* 1920 × 1080 base - scaled by the engine above */
-              width: 1920,
+              width: SLIDE_W,
               height: 1080,
-              transformOrigin: 'top center',
-              flexShrink: 0,
-              position: 'relative',
-              // Content clips inside its own wrapper below, not here - so the
-              // "editing this slide" tag can hang just above the slide's top
-              // edge instead of sitting on top of whatever the deck itself put
-              // in that corner.
-              overflow: 'visible',
+              position: 'absolute',
+              // Centre the unscaled box, then scale about that centre, so the
+              // slide stays put as the zoom changes.
+              left: '50%',
+              // Nudged down so the slide is centred in the space left under
+              // the floating header rather than in the raw viewport.
+              top: 'calc(50% + 18px)',
+              transform: `translate(-50%, -50%) scale(${scale})`,
+              transformOrigin: 'center center',
+              overflow: 'hidden',
               background: isDark ? '#000000' : 'var(--pure-white)',
               color: isDark ? '#ffffff' : 'var(--neutral-900)',
-              // Standard design system shadow used for all slides instead of custom heavy shadow
-              boxShadow: isActiveEdit
-                ? 'var(--shadow-soft), 0 0 0 4px color-mix(in srgb, var(--emerald-500) 18%, transparent)'
-                : 'var(--shadow-soft)',
-              // Subtle affordance that the slide is live for editing; the
-              // currently-focused slide gets a solid, brighter outline so it's
-              // clear which one your edits are landing on.
-              outline: !editing
-                ? 'none'
-                : isActiveEdit
-                  ? '2px solid var(--emerald-500)'
-                  : '2px solid color-mix(in srgb, var(--emerald-500) 20%, transparent)',
-              transition: 'outline-color .15s ease, box-shadow .15s ease',
+              boxShadow: isDark
+                ? 'var(--shadow-stage)'
+                : 'var(--shadow-stage), inset 0 0 0 1px rgba(0,0,0,0.06)',
+              // Every slide stays mounted so the exporter can still capture any
+              // of them by id; only the current one is shown.
+              opacity: isCurrent ? 1 : 0,
+              pointerEvents: isCurrent ? 'auto' : 'none',
+              zIndex: isCurrent ? 1 : 0,
             }}
           >
-            {editing && (
-              <span
-                style={{
-                  position: 'absolute',
-                  // Sits just above the slide's own top edge rather than inside
-                  // it, so it never sits on top of whatever the deck put in
-                  // that corner - the slide's overflow is visible for exactly
-                  // this reason (see the content wrapper below).
-                  top: -30,
-                  left: 0,
-                  zIndex: 20,
-                  padding: '5px 12px',
-                  borderRadius: 6,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  color: '#fff',
-                  background: 'var(--emerald-500)',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
-                  opacity: isActiveEdit ? 1 : 0,
-                  pointerEvents: 'none',
-                  transition: 'opacity .15s ease',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Editing this slide
-              </span>
-            )}
-            {/* Everything the deck itself renders clips to the slide's exact
-                bounds here, now that `.page` above is overflow-visible. */}
             <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
               {Renderer && (
                 <SlideSlots
@@ -3634,9 +3704,6 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
                 </SlideSlots>
               )}
 
-              {/* User-inserted shapes and text boxes. Rendered here rather than
-                  inside each renderer so every template - all 14, plus blank and
-                  imported - gets them from one place. */}
               <ShapeOverlay
                 shapes={visibleOverlay(slide.content)}
                 editing={editing}
@@ -3663,84 +3730,139 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
                 }
               />
 
-              {/* Footer row - preserved from original shell */}
-              {/* Footer strip. The label is the slide's own title, editable here
-                  as well as in the sidebar; hideFooter removes the whole strip for
-                  slides that want a clean bottom edge (covers, full-bleed
-                  dividers). The slide number is generated, so it isn't editable. */}
               {!slide.content.hideFooter && (
                 <div className="footer-row" style={{ zIndex: 10, position: 'relative' }}>
-                <span>
-                  {editing ? (
-                    <span
-                      data-editable
-                      contentEditable
-                      suppressContentEditableWarning
-                      spellCheck={false}
-                      title="Slide label - also shown in the sidebar"
-                      style={{ padding: '6px 8px', margin: '-6px -8px', outline: 'none' }}
-                      onBlur={(e) => {
-                        const next = (e.target as HTMLElement).innerText.trim();
-                        if (next && next !== slide.title) onRenameSlide?.(slide.instanceId, next);
-                        else if (!next) (e.target as HTMLElement).innerText = slide.title;
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur(); }
-                        if (e.key === 'Escape') {
-                          (e.target as HTMLElement).innerText = slide.title;
-                          (e.target as HTMLElement).blur();
-                        }
+                  <span>
+                    {editing ? (
+                      <span
+                        data-editable
+                        contentEditable
+                        suppressContentEditableWarning
+                        spellCheck={false}
+                        title="Slide label - also shown in the sidebar"
+                        style={{ padding: '6px 8px', margin: '-6px -8px', outline: 'none' }}
+                        onBlur={(e) => {
+                          const next = (e.target as HTMLElement).innerText.trim();
+                          if (next && next !== slide.title) onRenameSlide?.(slide.instanceId, next);
+                          else if (!next) (e.target as HTMLElement).innerText = slide.title;
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur(); }
+                          if (e.key === 'Escape') {
+                            (e.target as HTMLElement).innerText = slide.title;
+                            (e.target as HTMLElement).blur();
+                          }
+                        }}
+                      >
+                        {slide.title}
+                      </span>
+                    ) : (
+                      slide.title
+                    )}
+                  </span>
+                  <span>
+                    {i + 1} / {visibleSlides.length}
+                  </span>
+                  {editing && (
+                    <button
+                      onClick={() => onEditSlide(slide.instanceId, (c) => ({ ...c, hideFooter: true }))}
+                      title="Remove this slide's footer"
+                      aria-label="Remove footer"
+                      style={{
+                        position: 'absolute', right: -34, top: '50%', transform: 'translateY(-50%)',
+                        width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: '#fff', color: '#dc2626',
+                        border: '1px solid #fecaca', cursor: 'pointer',
+                        borderRadius: '50%', fontSize: 18, lineHeight: 1, padding: 0,
                       }}
                     >
-                      {slide.title}
-                    </span>
-                  ) : (
-                    slide.title
+                      ×
+                    </button>
                   )}
-                </span>
-                <span>
-                  {i + 1} / {visibleSlides.length}
-                </span>
-                {editing && (
-                  <button
-                    onClick={() => onEditSlide(slide.instanceId, (c) => ({ ...c, hideFooter: true }))}
-                    title="Remove this slide's footer"
-                    aria-label="Remove footer"
-                    style={{
-                      position: 'absolute', right: -34, top: '50%', transform: 'translateY(-50%)',
-                      width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: '#fff', color: '#dc2626',
-                      border: '1px solid #fecaca', cursor: 'pointer',
-                      borderRadius: '50%', fontSize: 18, lineHeight: 1, padding: 0,
-                    }}
-                  >
-                    \u00d7
-                  </button>
-                )}
-              </div>
-            )}
-            {/* Restoring it needs an affordance, or hiding it would be one-way. */}
-            {editing && slide.content.hideFooter && (
-              <button
-                onClick={() => onEditSlide(slide.instanceId, (c) => ({ ...c, hideFooter: undefined }))}
-                title="Bring the footer back"
-                style={{
-                  position: 'absolute', bottom: 24, left: 80, zIndex: 20,
-                  height: 34, padding: '0 16px',
-                  fontFamily: 'var(--font-mono)', fontSize: 15,
-                  textTransform: 'uppercase', letterSpacing: '0.1em',
-                  color: 'var(--emerald-600)', background: 'var(--emerald-50)',
-                  border: '1.5px dashed var(--emerald-400)', cursor: 'pointer',
-                  borderRadius: 'var(--radius-sharp)',
-                }}
-              >
-                + Footer
-              </button>
-            )}
+                </div>
+              )}
+              {editing && slide.content.hideFooter && (
+                <button
+                  onClick={() => onEditSlide(slide.instanceId, (c) => ({ ...c, hideFooter: undefined }))}
+                  title="Bring the footer back"
+                  style={{
+                    position: 'absolute', bottom: 24, left: 80, zIndex: 20,
+                    height: 34, padding: '0 16px',
+                    fontFamily: 'var(--font-mono)', fontSize: 15,
+                    textTransform: 'uppercase', letterSpacing: '0.1em',
+                    color: 'var(--emerald-600)', background: 'var(--emerald-50)',
+                    border: '1.5px dashed var(--emerald-400)', cursor: 'pointer',
+                    borderRadius: 'var(--radius-sharp)',
+                  }}
+                >
+                  + Footer
+                </button>
+              )}
             </div>
           </div>
         );
       })}
+
+      {/* Deck position on the left, zoom on the right; the centre stays clear
+          for the edit toolbar. */}
+      <div
+        style={{
+          position: 'absolute', bottom: 18, left: 24, right: 24, zIndex: 20,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          pointerEvents: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div style={cluster}>
+          <button onClick={() => go(-1)} disabled={index === 0} title="Previous slide (←)" aria-label="Previous slide"
+            style={{ ...btn, opacity: index === 0 ? 0.3 : 1, cursor: index === 0 ? 'default' : 'pointer' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+          </button>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em',
+              color: 'var(--chrome-text-dim)', minWidth: 62, textAlign: 'center', userSelect: 'none',
+            }}
+          >
+            {String(index + 1).padStart(2, '0')} / {String(visibleSlides.length).padStart(2, '0')}
+          </span>
+          <button onClick={() => go(1)} disabled={index >= visibleSlides.length - 1} title="Next slide (→)" aria-label="Next slide"
+            style={{ ...btn, opacity: index >= visibleSlides.length - 1 ? 0.3 : 1, cursor: index >= visibleSlides.length - 1 ? 'default' : 'pointer' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+        </div>
+        <span
+          style={{
+            marginLeft: 10, fontSize: 12, color: 'var(--neutral-500)',
+            maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap', userSelect: 'none', pointerEvents: 'none',
+          }}
+        >
+          {current.title}
+        </span>
+        </div>
+
+        <div style={cluster}>
+          <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.15))} title="Zoom out" aria-label="Zoom out" style={btn}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M5 12h14" /></svg>
+          </button>
+          <button
+            onClick={() => setZoom(1)}
+            title="Fit to screen"
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+              color: 'var(--chrome-text-dim)', background: 'transparent', border: 'none',
+              cursor: 'pointer', minWidth: 46, height: 28,
+            }}
+          >
+            {Math.round(scale * 100)}%
+          </button>
+          <button onClick={() => setZoom((z) => Math.min(3, z + 0.15))} title="Zoom in" aria-label="Zoom in" style={btn}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </div>
+      </div>
+
     </div>
   );
 }

@@ -8,6 +8,7 @@ import type { ValidationResult } from '../business-record/parser/types';
 import { parsePptx } from '../pptx-import/pptxParser';
 import { buildDeckFromImport } from '../pptx-import/pptxDeckBuilder';
 import type { Deck } from '../deck/types';
+import { MarkdownCodeEditor } from './MarkdownCodeEditor';
 
 interface SourceMaterialModalProps {
   open: boolean;
@@ -203,12 +204,12 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-neutral-900/50 backdrop-blur-sm p-6"
+      className="wg-overlay fixed inset-0 z-[200] flex items-center justify-center p-6"
       onClick={onClose}
     >
       <div
         ref={panelRef}
-        className="flex flex-col w-full max-w-2xl max-h-[86vh] bg-white rounded-[var(--radius-sharp)] shadow-2xl overflow-hidden"
+        className="wg-modal flex flex-col w-full max-w-2xl max-h-[86vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -299,11 +300,11 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                 <li>Paste your raw call transcript at the bottom, where it says <span className="font-mono text-[11px] text-neutral-900">TRANSCRIPT:</span></li>
                 <li>Claude replies with a code block - hit its <span className="font-semibold text-neutral-900">Copy</span> button, then come back to the <span className="font-semibold text-neutral-900">Paste .md</span> tab.</li>
               </ol>
-              <textarea
-                id="sm-prompt-text"
-                readOnly
+              <MarkdownCodeEditor
                 value={CONVERSION_PROMPT}
-                className="w-full h-[34vh] resize-none font-mono text-[11.5px] leading-relaxed text-neutral-700 bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] p-4 focus:outline-none focus:ring-2 focus:ring-neutral-900/10"
+                readOnly
+                height="34vh"
+                ariaLabel="Conversion prompt"
               />
               <div className="flex items-center gap-2.5">
                 <button
@@ -335,11 +336,12 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
               <p className="text-[12.5px] text-neutral-600 leading-relaxed">
                 Paste the Business Record markdown Claude gave you. A leading <span className="font-mono text-[11px]">```markdown</span> fence is fine - it’s stripped automatically.
               </p>
-              <textarea
+              <MarkdownCodeEditor
                 value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
+                onChange={setPasteText}
                 placeholder={'--- \nversion: 1.0\ntype: business-record\nclient: …'}
-                className="w-full h-[34vh] resize-none font-mono text-[11.5px] leading-relaxed text-neutral-700 bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] p-4 focus:outline-none focus:ring-2 focus:ring-neutral-900/10 placeholder:text-neutral-400"
+                error={error}
+                height="34vh"
               />
               <button
                 onClick={handlePasteImport}
@@ -390,22 +392,28 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                   { id: 'keep' as PptxMode, title: 'Keep my layout',
                     body: 'Every slide keeps its original arrangement, shape for shape. Only the theme changes.' },
                   { id: 'refresh' as PptxMode, title: 'Give me a refreshed look',
-                    body: 'Re-flows your content onto the 14 master templates. Coming soon.' },
+                    body: 'Re-flows your content onto the 14 master templates.' },
                 ]).map((opt) => (
                   <button
                     key={opt.id}
-                    onClick={() => setPptxMode(opt.id)}
-                    className={`text-left p-3 border transition-colors cursor-pointer rounded-[var(--radius-sharp)] ${
-                      pptxMode === opt.id
-                        ? 'border-emerald-500 bg-emerald-50'
-                        : 'border-neutral-200 hover:border-neutral-300'
+                    // Unbuilt options are disabled, not merely labelled. A
+                    // clickable control that silently does nothing reads as a
+                    // bug, and "Coming soon" in the body text is easy to miss.
+                    disabled={opt.id === 'refresh'}
+                    onClick={() => opt.id !== 'refresh' && setPptxMode(opt.id)}
+                    className={`text-left p-3 border transition-colors rounded-[var(--radius-sharp)] ${
+                      opt.id === 'refresh'
+                        ? 'border-neutral-150 bg-neutral-50 opacity-60 cursor-not-allowed'
+                        : pptxMode === opt.id
+                          ? 'border-emerald-500 bg-emerald-50 cursor-pointer'
+                          : 'border-neutral-200 hover:border-neutral-300 cursor-pointer'
                     }`}
                   >
                     <div className="text-[13px] font-bold text-neutral-900 flex items-center gap-2">
                       {opt.title}
                       {opt.id === 'refresh' && (
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400">
-                          soon
+                        <span className="px-1.5 py-0.5 text-[9.5px] font-mono font-bold uppercase tracking-[0.12em] text-neutral-500 bg-neutral-200 rounded-[var(--radius-sharp)]">
+                          Coming soon
                         </span>
                       )}
                     </div>
@@ -454,7 +462,12 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
             </div>
           )}
 
-          {error && <div className="mt-3 text-[12px] text-red-500 leading-relaxed">{error}</div>}
+          {/* The paste tab renders the same error as an inline pill under its
+              code editor, right where the offending markdown is - showing it
+              here as well would report one failure twice. */}
+          {error && tab !== 'paste' && (
+            <div className="mt-3 text-[12px] text-red-500 leading-relaxed">{error}</div>
+          )}
         </div>
       </div>
     </div>

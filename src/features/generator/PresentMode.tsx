@@ -85,9 +85,13 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0 }: Presen
       {/* Slide (click right/left half to navigate) */}
       <div style={{ position: 'relative', boxShadow: '0 30px 80px rgba(0,0,0,0.6)' }}>
         <SlideStage slide={slide} ast={ast} num={String(index + 1).padStart(2, '0')} scale={scale} logoUrl={deck.logoUrl} />
+        {/* Click-to-navigate halves. These carry no cursor of their own: the
+            w-/e-resize cursors they used to show read as "drag to resize the
+            slide", which is not something present mode can do. The arrows and
+            the arrow keys are the discoverable controls. */}
         <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
-          <div onClick={prev} style={{ flex: 1, cursor: atStart ? 'default' : 'w-resize' }} />
-          <div onClick={next} style={{ flex: 1, cursor: atEnd ? 'default' : 'e-resize' }} />
+          <div onClick={prev} style={{ flex: 1, cursor: 'default' }} />
+          <div onClick={next} style={{ flex: 1, cursor: 'default' }} />
         </div>
       </div>
 

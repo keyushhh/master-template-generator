@@ -177,6 +177,25 @@
   --accent-900: #1e1b4b;
   --accent-950: #07070a;
 
+  /* Editor chrome. Everything that is tooling rather than slide content draws
+     from these, so the chrome's tone is one decision in one place. Light for
+     now; a dark studio shell would only need these values swapped. */
+  --chrome-surface: #ffffff;
+  --chrome-surface-2: var(--neutral-50);
+  --chrome-surface-3: var(--neutral-100);
+  --chrome-border: var(--neutral-200);
+  --chrome-border-strong: var(--neutral-300);
+  --chrome-text: var(--neutral-900);
+  --chrome-text-dim: var(--neutral-600);
+  --chrome-text-faint: var(--neutral-400);
+  --chrome-hover: var(--neutral-100);
+  --chrome-active: var(--neutral-200);
+
+  /* The desk the slide sits on. Only a step off white: the slide is separated
+     by a hairline and a soft shadow, not by tonal contrast, which is what keeps
+     the whole surface calm. */
+  --stage-bg: #F1F2F4;
+
   /* Semantic aliases. Components can target meaning instead of a palette step. */
   --surface-canvas: var(--neutral-50);
   --surface-default: var(--bg-white);
@@ -235,6 +254,17 @@
 .bg-grid-dots-accent {
   background-size: 20px 20px !important;
   background-image: radial-gradient(circle, var(--neutral-300) 1.2px, transparent 1.2px) !important;
+}
+
+/* Live-status dot in the studio header. Breathes rather than blinks: a hard
+   on/off draws the eye away from the canvas, which is the opposite of what a
+   background autosave indicator should do. */
+.wg-pulse {
+  animation: wg-pulse 1.8s ease-in-out infinite;
+}
+@keyframes wg-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--emerald-500) 55%, transparent); }
+  50% { opacity: 0.65; box-shadow: 0 0 0 4px color-mix(in srgb, var(--emerald-500) 0%, transparent); }
 }
 
 /* India map pulse ring animation */

@@ -90,6 +90,10 @@ export interface SlotStyle {
   /** Hex, no '#'. */
   color?: string;
   align?: 'left' | 'center' | 'right';
+  /** A family name from FONT_CHOICES in formatting/rails.ts - the same string
+   *  the exporter passes to PowerPoint as `fontFace`, so the canvas and the
+   *  .pptx cannot disagree about which font a slot is in. */
+  fontFamily?: string;
 }
 
 /** One cell of a freshly-inserted (not imported) table: a single string

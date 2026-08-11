@@ -8,13 +8,17 @@ interface DeckSwitcherProps {
   onNew: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  /** 'header' renders just a caret next to the studio header's own editable
+   *  title, which already owns renaming the active deck. 'sidebar' renders the
+   *  full-width named trigger. */
+  variant?: 'sidebar' | 'header';
 }
 
 /**
  * Dropdown for managing multiple saved decks: switch, rename inline, delete
- * (two-step), and start a new one. Sits under the brand logo in the sidebar.
+ * (two-step), and start a new one.
  */
-export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, onDelete }: DeckSwitcherProps) {
+export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, onDelete, variant = 'sidebar' }: DeckSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
@@ -57,21 +61,35 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
     setEditingId(null);
   };
 
+  const isHeader = variant === 'header';
+
   return (
-    <div ref={rootRef} className="relative w-full">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between gap-2 h-[36px] px-3 rounded-[var(--radius-sharp)] border border-neutral-200 bg-white hover:bg-neutral-50 transition-colors cursor-pointer text-left"
-      >
-        <span className="flex items-center gap-2 min-w-0">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="0" /><line x1="3" y1="9" x2="21" y2="9" /></svg>
-          <span className="truncate text-[13px] font-bold text-neutral-800">{active?.name ?? 'Untitled deck'}</span>
-        </span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9" /></svg>
-      </button>
+    <div ref={rootRef} className={isHeader ? 'relative' : 'relative w-full'}>
+      {isHeader ? (
+        <button
+          onClick={() => setOpen((v) => !v)}
+          title="Switch deck"
+          aria-label="Switch deck"
+          aria-expanded={open}
+          className="flex items-center justify-center w-[22px] h-[22px] rounded-[var(--radius-sharp)] text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9" /></svg>
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 h-[36px] px-3 rounded-[var(--radius-sharp)] border border-neutral-200 bg-white hover:bg-neutral-50 transition-colors cursor-pointer text-left"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="0" /><line x1="3" y1="9" x2="21" y2="9" /></svg>
+            <span className="truncate text-[13px] font-bold text-neutral-800">{active?.name ?? 'Untitled deck'}</span>
+          </span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9" /></svg>
+        </button>
+      )}
 
       {open && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 w-full bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-lg overflow-hidden">
+        <div className={`absolute top-[calc(100%+6px)] z-[120] bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-lg overflow-hidden ${isHeader ? 'left-0 w-[264px]' : 'left-0 right-0 w-full'}`}>
           <div className="max-h-[240px] overflow-y-auto py-1">
             {projects.map((p) => {
               const isActive = p.id === activeId;

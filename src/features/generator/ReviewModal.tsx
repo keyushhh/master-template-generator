@@ -109,6 +109,9 @@ export function ReviewModal({
 
   if (!open) return null;
 
+  const allSelected = deck.slides.length > 0 && selected.size === deck.slides.length;
+  const selectAll = () => setSelected(new Set(deck.slides.map((s) => s.instanceId)));
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -152,7 +155,11 @@ export function ReviewModal({
       else await mod.exportToPPTX(visible, title, deck.logoUrl, onProgress, deck.logoScale);
     } catch (err) {
       console.error(`${kind} export error:`, err);
-      showToast(`${kind.toUpperCase()} export failed. Please try again.`, 'error');
+      // Report the actual reason. A bare "try again" hides the one piece of
+      // information that makes the failure fixable, and retrying an
+      // deterministic export failure just reproduces it.
+      const reason = err instanceof Error ? err.message : String(err);
+      showToast(`${kind.toUpperCase()} export failed — ${reason}`, 'error');
     } finally {
       setBusy(null);
     }
@@ -170,8 +177,8 @@ export function ReviewModal({
     'h-[38px] sm:h-[42px] px-3.5 sm:px-5 flex items-center gap-2 text-[12px] sm:text-[13px] font-bold rounded-[var(--radius-sharp)] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed';
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-neutral-900/60 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto" onClick={() => !busy && onClose()}>
-      <div ref={panelRef} className="flex flex-col w-full max-w-6xl max-h-[92vh] sm:max-h-[90vh] bg-white rounded-[var(--radius-sharp)] shadow-2xl overflow-hidden my-auto" onClick={(e) => e.stopPropagation()}>
+    <div className="wg-overlay fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-6 overflow-y-auto" onClick={() => !busy && onClose()}>
+      <div ref={panelRef} className="wg-modal flex flex-col w-full max-w-6xl max-h-[92vh] sm:max-h-[90vh] overflow-hidden my-auto" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-5 py-4 sm:px-6 sm:py-5 border-b border-neutral-150 shrink-0">
           <div className="flex flex-col gap-1">
@@ -241,11 +248,23 @@ export function ReviewModal({
             <div className="text-center text-[13px] text-neutral-500 py-16">No slides. Add slides to export.</div>
           ) : (
             <>
-              {selected.size === 0 && (
-                <div className="mb-3 text-[11.5px] text-neutral-500">
-                  Drag to reorder. Toggle the eye to include or exclude a slide. Use the checkbox to select multiple.
-                </div>
-              )}
+              <div className="mb-3 flex items-center justify-between gap-3">
+                {selected.size === 0 ? (
+                  <span className="text-[11.5px] text-neutral-500">
+                    Drag to reorder. Toggle the eye to include or exclude a slide. Use the checkbox to select multiple.
+                  </span>
+                ) : (
+                  <span className="text-[11.5px] text-neutral-500">
+                    Selecting slides is for bulk show / hide / delete — every visible slide is exported either way.
+                  </span>
+                )}
+                <button
+                  onClick={() => (allSelected ? clearSelection() : selectAll())}
+                  className="shrink-0 h-[28px] px-3 text-[11.5px] font-bold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] cursor-pointer transition-colors"
+                >
+                  {allSelected ? 'Clear selection' : `Select all ${deck.slides.length}`}
+                </button>
+              </div>
               <div className="grid gap-4 sm:gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
                 {deck.slides.map((slide) => {
                   const pos = visibleIds.indexOf(slide.instanceId); // -1 if hidden
@@ -323,8 +342,22 @@ export function ReviewModal({
 
         {/* Footer actions */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 sm:px-6 sm:py-4 border-t border-neutral-150 shrink-0 bg-white">
-          <div className="text-[12px] text-neutral-500 min-h-[18px]">
-            {busy ? `Exporting ${busy.toUpperCase()} - slide ${progress.current} of ${progress.total}…` : 'Everything look right? Export or present.'}
+          <div className="text-[12px] text-neutral-500 min-h-[18px] flex items-center gap-3 min-w-0">
+            {busy ? (
+              <>
+                <span className="whitespace-nowrap">
+                  Exporting {busy.toUpperCase()} — {progress.current} of {progress.total}
+                </span>
+                <span className="relative h-[3px] w-[120px] bg-neutral-200 overflow-hidden shrink-0">
+                  <span
+                    className="absolute inset-y-0 left-0 bg-emerald-500 transition-[width] duration-150"
+                    style={{ width: `${progress.total ? (progress.current / progress.total) * 100 : 0}%` }}
+                  />
+                </span>
+              </>
+            ) : (
+              'Everything look right? Export or present.'
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             <button onClick={onPresent} disabled={!!busy || visible.length === 0} aria-label="Start presenting" className={`${btnBase} text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200`}>
@@ -337,7 +370,7 @@ export function ReviewModal({
             <button onClick={() => runExport('png')} disabled={!!busy || visible.length === 0} className={`${btnBase} text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200`}>
               Download PNGs
             </button>
-            <button onClick={() => runExport('pdf')} disabled={!!busy || visible.length === 0} className={`${btnBase} text-white bg-neutral-800 hover:bg-neutral-700`}>
+            <button onClick={() => runExport('pdf')} disabled={!!busy || visible.length === 0} className={`${btnBase} text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200`}>
               Export PDF
             </button>
             <button onClick={() => runExport('pptx')} disabled={!!busy || visible.length === 0} className={`${btnBase} text-white bg-neutral-900 hover:bg-neutral-800`}>

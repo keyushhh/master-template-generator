@@ -98,10 +98,12 @@ function resolveColorMixForHtml2Canvas(clonedDoc: Document) {
   clonedDoc.body.removeChild(probe);
 }
 
-// Slides are rendered on-screen scaled-down (transform: scale) and pulled up with
-// a negative margin by the canvas's fit engine. Capturing that transformed element
-// directly makes html2canvas misplace layers (grid over text, grey strips). So we
-// neutralize the transform, capture at native 1920×1080, then restore.
+// The canvas presents one slide at a time: every slide stays mounted, but the
+// off-stage ones are centred under the current slide with opacity 0. Capturing
+// needs each one at native 1920×1080, unscaled, untranslated and fully opaque -
+// so we neutralize the stage's presentation styles, capture, then restore.
+// (The transform in particular must go: capturing a scaled element makes
+// html2canvas misplace layers - grid over text, grey strips.)
 const SLIDE_W = 1920;
 const SLIDE_H = 1080;
 
@@ -109,10 +111,20 @@ async function captureSlide(id: string): Promise<HTMLCanvasElement | null> {
   const el = document.getElementById(id);
   if (!el) return null;
 
-  const prevTransform = el.style.transform;
-  const prevMargin = el.style.marginBottom;
+  const saved = {
+    transform: el.style.transform,
+    marginBottom: el.style.marginBottom,
+    opacity: el.style.opacity,
+    left: el.style.left,
+    top: el.style.top,
+    zIndex: el.style.zIndex,
+  };
   el.style.transform = 'none';
   el.style.marginBottom = '0px';
+  el.style.opacity = '1';
+  el.style.left = '0px';
+  el.style.top = '0px';
+  el.style.zIndex = '1';
 
   try {
     return await html2canvas(el, {
@@ -127,8 +139,7 @@ async function captureSlide(id: string): Promise<HTMLCanvasElement | null> {
       onclone: resolveColorMixForHtml2Canvas,
     });
   } finally {
-    el.style.transform = prevTransform;
-    el.style.marginBottom = prevMargin;
+    Object.assign(el.style, saved);
   }
 }
 

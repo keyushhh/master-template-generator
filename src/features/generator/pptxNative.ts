@@ -495,7 +495,9 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
     text: line,
     options: {
       ...(i > 0 ? { softBreakBefore: true } : {}),
-      ...(i === lines.length - 1 && lines.length > 1 ? { color: NEUTRAL_300 } : {}),
+      // Matches the canvas's cover renderer. Both must change together or the
+      // exported deck stops matching what the editor showed.
+      ...(i === lines.length - 1 && lines.length > 1 ? { color: EMERALD_500 } : {}),
     },
   }));
   addText(slide, runs, box(140, heroTopPad + 55, 1680, headingH + 40), {
@@ -1237,6 +1239,7 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
       const text = s.text ?? '';
       if (!text.trim()) continue;
       addText(slide, text, b, {
+        fontFace: s.style?.fontFamily,
         size: s.style?.sizePx ?? 32,
         bold: s.style?.bold,
         italic: s.style?.italic,
@@ -1255,7 +1258,7 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
         text: cell.text ?? '',
         options: {
           fill: cell.fill ? { color: cell.fill } : undefined,
-          fontFace: FONT_DISPLAY,
+          fontFace: cell.style?.fontFamily ?? FONT_DISPLAY,
           fontSize: pt(cell.style?.sizePx ?? 16),
           bold: cell.style?.bold,
           italic: cell.style?.italic,
