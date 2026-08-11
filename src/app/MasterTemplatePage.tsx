@@ -3,7 +3,7 @@ import { GeneratorSidebar } from '../features/generator/GeneratorSidebar';
 import { PresentationCanvas, slideIsDark } from '../features/generator/PresentationCanvas';
 import { fontLabel, slotLabel } from '../features/formatting/labels';
 import { patchOffset, patchStyles, shiftOffsets } from '../features/formatting/resolve';
-import { sameSelection, slotsOf, toggleSlot, type Selection } from '../features/formatting/selection';
+import { sameSelection, shapeIdsOf, slotsOf, toggleShape, toggleSlot, type Selection } from '../features/formatting/selection';
 import { alignDelta, measureGroup, type GroupAlign } from '../features/formatting/group';
 import { ReviewModal } from '../features/generator/ReviewModal';
 import { PresentMode } from '../features/generator/PresentMode';
@@ -180,6 +180,10 @@ export function MasterTemplatePage() {
   }));
   const deck = history.present;
   const commitDeck = useCallback((next: Deck) => dispatchHistory({ type: 'commit', deck: next }), []);
+  // What Reset restores to - the deck as it stood right after import/generation,
+  // not the generic placeholder. Falls back to the placeholder for a deck that
+  // never had a source (a brand-new blank deck).
+  const [baselineDeck, setBaselineDeck] = useState<Deck>(boot.session.baselineDeck ?? boot.session.deck);
   // Edit mode forks the deck: edits land on the draft until Save commits them.
   // The fork carries its own undo stack (see draftReducer).
   const [draftHistory, dispatchDraft] = useReducer(draftReducer, undefined, () => ({
@@ -250,6 +254,7 @@ export function MasterTemplatePage() {
       dirty,
       historyPast: history.past.slice(-PERSISTED_HISTORY_LIMIT),
       historyFuture: history.future.slice(0, PERSISTED_HISTORY_LIMIT),
+      baselineDeck,
     });
     if (!ok && !saveFailedRef.current) {
       saveFailedRef.current = true;
@@ -258,7 +263,7 @@ export function MasterTemplatePage() {
       saveFailedRef.current = false;
     }
     setProjects(listProjects()); // keep updatedAt ordering fresh in the switcher
-  }, [activeId, ast, deck, draft, dirty, history.past, history.future, showToast]);
+  }, [activeId, ast, deck, draft, dirty, history.past, history.future, baselineDeck, showToast]);
 
   /** Route a deck mutation to the draft while editing, else commit directly. */
   const mutateDeck = useCallback(
@@ -275,9 +280,11 @@ export function MasterTemplatePage() {
 
   const handleGenerate = useCallback(() => {
     if (!ast) return;
-    commitDeck(buildDeckFromDocument(ast));
+    const built = buildDeckFromDocument(ast);
+    commitDeck(built);
     dispatchDraft({ type: 'close' });
     setDirty(false);
+    setBaselineDeck(built);
   }, [ast, commitDeck]);
 
   /** Import path: set the source AND build the deck in one step, so "Import & Load"
@@ -289,6 +296,7 @@ export function MasterTemplatePage() {
     commitDeck(built);
     dispatchDraft({ type: 'close' });
     setDirty(false);
+    setBaselineDeck(built);
     // If the deck is still unnamed, adopt the source's title so it's easy to find.
     const current = projects.find((p) => p.id === activeId);
     if (current && current.name === 'Untitled deck') {
@@ -308,6 +316,7 @@ export function MasterTemplatePage() {
     commitDeck(built);
     dispatchDraft({ type: 'close' });
     setDirty(false);
+    setBaselineDeck(built);
     showToast(
       warnings.length
         ? `Imported ${built.slides.length} slides. ${warnings.length} note${warnings.length > 1 ? 's' : ''}: ${warnings[0]}`
@@ -320,12 +329,15 @@ export function MasterTemplatePage() {
     }
   }, [commitDeck, projects, activeId, showToast]);
 
+  // Reverts to this deck's own baseline - the imported/generated content as it
+  // stood right after import, not the generic placeholder. A deck that never
+  // had a source (baselineDeck falls back to the placeholder itself) resets to
+  // the placeholder exactly as before.
   const handleReset = useCallback(() => {
-    commitDeck(createTemplateDeck());
+    commitDeck(baselineDeck);
     dispatchDraft({ type: 'close' });
     setDirty(false);
-    setAst(null); // unload the source too, so Source Material drops its loaded state
-  }, [commitDeck]);
+  }, [commitDeck, baselineDeck]);
 
   const handleEnterEdit = useCallback(() => {
     dispatchDraft({ type: 'open', deck });
@@ -360,12 +372,19 @@ export function MasterTemplatePage() {
   const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
 
   const handleSelect = useCallback((next: Selection, additive?: boolean) => {
-    // Shift-click builds a group instead of replacing the selection. Only slots
-    // can be grouped: imported runs and overlay shapes each have their own
-    // controls, and a mixed selection would leave most of the toolbar unable to
-    // act on most of what was selected.
+    // Shift-click builds a group instead of replacing the selection. Slots and
+    // imported shapes can each be grouped among their own kind - a box and its
+    // caption are both imported shapes, so shift-clicking between them has to
+    // work the same way shift-clicking two template fields does. Overlay
+    // shapes aren't included: they have their own controls per shape and
+    // mixing kinds would leave most of the toolbar unable to act on most of
+    // what was selected.
     if (additive && next.kind === 'slot') {
       setSelection((prev) => toggleSlot(prev, next));
+      return;
+    }
+    if (additive && next.kind === 'run') {
+      setSelection((prev) => toggleShape(prev, next));
       return;
     }
     // Re-focusing the field you're already typing in fires on every blur/focus
@@ -517,12 +536,31 @@ export function MasterTemplatePage() {
       ? targetSlide.content.overlay?.find((s) => s.id === selection.shapeId)
       : undefined;
 
-  /** Whether the toolbar should show text controls. True for template slots and
-   *  imported runs, and for an inserted text box - but not for a rectangle,
-   *  which gets shape controls instead. */
+  /** The imported shape a 'run' selection points at, if any - it's the shape
+   *  itself that fill/stroke/delete act on, regardless of which run inside it
+   *  the selection happens to be addressing. */
+  const selectedImportedShape =
+    selection?.kind === 'run' && targetSlide
+      ? targetSlide.content.shapes?.find((s) => s.id === selection.shapeId)
+      : undefined;
+  const importedShapeHasText = !!selectedImportedShape?.paragraphs?.length;
+
+  /** Every imported shape currently selected together (a box shift-clicked
+   *  with its caption, say). Above one, the toolbar swaps individual
+   *  fill/stroke/text controls for group alignment - a mixed box-and-text
+   *  selection has no single font or fill to show anyway. */
+  const importedShapeIds = shapeIdsOf(selection);
+  const importedShapeGroup = importedShapeIds.length > 1;
+
+  /** Whether the toolbar should show text controls. True for template slots,
+   *  a single imported run that actually carries text, and an inserted text
+   *  box - but not for a rectangle, a multi-shape group, or an imported shape
+   *  with no text of its own, which get shape controls instead. */
   const hasTextSelection =
     !!selection &&
-    (selection.kind === 'slot' || selection.kind === 'run' || selectedOverlayShape?.kind === 'text');
+    (selection.kind === 'slot' ||
+      (selection.kind === 'run' && importedShapeHasText && !importedShapeGroup) ||
+      selectedOverlayShape?.kind === 'text');
 
   const handleInsertShape = useCallback(
     (kind: OverlayShape['kind']) => {
@@ -586,6 +624,89 @@ export function MasterTemplatePage() {
     [patchSelectedShape]
   );
 
+  /** Deletes every shape in the current selection, not just the anchor - a
+   *  shift-clicked group deletes as one action. */
+  const handleDeleteImportedShape = useCallback(() => {
+    if (selection?.kind !== 'run') return;
+    const sel = selection;
+    const ids = shapeIdsOf(sel);
+    handleEditSlide(sel.instanceId, (c) => ({
+      ...c,
+      shapes: (c.shapes ?? []).filter((s) => !ids.includes(s.id)),
+    }));
+    setSelection(null);
+  }, [selection, handleEditSlide]);
+
+  const handleSetImportedShapeFill = useCallback(
+    (hex: string | undefined) => {
+      if (selection?.kind !== 'run') return;
+      const sel = selection;
+      const ids = shapeIdsOf(sel);
+      handleEditSlide(sel.instanceId, (c) => ({
+        ...c,
+        shapes: (c.shapes ?? []).map((s) => (ids.includes(s.id) ? { ...s, fill: hex } : s)),
+      }));
+    },
+    [selection, handleEditSlide]
+  );
+
+  const handleSetImportedShapeLine = useCallback(
+    (line: { color: string; widthPx: number } | undefined) => {
+      if (selection?.kind !== 'run') return;
+      const sel = selection;
+      const ids = shapeIdsOf(sel);
+      handleEditSlide(sel.instanceId, (c) => ({
+        ...c,
+        shapes: (c.shapes ?? []).map((s) => (ids.includes(s.id) ? { ...s, line } : s)),
+      }));
+    },
+    [selection, handleEditSlide]
+  );
+
+  /**
+   * Aligns every selected imported shape to the others, the way Google
+   * Slides' "Align" acts on a multi-object selection: relative to the
+   * combined bounding box of the group, not to the slide. This is what makes
+   * "centre this caption inside its box" possible - the box and its caption
+   * are separate shapes with no relationship in the model, so centering only
+   * makes sense as a geometric operation on the pair.
+   */
+  const handleAlignShapes = useCallback(
+    (to: 'left' | 'centerX' | 'right' | 'top' | 'centerY' | 'bottom') => {
+      if (selection?.kind !== 'run') return;
+      const sel = selection;
+      const ids = shapeIdsOf(sel);
+      if (ids.length < 2) return;
+      handleEditSlide(sel.instanceId, (c) => {
+        const shapes = c.shapes ?? [];
+        const members = shapes.filter((s) => ids.includes(s.id));
+        if (members.length < 2) return c;
+        const minX = Math.min(...members.map((s) => s.x));
+        const maxX = Math.max(...members.map((s) => s.x + s.w));
+        const minY = Math.min(...members.map((s) => s.y));
+        const maxY = Math.max(...members.map((s) => s.y + s.h));
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        return {
+          ...c,
+          shapes: shapes.map((s) => {
+            if (!ids.includes(s.id)) return s;
+            let x = s.x;
+            let y = s.y;
+            if (to === 'left') x = minX;
+            else if (to === 'right') x = maxX - s.w;
+            else if (to === 'centerX') x = cx - s.w / 2;
+            else if (to === 'top') y = minY;
+            else if (to === 'bottom') y = maxY - s.h;
+            else if (to === 'centerY') y = cy - s.h / 2;
+            return { ...s, x: Math.round(x), y: Math.round(y) };
+          }),
+        };
+      });
+    },
+    [selection, handleEditSlide]
+  );
+
   const handleNotesChange = useCallback(
     (notes: string) => {
       if (!targetSlide) return;
@@ -609,7 +730,7 @@ export function MasterTemplatePage() {
    */
   useEffect(() => {
     if (!editing || !selection) return;
-    if (selection.kind !== 'overlay' && selection.kind !== 'slot') return;
+    if (selection.kind !== 'overlay' && selection.kind !== 'slot' && selection.kind !== 'run') return;
     const sel = selection;
 
     const onKey = (e: KeyboardEvent) => {
@@ -631,6 +752,14 @@ export function MasterTemplatePage() {
       if (sel.kind === 'overlay' && (e.key === 'Delete' || e.key === 'Backspace')) {
         e.preventDefault();
         handleDeleteShape();
+        return;
+      }
+      // An imported shape works the same way, as long as the caret isn't
+      // sitting inside its text - the isContentEditable guard above already
+      // covers that case, so reaching here means the shape itself is targeted.
+      if (sel.kind === 'run' && (e.key === 'Delete' || e.key === 'Backspace')) {
+        e.preventDefault();
+        handleDeleteImportedShape();
         return;
       }
       if (e.key === 'Escape') {
@@ -658,6 +787,21 @@ export function MasterTemplatePage() {
         return;
       }
 
+      if (sel.kind === 'run') {
+        // Every shape in the selection moves by the same delta, so a group (a
+        // box and its caption) keeps its internal layout while nudging.
+        const ids = shapeIdsOf(sel);
+        handleEditSlide(sel.instanceId, (c) => ({
+          ...c,
+          shapes: (c.shapes ?? []).map((s) => {
+            if (!ids.includes(s.id)) return s;
+            const moved = clampToSlide({ ...s, x: s.x + d[0] * step, y: s.y + d[1] * step });
+            return { ...s, x: moved.x, y: moved.y };
+          }),
+        }));
+        return;
+      }
+
       const shape = displayDeck.slides
         .find((s) => s.instanceId === sel.instanceId)
         ?.content.overlay?.find((s) => s.id === sel.shapeId);
@@ -672,7 +816,7 @@ export function MasterTemplatePage() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [editing, selection, handleLayerMove, handleDeleteShape, patchSelectedShape, handleEditSlide, displayDeck]);
+  }, [editing, selection, handleLayerMove, handleDeleteShape, handleDeleteImportedShape, patchSelectedShape, handleEditSlide, displayDeck]);
 
   /** Returns the selection to template styling (or, on an imported run, strips
    *  the formatting the toolbar can control). */
@@ -937,6 +1081,7 @@ export function MasterTemplatePage() {
     dispatchHistory({ type: 'set', deck: session.deck, past: session.historyPast, future: session.historyFuture });
     dispatchDraft({ type: 'open', deck: session.draft ?? null });
     setDirty(session.draft ? session.dirty ?? false : false);
+    setBaselineDeck(session.baselineDeck ?? session.deck);
   }, []);
 
   const flushCurrent = useCallback(() => {
@@ -947,8 +1092,9 @@ export function MasterTemplatePage() {
       dirty,
       historyPast: history.past.slice(-PERSISTED_HISTORY_LIMIT),
       historyFuture: history.future.slice(0, PERSISTED_HISTORY_LIMIT),
+      baselineDeck,
     });
-  }, [activeId, ast, deck, draft, dirty, history.past, history.future]);
+  }, [activeId, ast, deck, draft, dirty, history.past, history.future, baselineDeck]);
 
   const handleSwitchDeck = useCallback(
     (id: string) => {
@@ -1206,6 +1352,7 @@ export function MasterTemplatePage() {
         onRequestEdit={handleEnterEdit}
         selection={selection}
         onSelect={handleSelect}
+        onDeselect={() => setSelection(null)}
         onActiveSlideChange={setActiveSlideId}
         onRenameSlide={handleRename}
         revision={textRevision}
@@ -1260,6 +1407,13 @@ export function MasterTemplatePage() {
             onToggleBehind={() => patchSelectedShape({ behind: !selectedOverlayShape?.behind })}
             onDeleteShape={handleDeleteShape}
             onSetFill={handleSetShapeFill}
+            importedShape={selectedImportedShape}
+            isImportedSelection={selection?.kind === 'run'}
+            importedShapeGroupCount={importedShapeIds.length}
+            onAlignShapes={handleAlignShapes}
+            onDeleteImportedShape={handleDeleteImportedShape}
+            onSetImportedFill={handleSetImportedShapeFill}
+            onSetImportedLine={handleSetImportedShapeLine}
             notes={targetSlide.notes ?? ''}
             onNotesChange={handleNotesChange}
           />

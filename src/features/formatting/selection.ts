@@ -49,6 +49,13 @@ export interface RunSelection {
   shapeId: string;
   paragraph: number;
   run: number;
+  /** Other imported shapes on the same slide, selected alongside `shapeId` -
+   *  the box-and-its-caption case, where the two are separate shapes that need
+   *  to move, align or delete together. Same "anchor plus extras" shape as
+   *  SlotSelection.extra, for the same reason: every existing consumer that
+   *  only reads `shapeId` keeps working, a group is just a run selection that
+   *  happens to include more shapes. */
+  extra?: string[];
   effectiveSizePx?: number;
   /** The font this text is actually rendering in, read from the live DOM at
    *  selection time. Shown in the toolbar in place of the internal slot name:
@@ -115,6 +122,38 @@ export function toggleSlot(
   };
 }
 
+/** Every imported shape a selection covers, anchor first. Mirrors `slotsOf`. */
+export function shapeIdsOf(sel: Selection | null): string[] {
+  if (!sel || sel.kind !== 'run') return [];
+  return [...new Set([sel.shapeId, ...(sel.extra ?? [])])];
+}
+
+/**
+ * Adds or removes an imported shape from a selection, the way a shift-click
+ * should behave. Mirrors `toggleSlot` - see there for the reasoning behind
+ * "never empty" and "a different slide replaces outright".
+ */
+export function toggleShape(prev: Selection | null, next: RunSelection): RunSelection {
+  if (!prev || prev.kind !== 'run' || prev.instanceId !== next.instanceId) return next;
+
+  const current = shapeIdsOf(prev);
+  if (!current.includes(next.shapeId)) {
+    return { ...prev, extra: [...(prev.extra ?? []), next.shapeId] };
+  }
+
+  const remaining = current.filter((id) => id !== next.shapeId);
+  if (!remaining.length) return prev;
+  const [anchor, ...extra] = remaining;
+  return {
+    ...prev,
+    shapeId: anchor,
+    extra: extra.length ? extra : undefined,
+    // A different anchor has its own paragraph/run/text metrics - the old
+    // ones would point at text that may not even exist on the new anchor.
+    ...(anchor === prev.shapeId ? {} : { paragraph: 0, run: 0, effectiveSizePx: undefined, effectiveFont: undefined }),
+  };
+}
+
 /** True when both selections point at the same thing, so re-focusing the field
  *  a user is already in doesn't churn React state on every keystroke-blur. */
 export function sameSelection(a: Selection | null, b: Selection | null): boolean {
@@ -129,11 +168,15 @@ export function sameSelection(a: Selection | null, b: Selection | null): boolean
     return ea.length === eb.length && ea.every((s, i) => s === eb[i]);
   }
   if (a.kind === 'run' && b.kind === 'run') {
+    const ea = a.extra ?? [];
+    const eb = b.extra ?? [];
     return (
       a.instanceId === b.instanceId &&
       a.shapeId === b.shapeId &&
       a.paragraph === b.paragraph &&
-      a.run === b.run
+      a.run === b.run &&
+      ea.length === eb.length &&
+      ea.every((s, i) => s === eb[i])
     );
   }
   if (a.kind === 'overlay' && b.kind === 'overlay') {

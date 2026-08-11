@@ -41,11 +41,22 @@ function lines(axis: 'x' | 'y'): number[] {
   return [...grid, ...guides];
 }
 
-/** Snaps one coordinate: to a brand line if within MAGNET, else to FINE. */
-export function snapValue(v: number, axis: 'x' | 'y', free: boolean): number {
+/** Extra, per-drag snap lines gathered from sibling shapes on the same slide
+ *  (their edges and centers) - lets a drag lock onto "flush with that other
+ *  box" the same way it locks onto the brand grid. */
+export interface ExtraGuides { x: number[]; y: number[] }
+
+/** Snaps one coordinate: to a sibling-shape line first (tighter magnet, since
+ *  those are exact rather than a design guess), then a brand line, else FINE. */
+export function snapValue(v: number, axis: 'x' | 'y', free: boolean, extra: number[] = []): number {
   if (free) return Math.round(v);
   let best: number | undefined;
   let bestDist = MAGNET + 1;
+  for (const l of extra) {
+    const d = Math.abs(l - v);
+    if (d < bestDist) { bestDist = d; best = l; }
+  }
+  if (best !== undefined) return best;
   for (const l of lines(axis)) {
     const d = Math.abs(l - v);
     if (d < bestDist) { bestDist = d; best = l; }
@@ -59,15 +70,27 @@ export interface Rect { x: number; y: number; w: number; h: number }
 /** Minimum size, so a shape can never be resized into something unclickable. */
 export const MIN_SIZE = 24;
 
+/** Sibling rects' left/right/center-x and top/bottom/center-y as snap lines. */
+export function guidesFromSiblings(rects: Rect[]): ExtraGuides {
+  const x: number[] = [];
+  const y: number[] = [];
+  for (const r of rects) {
+    x.push(r.x, r.x + r.w, r.x + r.w / 2);
+    y.push(r.y, r.y + r.h, r.y + r.h / 2);
+  }
+  return { x, y };
+}
+
 /**
  * Snaps a moved rect. Both edges are considered on each axis and the better
  * match wins, so dragging a box to sit flush against a gridline works whether
  * you're thinking about its left edge or its right.
  */
-export function snapMove(r: Rect, free: boolean): Rect {
+export function snapMove(r: Rect, free: boolean, extra?: ExtraGuides): Rect {
   const snapAxis = (pos: number, size: number, axis: 'x' | 'y') => {
-    const lead = snapValue(pos, axis, free);
-    const trail = snapValue(pos + size, axis, free) - size;
+    const extraLines = axis === 'x' ? extra?.x : extra?.y;
+    const lead = snapValue(pos, axis, free, extraLines);
+    const trail = snapValue(pos + size, axis, free, extraLines) - size;
     return Math.abs(lead - pos) <= Math.abs(trail - pos) ? lead : trail;
   };
   return {
@@ -86,27 +109,27 @@ export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
  * edge snaps independently - so resizing the right edge of a box leaves its
  * left edge exactly where the user put it.
  */
-export function snapResize(start: Rect, handle: Handle, dx: number, dy: number, free: boolean): Rect {
+export function snapResize(start: Rect, handle: Handle, dx: number, dy: number, free: boolean, extra?: ExtraGuides): Rect {
   let { x, y, w, h } = start;
   const right = start.x + start.w;
   const bottom = start.y + start.h;
 
   if (handle.includes('w')) {
-    const nx = snapValue(start.x + dx, 'x', free);
+    const nx = snapValue(start.x + dx, 'x', free, extra?.x);
     x = Math.min(nx, right - MIN_SIZE);
     w = right - x;
   }
   if (handle.includes('e')) {
-    const nr = snapValue(right + dx, 'x', free);
+    const nr = snapValue(right + dx, 'x', free, extra?.x);
     w = Math.max(MIN_SIZE, nr - start.x);
   }
   if (handle.includes('n')) {
-    const ny = snapValue(start.y + dy, 'y', free);
+    const ny = snapValue(start.y + dy, 'y', free, extra?.y);
     y = Math.min(ny, bottom - MIN_SIZE);
     h = bottom - y;
   }
   if (handle.includes('s')) {
-    const nb = snapValue(bottom + dy, 'y', free);
+    const nb = snapValue(bottom + dy, 'y', free, extra?.y);
     h = Math.max(MIN_SIZE, nb - start.y);
   }
   return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };

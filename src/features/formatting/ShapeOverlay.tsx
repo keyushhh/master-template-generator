@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OverlayShape } from '../deck/types';
 import { applyToCss } from './resolve';
-import { MIN_SIZE, clampToSlide, snapMove, snapResize, type Handle, type Rect } from './snap';
+import { MIN_SIZE, clampToSlide, guidesFromSiblings, snapMove, snapResize, type ExtraGuides, type Handle, type Rect } from './snap';
 
 /** z-index bands. The slide's grid sits at 0 and its template content at 10,
  *  so these bracket it without colliding. */
@@ -95,6 +95,7 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
     startY: number;
     scale: number;
     moved: boolean;
+    extras: ExtraGuides;
   } | null>(null);
 
   useEffect(() => {
@@ -121,8 +122,8 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
       d.moved = true;
       const free = e.altKey;
       const rect = d.handle
-        ? snapResize(d.startRect, d.handle, dx, dy, free)
-        : clampToSlide(snapMove({ ...d.startRect, x: d.startRect.x + dx, y: d.startRect.y + dy }, free));
+        ? snapResize(d.startRect, d.handle, dx, dy, free, d.extras)
+        : clampToSlide(snapMove({ ...d.startRect, x: d.startRect.x + dx, y: d.startRect.y + dy }, free, d.extras));
       setLive({ id: d.id, rect });
     };
 
@@ -161,6 +162,7 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
       startY: e.clientY,
       scale: slideScale(e.currentTarget as HTMLElement),
       moved: false,
+      extras: guidesFromSiblings(shapes.filter((s) => s.id !== shape.id)),
     };
     setLive({ id: shape.id, rect });
   };

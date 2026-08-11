@@ -36,12 +36,25 @@ export interface ImportedParagraph {
   align?: 'left' | 'center' | 'right';
 }
 
+/** One cell of an imported table. Its own fill wins over the table's banding,
+ *  the same precedence PowerPoint uses when a cell has an explicit override. */
+export interface ImportedTableCell {
+  /** Hex, no '#'. Absent means transparent - let the row's banding show. */
+  fill?: string;
+  paragraphs?: ImportedParagraph[];
+}
+
+export interface ImportedTableRow {
+  heightPx: number;
+  cells: ImportedTableCell[];
+}
+
 /** A shape lifted from an uploaded .pptx, positioned in the 1920x1080 design
  *  space. Geometry is preserved exactly; fill, line and type are mapped onto
  *  the brand palette so the slide reads as Wozku without moving. */
 export interface ImportedShape {
   id: string;
-  kind: 'rect' | 'ellipse' | 'image';
+  kind: 'rect' | 'ellipse' | 'image' | 'table';
   x: number;
   y: number;
   w: number;
@@ -53,6 +66,9 @@ export interface ImportedShape {
   imageUrl?: string;
   paragraphs?: ImportedParagraph[];
   vAlign?: 'top' | 'middle' | 'bottom';
+  /** Present for kind==='table'. Column widths sum to `w`. */
+  colWidthsPx?: number[];
+  rows?: ImportedTableRow[];
 }
 
 /** A per-slot formatting override applied on top of whatever the template

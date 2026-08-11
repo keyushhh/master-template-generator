@@ -22,7 +22,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { OverlayShape, SlotStyle } from '../deck/types';
+import type { ImportedShape, OverlayShape, SlotStyle } from '../deck/types';
 import {
   ACCENT_SWATCHES,
   NEUTRAL_SWATCHES,
@@ -210,8 +210,20 @@ function SizeStepper({
 }
 
 function ColorMenu({
-  value, onDark, onPick,
-}: { value?: string; onDark?: boolean; onPick: (hex: string | undefined) => void }) {
+  value, onDark, onPick, title = 'Text colour', noneLabel = 'Template colour',
+  paletteLabel = 'Brand palette', noneSwatch, emptySwatch,
+}: {
+  value?: string; onDark?: boolean; onPick: (hex: string | undefined) => void;
+  title?: string; noneLabel?: string; paletteLabel?: string;
+  /** Puts a dedicated "remove colour" chip at the front of the swatch grid,
+   *  always visible rather than only appearing once something is picked - a
+   *  shape's fill/stroke has "none" as a real, common choice, not a fallback
+   *  you'd only look for after already picking a colour. */
+  noneSwatch?: boolean;
+  /** Icon shown when nothing is picked - a diagonal split by default (text),
+   *  or a plain checkerboard-ish outline when "none" means transparent. */
+  emptySwatch?: React.ReactNode;
+}) {
   const [hex, setHex] = useState('');
   const neutrals = onDark ? [...NEUTRAL_SWATCHES].reverse() : NEUTRAL_SWATCHES;
   const custom = !!value && !isBrandColor(value);
@@ -236,23 +248,42 @@ function ColorMenu({
 
   return (
     <Menu
-      title="Text colour"
+      title={title}
       label=""
       width={214}
       icon={
-        <span
-          style={{
-            width: 15, height: 15, flexShrink: 0, borderRadius: 2,
-            background: value ? `#${value}` : 'linear-gradient(135deg,#fff 50%,#10B981 50%)',
-            border: '1px solid rgba(255,255,255,0.45)',
-          }}
-        />
+        emptySwatch && !value ? emptySwatch : (
+          <span
+            style={{
+              width: 15, height: 15, flexShrink: 0, borderRadius: 2,
+              background: value ? `#${value}` : 'linear-gradient(135deg,#fff 50%,#10B981 50%)',
+              border: '1px solid rgba(255,255,255,0.45)',
+            }}
+          />
+        )
       }
     >
       {(close) => (
         <>
-          <div style={{ ...mono, color: 'rgba(255,255,255,0.4)', padding: '2px 4px 8px' }}>Brand palette</div>
+          <div style={{ ...mono, color: 'rgba(255,255,255,0.4)', padding: '2px 4px 8px' }}>{paletteLabel}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
+            {noneSwatch && (
+              <button
+                title={noneLabel}
+                aria-label={noneLabel}
+                onClick={() => { onPick(undefined); close(); }}
+                style={{
+                  width: 22, height: 22, padding: 0, cursor: 'pointer', position: 'relative',
+                  background: 'transparent',
+                  border: !value ? '2px solid var(--emerald-400)' : '1px solid rgba(255,255,255,0.35)',
+                  borderRadius: 'var(--radius-sharp)',
+                }}
+              >
+                <svg width="22" height="22" viewBox="0 0 22 22" style={{ position: 'absolute', inset: 0 }} aria-hidden>
+                  <line x1="4" y1="18" x2="18" y2="4" stroke="#f87171" strokeWidth="1.6" />
+                </svg>
+              </button>
+            )}
             {neutrals.map((s) => chip(s.hex, s.label, s.light, close))}
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, padding: '0 2px' }}>
@@ -279,9 +310,9 @@ function ColorMenu({
               }}
             />
           </div>
-          {value && (
+          {value && !noneSwatch && (
             <div style={{ marginTop: 8 }}>
-              <Row label="Template colour" onClick={() => { onPick(undefined); close(); }} />
+              <Row label={noneLabel} onClick={() => { onPick(undefined); close(); }} />
             </div>
           )}
         </>
@@ -332,6 +363,22 @@ interface EditToolbarProps {
   onDeleteShape: () => void;
   onSetFill: (hex: string | undefined) => void;
 
+  /** The imported shape a 'run' selection points at, when it has one - the
+   *  shape itself, not the particular run, since fill/stroke/delete are
+   *  shape-level. */
+  importedShape?: ImportedShape;
+  /** True whenever the current selection is an imported shape at all (text or
+   *  not) - a text one still needs a delete button, just no fill/stroke. */
+  isImportedSelection?: boolean;
+  /** How many imported shapes are selected together. Above one, the bar shows
+   *  group alignment instead of any single shape's fill/stroke/text controls -
+   *  a box and its caption have nothing in common to show one set of. */
+  importedShapeGroupCount?: number;
+  onAlignShapes: (to: 'left' | 'centerX' | 'right' | 'top' | 'centerY' | 'bottom') => void;
+  onDeleteImportedShape: () => void;
+  onSetImportedFill: (hex: string | undefined) => void;
+  onSetImportedLine: (line: { color: string; widthPx: number } | undefined) => void;
+
   notes: string;
   onNotesChange: (notes: string) => void;
 }
@@ -356,6 +403,13 @@ export function EditToolbar({
   onToggleBehind,
   onDeleteShape,
   onSetFill,
+  importedShape,
+  isImportedSelection,
+  importedShapeGroupCount,
+  onAlignShapes,
+  onDeleteImportedShape,
+  onSetImportedFill,
+  onSetImportedLine,
   notes,
   onNotesChange,
 }: EditToolbarProps) {
@@ -518,6 +572,16 @@ export function EditToolbar({
               Reset
             </button>
           )}
+
+          {isImportedSelection && (
+            <button title="Delete this text box" aria-label="Delete text box" onClick={onDeleteImportedShape}
+              style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          )}
         </>
       ) : selectedShape ? (
         <>
@@ -563,6 +627,93 @@ export function EditToolbar({
           </Menu>
 
           <button title="Delete this shape" aria-label="Delete shape" onClick={onDeleteShape}
+            style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+          </button>
+        </>
+      ) : importedShapeGroupCount && importedShapeGroupCount > 1 ? (
+        <>
+          <span
+            title="Alignment, nudging, dragging and delete apply to all of these"
+            style={{ ...mono, color: 'var(--emerald-400)', whiteSpace: 'nowrap' }}
+          >
+            {importedShapeGroupCount} shapes
+          </span>
+
+          <Menu title="Align the selected shapes to each other" label="Align" width={200}>
+            {(close) => (
+              <>
+                <div style={{ ...mono, color: 'rgba(255,255,255,0.4)', padding: '2px 4px 6px' }}>Horizontal</div>
+                <Row label="Left" onClick={() => { onAlignShapes('left'); close(); }} />
+                <Row label="Centre" onClick={() => { onAlignShapes('centerX'); close(); }} />
+                <Row label="Right" onClick={() => { onAlignShapes('right'); close(); }} />
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '8px 4px' }} />
+                <div style={{ ...mono, color: 'rgba(255,255,255,0.4)', padding: '2px 4px 6px' }}>Vertical</div>
+                <Row label="Top" onClick={() => { onAlignShapes('top'); close(); }} />
+                <Row label="Middle" onClick={() => { onAlignShapes('centerY'); close(); }} />
+                <Row label="Bottom" onClick={() => { onAlignShapes('bottom'); close(); }} />
+              </>
+            )}
+          </Menu>
+
+          <button title="Delete selected shapes" aria-label="Delete selected shapes" onClick={onDeleteImportedShape}
+            style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+          </button>
+        </>
+      ) : importedShape ? (
+        <>
+          {(importedShape.kind === 'rect' || importedShape.kind === 'ellipse') && (
+            <ColorMenu
+              title="Fill colour"
+              paletteLabel="Fill colour"
+              noneLabel="No fill"
+              noneSwatch
+              value={importedShape.fill}
+              onDark={onDark}
+              onPick={onSetImportedFill}
+              emptySwatch={<span style={{ width: 15, height: 15, border: '1.5px solid rgba(255,255,255,0.55)', borderRadius: 2 }} />}
+            />
+          )}
+
+          <ColorMenu
+            title="Stroke colour"
+            paletteLabel="Stroke colour"
+            noneLabel="No stroke"
+            noneSwatch
+            value={importedShape.line?.color}
+            onDark={onDark}
+            onPick={(hex) => onSetImportedLine(hex ? { color: hex, widthPx: importedShape.line?.widthPx ?? 1 } : undefined)}
+            emptySwatch={
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2" aria-hidden>
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+              </svg>
+            }
+          />
+
+          {importedShape.line && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <button title="Thinner stroke" aria-label="Thinner stroke"
+                onClick={() => onSetImportedLine({ color: importedShape.line!.color, widthPx: Math.max(1, importedShape.line!.widthPx - 1) })}
+                style={{ ...ctl, padding: '0 6px' }}>−</button>
+              <span style={{ ...mono, fontSize: 10, color: 'rgba(255,255,255,0.6)', minWidth: 14, textAlign: 'center' }}>
+                {importedShape.line.widthPx}
+              </span>
+              <button title="Thicker stroke" aria-label="Thicker stroke"
+                onClick={() => onSetImportedLine({ color: importedShape.line!.color, widthPx: Math.min(12, importedShape.line!.widthPx + 1) })}
+                style={{ ...ctl, padding: '0 6px' }}>+</button>
+            </span>
+          )}
+
+          <Sep />
+
+          <button title="Delete this shape" aria-label="Delete shape" onClick={onDeleteImportedShape}
             style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <polyline points="3 6 5 6 21 6" />

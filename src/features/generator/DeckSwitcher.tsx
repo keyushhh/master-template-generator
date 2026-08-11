@@ -18,8 +18,11 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
-  const [armedDeleteId, setArmedDeleteId] = useState<string | null>(null);
+  /** The deck a delete click is pending confirmation for - a modal, not just a
+   *  hover-tooltip change, so an accidental double-click can't slip through. */
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const pendingDelete = projects.find((p) => p.id === pendingDeleteId) ?? null;
 
   const active = projects.find((p) => p.id === activeId) ?? null;
 
@@ -42,14 +45,12 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
   useEffect(() => {
     if (!open) {
       setEditingId(null);
-      setArmedDeleteId(null);
     }
   }, [open]);
 
   const startRename = (p: ProjectMeta) => {
     setEditingId(p.id);
     setDraftName(p.name);
-    setArmedDeleteId(null);
   };
   const commitRename = () => {
     if (editingId) onRename(editingId, draftName);
@@ -116,14 +117,10 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
                   </button>
                   <button
-                    onClick={() => (armedDeleteId === p.id ? onDelete(p.id) : setArmedDeleteId(p.id))}
-                    title={armedDeleteId === p.id ? 'Click again to delete' : 'Delete'}
+                    onClick={() => setPendingDeleteId(p.id)}
+                    title="Delete"
                     aria-label="Delete deck"
-                    className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-[var(--radius-sharp)] transition-all cursor-pointer ${
-                      armedDeleteId === p.id
-                        ? 'text-red-600 bg-red-50 opacity-100'
-                        : 'text-neutral-400 hover:text-red-600 opacity-0 group-hover:opacity-100'
-                    }`}
+                    className="shrink-0 w-6 h-6 flex items-center justify-center rounded-[var(--radius-sharp)] transition-all cursor-pointer text-neutral-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                   </button>
@@ -138,6 +135,40 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             New deck
           </button>
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onMouseDown={() => setPendingDeleteId(null)}
+        >
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            className="w-[360px] bg-white rounded-[var(--radius-sharp)] shadow-xl p-5"
+          >
+            <h3 className="text-[15px] font-bold text-neutral-900">Delete "{pendingDelete.name}"?</h3>
+            <p className="mt-1.5 text-[13px] text-neutral-500">
+              This can't be undone. All slides and edits in this deck will be lost.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setPendingDeleteId(null)}
+                className="h-8 px-3 text-[13px] font-bold text-neutral-700 rounded-[var(--radius-sharp)] border border-neutral-200 hover:bg-neutral-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  onDelete(pendingDelete.id);
+                  setPendingDeleteId(null);
+                }}
+                className="h-8 px-3 text-[13px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-[var(--radius-sharp)] cursor-pointer"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

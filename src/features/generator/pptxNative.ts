@@ -1146,6 +1146,24 @@ async function buildImported(slide: pptxgen.Slide, content: SlideInstance['conte
       continue;
     }
 
+    if (sh.kind === 'table' && sh.rows) {
+      const colW = (sh.colWidthsPx ?? []).map((w) => inch(w));
+      const rows: pptxgen.TableRow[] = sh.rows.map((row) => row.cells.map((cell) => ({
+        text: (cell.paragraphs ?? []).flatMap((p) => p.runs.map((r) => r.text)).join(' '),
+        options: {
+          fill: cell.fill ? { color: cell.fill } : undefined,
+          fontFace: cell.paragraphs?.[0]?.runs[0]?.font ?? FONT_DISPLAY,
+          fontSize: pt(cell.paragraphs?.[0]?.runs[0]?.sizePx ?? 16),
+          bold: cell.paragraphs?.[0]?.runs[0]?.bold,
+          color: cell.paragraphs?.[0]?.runs[0]?.color ?? NEUTRAL_900,
+          align: cell.paragraphs?.[0]?.align ?? 'left',
+          border: { type: 'solid', color: 'D9D9D9', pt: 0.75 },
+        },
+      })));
+      slide.addTable(rows, { ...b, colW: colW.length ? colW : undefined, autoPage: false });
+      continue;
+    }
+
     if (sh.fill || sh.line) {
       const line = sh.line ? { color: sh.line.color, widthPx: sh.line.widthPx } : undefined;
       if (sh.kind === 'ellipse') {

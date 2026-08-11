@@ -3,6 +3,7 @@ import type {
   ImportedShape,
   ImportedParagraph,
   ImportedRun,
+  ImportedTableRow,
 } from '../deck/types';
 import { mapFont, snapToBrand } from './brandMap';
 
@@ -68,37 +69,128 @@ function firstChild(parent: Element, localName: string): Element | null {
   return childrenOf(parent, [localName])[0] ?? null;
 }
 
+/** dk1/lt1/dk2/lt2/accentN/hlink/folHlink -> hex, read from the deck's theme. */
+type ThemeMap = Record<string, string>;
+
+/**
+ * A table's banded columns/rows are very often colored by scheme reference
+ * (`accent2`, `accent3`...) rather than a literal RGB - a fill only some
+ * shapes in a "fake table" (a grid of individually drawn rectangles, the
+ * overwhelmingly common way tables show up in decks) carry. Resolving only
+ * bg1/tx1 and leaving every other scheme name as "no fill" is exactly what
+ * makes some columns keep their background and others lose it.
+ */
+async function loadThemeMap(zip: JSZip): Promise<ThemeMap> {
+  const map: ThemeMap = {};
+  const names = Object.keys(zip.files).filter((n) => /^ppt\/theme\/theme\d+\.xml$/.test(n));
+  const name = names.sort()[0];
+  if (!name) return map;
+  const xml = await zip.file(name)?.async('string');
+  if (!xml) return map;
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const scheme = doc.getElementsByTagNameNS(A, 'clrScheme')[0];
+  if (!scheme) return map;
+  for (let i = 0; i < scheme.childNodes.length; i++) {
+    const node = scheme.childNodes[i];
+    if (node.nodeType !== 1) continue;
+    const child = node as Element;
+    const srgb = firstChild(child, 'srgbClr')?.getAttribute('val');
+    const sys = firstChild(child, 'sysClr')?.getAttribute('lastClr');
+    const hex = srgb ?? sys;
+    if (hex) map[child.localName] = hex;
+  }
+  // Default clrMap PowerPoint ships when a slide master doesn't remap it -
+  // resolving a full <p:clrMap> per master is more machinery than the payoff
+  // here justifies.
+  if (map.lt1) map.bg1 = map.bg1 ?? map.lt1;
+  if (map.dk1) map.tx1 = map.tx1 ?? map.dk1;
+  if (map.lt2) map.bg2 = map.bg2 ?? map.lt2;
+  if (map.dk2) map.tx2 = map.tx2 ?? map.dk2;
+  return map;
+}
+
 /** Resolves a DrawingML fill element to a hex string, or undefined for none. */
-function readFill(spPr: Element | null): string | undefined {
+function readFill(spPr: Element | null, theme: ThemeMap): string | undefined {
   if (!spPr) return undefined;
   if (firstChild(spPr, 'noFill')) return undefined;
   const solid = firstChild(spPr, 'solidFill');
   if (!solid) return undefined;
   const srgb = firstChild(solid, 'srgbClr');
   if (srgb) return srgb.getAttribute('val') ?? undefined;
-  // Theme colours need the theme's clrMap to resolve properly. Rather than
-  // half-resolve them, fall back to the two that carry an unambiguous meaning.
   const scheme = firstChild(solid, 'schemeClr');
   const val = scheme?.getAttribute('val');
+  if (val && theme[val]) return theme[val];
   if (val === 'bg1' || val === 'lt1') return 'FFFFFF';
   if (val === 'tx1' || val === 'dk1') return '171717';
   return undefined;
 }
 
-function readLine(spPr: Element | null): { color: string; widthPx: number } | undefined {
+function readLine(spPr: Element | null, theme: ThemeMap): { color: string; widthPx: number } | undefined {
   if (!spPr) return undefined;
   const ln = firstChild(spPr, 'ln');
   if (!ln || firstChild(ln, 'noFill')) return undefined;
   const solid = firstChild(ln, 'solidFill');
   if (!solid) return undefined;
   const srgb = firstChild(solid, 'srgbClr');
-  const color = srgb?.getAttribute('val');
+  const scheme = firstChild(solid, 'schemeClr');
+  const color = srgb?.getAttribute('val') ?? (scheme ? theme[scheme.getAttribute('val') ?? ''] : undefined);
   if (!color) return undefined;
   const w = ln.getAttribute('w');
   return { color, widthPx: w ? Math.max(1, Number(w) / EMU_PER_PX) : 1 };
 }
 
-function readParagraphs(sp: Element): ImportedParagraph[] | undefined {
+/** A table style's per-region fill, resolved from `ppt/tableStyles.xml` -
+ *  what a cell without its own inline fill inherits (banded rows, a
+ *  highlighted header/first column, etc). */
+interface TableStyleDef {
+  wholeTbl?: string;
+  band1H?: string;
+  band2H?: string;
+  firstRow?: string;
+  lastRow?: string;
+  firstCol?: string;
+  lastCol?: string;
+}
+
+type TableStyleMap = Record<string, TableStyleDef>;
+
+function readTcStyleFill(region: Element | null, theme: ThemeMap): string | undefined {
+  const tcStyle = region ? firstChild(region, 'tcStyle') : null;
+  const fill = tcStyle ? firstChild(tcStyle, 'fill') : null;
+  return fill ? readFill(fill, theme) : undefined;
+}
+
+/**
+ * A table's own style (`<a:tblStyleId>`, resolved against this part) is where
+ * banded rows and a highlighted header/first column actually come from in
+ * most real decks - authors override one or two cells' fill inline (a
+ * "favorite" column) and leave everything else to the style, which this app
+ * previously never read at all. Skipping it is exactly why some columns of
+ * an imported table kept their color and others came through blank.
+ */
+async function loadTableStyleMap(zip: JSZip, theme: ThemeMap): Promise<TableStyleMap> {
+  const map: TableStyleMap = {};
+  const xml = await zip.file('ppt/tableStyles.xml')?.async('string');
+  if (!xml) return map;
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  for (const styleEl of Array.from(doc.getElementsByTagNameNS(A, 'tblStyle'))) {
+    const id = styleEl.getAttribute('styleId');
+    if (!id) continue;
+    const read = (name: string) => readTcStyleFill(firstChild(styleEl, name), theme);
+    map[id] = {
+      wholeTbl: read('wholeTbl'),
+      band1H: read('band1H'),
+      band2H: read('band2H'),
+      firstRow: read('firstRow'),
+      lastRow: read('lastRow'),
+      firstCol: read('firstCol'),
+      lastCol: read('lastCol'),
+    };
+  }
+  return map;
+}
+
+function readParagraphs(sp: Element, theme: ThemeMap): ImportedParagraph[] | undefined {
   const txBody = el(sp, 'http://schemas.openxmlformats.org/presentationml/2006/main', 'txBody')
     ?? el(sp, A, 'txBody');
   if (!txBody) return undefined;
@@ -119,7 +211,7 @@ function readParagraphs(sp: Element): ImportedParagraph[] | undefined {
         if (sz) run.sizePx = (Number(sz) / 100) * (96 / 72);
         if (rPr.getAttribute('b') === '1') run.bold = true;
         if (rPr.getAttribute('i') === '1') run.italic = true;
-        const color = readFill(rPr);
+        const color = readFill(rPr, theme);
         if (color) run.color = snapToBrand(color);
         const latin = firstChild(rPr, 'latin');
         const face = latin?.getAttribute('typeface');
@@ -184,12 +276,97 @@ function geomOf(spPr: Element | null): 'rect' | 'ellipse' {
  * it. Ignoring that puts every grouped shape in the wrong place - and groups
  * are common in Google Slides exports.
  */
+/** Reads a native OOXML table (`<a:tbl>`, sitting under a `graphicFrame`'s
+ *  `<a:graphic><a:graphicData>`) into rows of cells with their own fill and
+ *  text. Column widths and row heights come straight from `tblGrid`/`tr`, so
+ *  the table's internal proportions survive even though its overall box is
+ *  scaled like every other shape. */
+function readTable(
+  node: Element,
+  frame: Frame,
+  scale: number,
+  theme: ThemeMap,
+  tableStyles: TableStyleMap,
+  counter: { n: number }
+): ImportedShape | null {
+  const tbl = el(node, A, 'tbl');
+  if (!tbl) return null;
+  const box = readXfrm(node, frame, scale);
+  if (!box || box.w <= 0 || box.h <= 0) return null;
+
+  const grid = firstChild(tbl, 'tblGrid');
+  const colsEmu = grid ? childrenOf(grid, ['gridCol']).map((c) => Number(c.getAttribute('w') ?? 0)) : [];
+  const totalColEmu = colsEmu.reduce((a, b) => a + b, 0) || 1;
+  const colWidthsPx = colsEmu.map((w) => (w / totalColEmu) * box.w);
+
+  const trs = childrenOf(tbl, ['tr']);
+  const rowsEmu = trs.map((tr) => Number(tr.getAttribute('h') ?? 0));
+  const totalRowEmu = rowsEmu.reduce((a, b) => a + b, 0) || 1;
+  const rowCount = trs.length;
+  const colCount = colsEmu.length || Math.max(...trs.map((tr) => childrenOf(tr, ['tc']).length), 1);
+
+  // The style a cell without its own inline fill falls back to - precedence
+  // (later wins) mirrors ECMA-376: base fill, then banding, then a
+  // highlighted first/last column, then a highlighted first/last row (the
+  // header/total row an author calls out is the most specific override).
+  const tblPr = firstChild(tbl, 'tblPr');
+  const styleId = tblPr ? firstChild(tblPr, 'tableStyleId')?.textContent?.trim() : undefined;
+  const style = styleId ? tableStyles[styleId] : undefined;
+  const on = (name: string) => tblPr?.getAttribute(name) === '1' || tblPr?.getAttribute(name) === 'true';
+  const firstRowOn = on('firstRow');
+  const lastRowOn = on('lastRow');
+  const firstColOn = on('firstCol');
+  const lastColOn = on('lastCol');
+  const bandRowOn = on('bandRow');
+
+  const styleFillFor = (ri: number, ci: number): string | undefined => {
+    if (!style) return undefined;
+    let fill = style.wholeTbl;
+    if (bandRowOn && (style.band1H || style.band2H)) {
+      const bodyIndex = ri - (firstRowOn ? 1 : 0);
+      const inFooter = lastRowOn && ri === rowCount - 1;
+      if (bodyIndex >= 0 && !inFooter) fill = (bodyIndex % 2 === 0 ? style.band1H : style.band2H) ?? fill;
+    }
+    if (firstColOn && ci === 0) fill = style.firstCol ?? fill;
+    if (lastColOn && ci === colCount - 1) fill = style.lastCol ?? fill;
+    if (firstRowOn && ri === 0) fill = style.firstRow ?? fill;
+    if (lastRowOn && ri === rowCount - 1) fill = style.lastRow ?? fill;
+    return fill;
+  };
+
+  const rows: ImportedTableRow[] = trs.map((tr, ri) => ({
+    heightPx: (rowsEmu[ri] / totalRowEmu) * box.h,
+    cells: childrenOf(tr, ['tc']).map((tc, ci) => {
+      const tcPr = firstChild(tc, 'tcPr');
+      const fill = readFill(tcPr, theme) ?? styleFillFor(ri, ci);
+      return {
+        fill: fill ? snapToBrand(fill) : undefined,
+        paragraphs: readParagraphs(tc, theme),
+      };
+    }),
+  }));
+
+  counter.n += 1;
+  return {
+    id: `imp-${counter.n}`,
+    kind: 'table',
+    x: box.x,
+    y: box.y,
+    w: box.w,
+    h: box.h,
+    colWidthsPx,
+    rows,
+  };
+}
+
 function walk(
   tree: Element,
   frame: Frame,
   scale: number,
   media: Map<string, string>,
   rels: Map<string, string>,
+  theme: ThemeMap,
+  tableStyles: TableStyleMap,
   out: ImportedShape[],
   warnings: string[],
   counter: { n: number }
@@ -219,15 +396,20 @@ function walk(
           };
         }
       }
-      walk(node, next, scale, media, rels, out, warnings, counter);
+      walk(node, next, scale, media, rels, theme, tableStyles, out, warnings, counter);
       continue;
     }
 
     if (name === 'graphicFrame') {
-      // Charts, SmartArt and native tables live behind a graphicFrame and have
-      // no shape tree to lift. Flagged rather than silently skipped.
-      warnings.push('A chart, table or SmartArt object was skipped - it has no '
-        + 'shape geometry to import. Re-create it on the slide if you need it.');
+      const table = readTable(node, frame, scale, theme, tableStyles, counter);
+      if (table) {
+        out.push(table);
+      } else {
+        // Charts and SmartArt live behind a graphicFrame too and have no cell
+        // grid to lift. Flagged rather than silently skipped.
+        warnings.push('A chart or SmartArt object was skipped - it has no '
+          + 'shape geometry to import. Re-create it on the slide if you need it.');
+      }
       continue;
     }
 
@@ -258,9 +440,9 @@ function walk(
       continue;
     }
 
-    const fill = readFill(spPr);
-    const line = readLine(spPr);
-    const paragraphs = readParagraphs(node);
+    const fill = readFill(spPr, theme);
+    const line = readLine(spPr, theme);
+    const paragraphs = readParagraphs(node, theme);
     if (!fill && !line && !paragraphs) continue; // invisible spacer
 
     out.push({
@@ -347,6 +529,9 @@ export async function parsePptx(file: File | ArrayBuffer): Promise<PptxImportRes
   // distorting. A 16:9 source (the overwhelming majority) maps exactly.
   const scale = Math.min(CANVAS_W / srcW, CANVAS_H / srcH);
 
+  const theme = await loadThemeMap(zip);
+  const tableStyles = await loadTableStyleMap(zip, theme);
+
   // Decode every media part once; slides reference them by relationship id.
   const media = new Map<string, string>();
   await Promise.all(Object.keys(zip.files)
@@ -394,7 +579,7 @@ export async function parsePptx(file: File | ArrayBuffer): Promise<PptxImportRes
     const bgSrgb = bg?.getElementsByTagNameNS(A, 'srgbClr')[0]?.getAttribute('val');
 
     const shapes: ImportedShape[] = [];
-    walk(spTree, IDENTITY, scale, media, rels, shapes, warnings, { n: 0 });
+    walk(spTree, IDENTITY, scale, media, rels, theme, tableStyles, shapes, warnings, { n: 0 });
     slides.push({
       shapes,
       base: bgSrgb ?? 'FFFFFF',

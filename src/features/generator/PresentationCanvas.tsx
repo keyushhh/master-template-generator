@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { DocumentNode } from '../business-record/parser/ast';
-import type { Deck, SlideContent, SlideInstance, SlotOffset, SlotStyle } from '../deck/types';
+import type { Deck, ImportedShape, SlideContent, SlideInstance, SlotOffset, SlotStyle } from '../deck/types';
 import { applyToCss, offsetFor, shiftOffsets, styleFor } from '../formatting/resolve';
-import { FINE, SLIDE_W, snapValue } from '../formatting/snap';
-import { slotsOf, type Selection } from '../formatting/selection';
+import { clampToSlide, FINE, guidesFromSiblings, SLIDE_W, snapMove, snapResize, snapValue, type ExtraGuides, type Handle, type Rect } from '../formatting/snap';
+import { shapeIdsOf, slotsOf, type Selection } from '../formatting/selection';
 import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
 import { ShapeOverlay } from '../formatting/ShapeOverlay';
 import { overlayOf, withOverlay } from '../formatting/overlayModel';
@@ -28,6 +28,11 @@ interface PresentationCanvasProps {
   /** `additive` (a shift-click) adds the slot to the current selection instead
    *  of replacing it, which is how a group is built. */
   onSelect?: (selection: Selection, additive?: boolean) => void;
+  /** Clicking the slide background (not any editable field or shape) while
+   *  something is selected should drop the selection, the way every other
+   *  canvas editor behaves - clicking a slot/run/shape itself never reaches
+   *  this, since those targets are excluded before it fires. */
+  onDeselect?: () => void;
   /** Reports which slide currently holds focus, so the page's Insert controls
    *  know which slide a new shape or a note belongs to. */
   onActiveSlideChange?: (instanceId: string) => void;
@@ -2927,6 +2932,83 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
   const base = content.importedBase ?? 'FFFFFF';
   const dark = importedIsDark(base);
 
+  /** Live geometry during a drag/resize, so the shape follows the pointer
+   *  without writing to the deck (and pushing an undo entry) on every move. */
+  const [live, setLive] = useState<{ id: string; rect: Rect } | null>(null);
+  const dragRef = useRef<{
+    id: string;
+    handle: Handle | null;
+    startRect: Rect;
+    startX: number;
+    startY: number;
+    scale: number;
+    moved: boolean;
+    extras: ExtraGuides;
+  } | null>(null);
+
+  /** Shift held on mousedown, for a run's shift-click-to-add-to-selection
+   *  gesture - see the run span below for why this can't just be read off
+   *  the mouseup event. */
+  const additiveRunClick = useRef(false);
+
+  useEffect(() => {
+    if (!live) return;
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dx = (e.clientX - d.startX) / d.scale;
+      const dy = (e.clientY - d.startY) / d.scale;
+      if (!d.moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+      d.moved = true;
+      const free = e.altKey;
+      const rect = d.handle
+        ? snapResize(d.startRect, d.handle, dx, dy, free, d.extras)
+        : clampToSlide(snapMove({ ...d.startRect, x: d.startRect.x + dx, y: d.startRect.y + dy }, free, d.extras));
+      setLive({ id: d.id, rect });
+    };
+    const onUp = () => {
+      const d = dragRef.current;
+      if (d?.moved && live) {
+        onEdit((c) => ({
+          ...c,
+          shapes: (c.shapes ?? []).map((sh) => (sh.id === live.id ? { ...sh, ...live.rect } : sh)),
+        }));
+      }
+      dragRef.current = null;
+      setLive(null);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [live, onEdit]);
+
+  const slideScale = (el: HTMLElement | null): number => {
+    const slide = el?.closest<HTMLElement>('[data-slide]');
+    const rect = slide?.getBoundingClientRect();
+    return rect?.width ? rect.width / SLIDE_W : 1;
+  };
+
+  const beginDrag = (e: React.PointerEvent, sh: ImportedShape, handle: Handle | null) => {
+    if (!editing) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const rect: Rect = { x: sh.x, y: sh.y, w: sh.w, h: sh.h };
+    dragRef.current = {
+      id: sh.id,
+      handle,
+      startRect: rect,
+      startX: e.clientX,
+      startY: e.clientY,
+      scale: slideScale(e.currentTarget as HTMLElement),
+      moved: false,
+      extras: guidesFromSiblings(shapes.filter((s) => s.id !== sh.id)),
+    };
+    setLive({ id: sh.id, rect });
+  };
+
   /** True if the toolbar is currently pointed at this exact run. */
   const runSelected = (shapeId: string, p: number, r: number) =>
     selection?.kind === 'run' &&
@@ -2935,10 +3017,26 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
     selection.paragraph === p &&
     selection.run === r;
 
+  /** True if the selection belongs to this shape at all, regardless of which
+   *  run inside it - drag/resize handles are shape-level, not run-level. Also
+   *  true for every shape shift-clicked alongside the anchor, so a group (a
+   *  box and its caption, say) shows handles on every member, not just one. */
+  const shapeSelected = (shapeId: string) =>
+    selection?.kind === 'run' && selection.instanceId === instanceId && shapeIdsOf(selection).includes(shapeId);
+
+  /** Selects a shape that has no text of its own to focus (an image, a plain
+   *  rect/line, or a table) - the (0,0) placeholder paragraph/run address is
+   *  never read for these, only `shapeId` is, by `shapeSelected` and the
+   *  bottom toolbar's fill/stroke/delete controls. `additive` (shift-click)
+   *  adds it to whatever else is already selected instead of replacing. */
+  const selectShape = (shapeId: string, additive = false) => {
+    if (editing && instanceId) onSelect?.({ kind: 'run', instanceId, shapeId, paragraph: 0, run: 0 }, additive);
+  };
+
   /** Imported runs are addressed by shape/paragraph/run rather than by slot
    *  name, so they can't go through SlotContext like a template slot does -
    *  the run span reports its own selection instead. */
-  const selectRun = (shapeId: string, p: number, r: number, el: HTMLElement) => {
+  const selectRun = (shapeId: string, p: number, r: number, el: HTMLElement, additive = false) => {
     if (!onSelect || !instanceId) return;
     const cs = window.getComputedStyle(el);
     const px = parseFloat(cs.fontSize);
@@ -2950,7 +3048,7 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
       run: r,
       effectiveSizePx: Number.isFinite(px) ? Math.round(px) : undefined,
       effectiveFont: cs.fontFamily,
-    });
+    }, additive);
   };
 
   const patchRun = (shapeId: string, p: number, r: number, text: string) =>
@@ -2993,35 +3091,165 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
       <Glow style={{ bottom: -420, left: -360, opacity: 0.6 }} />
 
       {shapes.map((sh) => {
+        const rect = live?.id === sh.id ? live.rect : sh;
+        const selected = editing && shapeSelected(sh.id);
+
         const boxStyle: React.CSSProperties = {
           position: 'absolute',
-          left: sh.x,
-          top: sh.y,
-          width: sh.w,
-          height: sh.h,
+          left: rect.x,
+          top: rect.y,
+          width: rect.w,
+          height: rect.h,
           zIndex: 1,
           borderRadius: sh.kind === 'ellipse' ? '50%' : 0,
           background: sh.fill ? `#${sh.fill}` : undefined,
           border: sh.line ? `${Math.max(1, sh.line.widthPx)}px solid #${sh.line.color}` : undefined,
           boxSizing: 'border-box',
+          cursor: editing ? 'move' : undefined,
+          outline: selected ? '2px dashed color-mix(in srgb, var(--emerald-500) 60%, transparent)' : undefined,
+          outlineOffset: 3,
         };
+
+        // Drag/resize is available on every imported shape, text included -
+        // grabbing the body moves it, the eight edge handles resize it. Text
+        // boxes reflow live because their width comes straight from `rect.w`.
+        // Fill/stroke/delete live in the bottom toolbar, not here - a second,
+        // tiny colour picker floating over the shape duplicated it and was easy
+        // to fire by accident while trying to format the text inside.
+        const handles = selected && (
+          <>
+            <div
+              onPointerDown={(e) => beginDrag(e, sh, null)}
+              style={{
+                position: 'absolute', top: 4, left: 4, width: 18, height: 18,
+                borderRadius: 4, background: 'var(--emerald-500)', cursor: 'move',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3,
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M5 0v10M0 5h10" stroke="#fff" strokeWidth="1.4" />
+              </svg>
+            </div>
+            {(['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as Handle[]).map((h) => {
+              const pos: React.CSSProperties = { position: 'absolute' };
+              if (h.includes('n')) pos.top = -5;
+              if (h.includes('s')) pos.bottom = -5;
+              if (h.includes('w')) pos.left = -5;
+              if (h.includes('e')) pos.right = -5;
+              if (h === 'n' || h === 's') { pos.left = '50%'; pos.marginLeft = -5; }
+              if (h === 'e' || h === 'w') { pos.top = '50%'; pos.marginTop = -5; }
+              return (
+                <div
+                  key={h}
+                  onPointerDown={(e) => beginDrag(e, sh, h)}
+                  style={{
+                    ...pos, width: 10, height: 10, background: '#fff',
+                    border: '2px solid var(--emerald-500)', cursor: `${h}-resize`, zIndex: 3,
+                  }}
+                />
+              );
+            })}
+          </>
+        );
 
         if (sh.kind === 'image') {
           return (
-            <img
+            <div
               key={sh.id}
-              src={sh.imageUrl}
-              alt=""
-              style={{ ...boxStyle, objectFit: 'contain' }}
-            />
+              data-selectable
+              style={boxStyle}
+              onPointerDown={(e) => editing && beginDrag(e, sh, null)}
+              onClick={(e) => selectShape(sh.id, e.shiftKey)}
+            >
+              <img src={sh.imageUrl} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
+              {handles}
+            </div>
           );
         }
 
-        if (!sh.paragraphs?.length) return <div key={sh.id} style={boxStyle} />;
+        if (sh.kind === 'table' && sh.rows) {
+          // Column/row proportions are fixed at import time; a resize scales
+          // every column and row by the same factor the box itself grew by,
+          // rather than resizing only the last one.
+          const wScale = sh.w ? rect.w / sh.w : 1;
+          const hScale = sh.h ? rect.h / sh.h : 1;
+          return (
+            <div
+              key={sh.id}
+              data-selectable
+              style={{ ...boxStyle, display: 'flex', flexDirection: 'column' }}
+              // Cells fill the whole box, so there's no bare "background" spot
+              // to require a target === currentTarget match against - nothing
+              // inside a cell sets its own selection, unlike a text run.
+              onPointerDown={(e) => editing && (e.target as HTMLElement) === e.currentTarget && beginDrag(e, sh, null)}
+              onClick={(e) => selectShape(sh.id, e.shiftKey)}
+            >
+              {sh.rows.map((row, ri) => (
+                // minHeight, not height: a source row height of 0 (common when a
+                // deck never set one explicitly, letting content size it) must
+                // not collapse the row - it's a floor once remapped brand fonts
+                // are in play, not an exact size.
+                <div key={ri} style={{ display: 'flex', minHeight: row.heightPx * hScale, flexShrink: 0 }}>
+                  {row.cells.map((cell, ci) => (
+                    <div
+                      key={ci}
+                      style={{
+                        width: (sh.colWidthsPx?.[ci] ?? sh.w / row.cells.length) * wScale,
+                        flexShrink: 0,
+                        background: cell.fill ? `#${cell.fill}` : undefined,
+                        border: '1px solid color-mix(in srgb, var(--neutral-900) 12%, transparent)',
+                        boxSizing: 'border-box',
+                        padding: '4px 10px',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {(cell.paragraphs ?? []).map((para, pi) => (
+                        <div key={pi} style={{ textAlign: para.align ?? 'left', lineHeight: 1.35 }}>
+                          {para.runs.map((run, runI) => (
+                            <span
+                              key={runI}
+                              style={{
+                                fontFamily: run.font ? `"${run.font}", var(--font-sans)` : 'var(--font-sans)',
+                                fontSize: run.sizePx ?? 16,
+                                fontWeight: run.bold ? 700 : 400,
+                                fontStyle: run.italic ? 'italic' : undefined,
+                                textDecoration: run.underline ? 'underline' : undefined,
+                                color: run.color ? `#${run.color}` : dark ? '#ffffff' : 'var(--neutral-900)',
+                                whiteSpace: 'pre-wrap',
+                              }}
+                            >
+                              {run.text}
+                            </span>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {handles}
+            </div>
+          );
+        }
+
+        if (!sh.paragraphs?.length) {
+          return (
+            <div
+              key={sh.id}
+              data-selectable
+              style={boxStyle}
+              onPointerDown={(e) => editing && beginDrag(e, sh, null)}
+              onClick={(e) => selectShape(sh.id, e.shiftKey)}
+            >
+              {handles}
+            </div>
+          );
+        }
 
         return (
           <div
             key={sh.id}
+            data-selectable
             style={{
               ...boxStyle,
               display: 'flex',
@@ -3032,6 +3260,17 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
               // the type is remapped to the brand stack a line can run a few px
               // long, so text is allowed to spill rather than be clipped.
               overflow: 'visible',
+            }}
+            onPointerDown={(e) => {
+              // Only the body of the box drags the shape - a click that lands on
+              // a run (handled below) has to reach the run's own selection first.
+              if (editing && (e.target as HTMLElement) === e.currentTarget) beginDrag(e, sh, null);
+            }}
+            onClick={(e) => {
+              // A click that missed every run (empty padding within the box)
+              // still selects the shape itself, so drag/resize handles appear
+              // without requiring a run to click first.
+              if (editing && (e.target as HTMLElement) === e.currentTarget) selectShape(sh.id, e.shiftKey);
             }}
           >
             {sh.paragraphs.map((para, pi) => (
@@ -3046,10 +3285,19 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
                 {para.runs.map((run, ri) => (
                   <span
                     key={ri}
+                    // Focus fires before mouseup on a shift-click, so capturing
+                    // the modifier on mousedown (like the template-slot fields
+                    // do) keeps the gesture from toggling the run straight back
+                    // off before mouseup ever sees it.
+                    onMouseDown={(e) => { additiveRunClick.current = e.shiftKey; }}
                     // Focus bubbles, so listening here catches the editable span
                     // inside without wrapping every run in another element.
-                    onFocus={(e) => editing && selectRun(sh.id, pi, ri, e.currentTarget)}
-                    onMouseUp={(e) => editing && selectRun(sh.id, pi, ri, e.currentTarget)}
+                    onFocus={(e) => { if (editing && !additiveRunClick.current) selectRun(sh.id, pi, ri, e.currentTarget); }}
+                    onMouseUp={(e) => {
+                      const additive = additiveRunClick.current;
+                      additiveRunClick.current = false;
+                      if (editing) selectRun(sh.id, pi, ri, e.currentTarget, additive);
+                    }}
                     style={{
                       fontFamily: run.font ? `"${run.font}", var(--font-sans)` : 'var(--font-sans)',
                       fontSize: run.sizePx ?? 18,
@@ -3072,6 +3320,7 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
                 ))}
               </div>
             ))}
+            {handles}
           </div>
         );
       })}
@@ -3166,7 +3415,7 @@ export function SlideStage({
 // ---------------------------------------------------------------------------
 // PresentationCanvas
 // ---------------------------------------------------------------------------
-export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange, onLogoScaleChange, onRequestEdit, selection, onSelect, onActiveSlideChange, onRenameSlide, revision }: PresentationCanvasProps) {
+export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange, onLogoScaleChange, onRequestEdit, selection, onSelect, onDeselect, onActiveSlideChange, onRenameSlide, revision }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   // Which slide currently holds focus while editing - drives the "you're
   // editing this one" outline so all slides don't look identically active.
@@ -3213,6 +3462,16 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
     <div
       ref={stageRef}
       className="book"
+      onClick={(e) => {
+        if (!editing || !onDeselect) return;
+        const target = e.target as HTMLElement;
+        // Anything a click should actually select already lives behind a
+        // contentEditable span, a data-overlay-shape shape, or a
+        // data-selectable imported shape - if none of those are on the path
+        // to the click, it landed on plain slide background.
+        if (target.closest('[contenteditable], [data-overlay-shape], [data-selectable]')) return;
+        onDeselect();
+      }}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -3254,7 +3513,11 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
               transformOrigin: 'top center',
               flexShrink: 0,
               position: 'relative',
-              overflow: 'hidden',
+              // Content clips inside its own wrapper below, not here - so the
+              // "editing this slide" tag can hang just above the slide's top
+              // edge instead of sitting on top of whatever the deck itself put
+              // in that corner.
+              overflow: 'visible',
               background: isDark ? '#000000' : 'var(--pure-white)',
               color: isDark ? '#ffffff' : 'var(--neutral-900)',
               // Standard design system shadow used for all slides instead of custom heavy shadow
@@ -3276,14 +3539,19 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
               <span
                 style={{
                   position: 'absolute',
-                  top: 0,
+                  // Sits just above the slide's own top edge rather than inside
+                  // it, so it never sits on top of whatever the deck put in
+                  // that corner - the slide's overflow is visible for exactly
+                  // this reason (see the content wrapper below).
+                  top: -30,
                   left: 0,
                   zIndex: 20,
-                  padding: '12px 26px',
+                  padding: '5px 12px',
+                  borderRadius: 6,
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 22,
+                  fontSize: 12,
                   fontWeight: 700,
-                  letterSpacing: '0.1em',
+                  letterSpacing: '0.08em',
                   textTransform: 'uppercase',
                   color: '#fff',
                   background: 'var(--emerald-500)',
@@ -3291,69 +3559,73 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
                   opacity: isActiveEdit ? 1 : 0,
                   pointerEvents: 'none',
                   transition: 'opacity .15s ease',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 Editing this slide
               </span>
             )}
-            {Renderer && (
-              <SlideSlots
-                instanceId={slide.instanceId}
-                content={slide.content}
-                selection={selection ?? null}
-                onSelect={onSelect}
-                onEditSlide={onEditSlide}
-                revision={revision}
-              >
-                <Renderer
-                  ast={ast}
-                  content={slide.content}
-                  num={num}
-                  editing={editing}
-                  onEdit={(updater) => onEditSlide(slide.instanceId, updater)}
-                  logoUrl={deck.logoUrl}
-                  onLogoChange={onLogoChange}
-                  logoScale={deck.logoScale}
-                  onLogoScaleChange={onLogoScaleChange}
+            {/* Everything the deck itself renders clips to the slide's exact
+                bounds here, now that `.page` above is overflow-visible. */}
+            <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+              {Renderer && (
+                <SlideSlots
                   instanceId={slide.instanceId}
-                  onRequestEdit={onRequestEdit}
-                  selection={selection}
+                  content={slide.content}
+                  selection={selection ?? null}
                   onSelect={onSelect}
-                />
-              </SlideSlots>
-            )}
+                  onEditSlide={onEditSlide}
+                  revision={revision}
+                >
+                  <Renderer
+                    ast={ast}
+                    content={slide.content}
+                    num={num}
+                    editing={editing}
+                    onEdit={(updater) => onEditSlide(slide.instanceId, updater)}
+                    logoUrl={deck.logoUrl}
+                    onLogoChange={onLogoChange}
+                    logoScale={deck.logoScale}
+                    onLogoScaleChange={onLogoScaleChange}
+                    instanceId={slide.instanceId}
+                    onRequestEdit={onRequestEdit}
+                    selection={selection}
+                    onSelect={onSelect}
+                  />
+                </SlideSlots>
+              )}
 
-            {/* User-inserted shapes and text boxes. Rendered here rather than
-                inside each renderer so every template - all 14, plus blank and
-                imported - gets them from one place. */}
-            <ShapeOverlay
-              shapes={overlayOf(slide.content)}
-              editing={editing}
-              selectedId={
-                selection?.kind === 'overlay' && selection.instanceId === slide.instanceId
-                  ? selection.shapeId
-                  : undefined
-              }
-              onSelect={(shapeId) =>
-                onSelect?.({ kind: 'overlay', instanceId: slide.instanceId, shapeId })
-              }
-              onPatch={(shapeId, patch) =>
-                onEditSlide(slide.instanceId, (c) =>
-                  withOverlay(
-                    c,
-                    overlayOf(c).map((s) => (s.id === shapeId ? { ...s, ...patch } : s))
+              {/* User-inserted shapes and text boxes. Rendered here rather than
+                  inside each renderer so every template - all 14, plus blank and
+                  imported - gets them from one place. */}
+              <ShapeOverlay
+                shapes={overlayOf(slide.content)}
+                editing={editing}
+                selectedId={
+                  selection?.kind === 'overlay' && selection.instanceId === slide.instanceId
+                    ? selection.shapeId
+                    : undefined
+                }
+                onSelect={(shapeId) =>
+                  onSelect?.({ kind: 'overlay', instanceId: slide.instanceId, shapeId })
+                }
+                onPatch={(shapeId, patch) =>
+                  onEditSlide(slide.instanceId, (c) =>
+                    withOverlay(
+                      c,
+                      overlayOf(c).map((s) => (s.id === shapeId ? { ...s, ...patch } : s))
+                    )
                   )
-                )
-              }
-            />
+                }
+              />
 
-            {/* Footer row - preserved from original shell */}
-            {/* Footer strip. The label is the slide's own title, editable here
-                as well as in the sidebar; hideFooter removes the whole strip for
-                slides that want a clean bottom edge (covers, full-bleed
-                dividers). The slide number is generated, so it isn't editable. */}
-            {!slide.content.hideFooter && (
-              <div className="footer-row" style={{ zIndex: 10, position: 'relative' }}>
+              {/* Footer row - preserved from original shell */}
+              {/* Footer strip. The label is the slide's own title, editable here
+                  as well as in the sidebar; hideFooter removes the whole strip for
+                  slides that want a clean bottom edge (covers, full-bleed
+                  dividers). The slide number is generated, so it isn't editable. */}
+              {!slide.content.hideFooter && (
+                <div className="footer-row" style={{ zIndex: 10, position: 'relative' }}>
                 <span>
                   {editing ? (
                     <span
@@ -3421,6 +3693,7 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
                 + Footer
               </button>
             )}
+            </div>
           </div>
         );
       })}

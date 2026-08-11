@@ -30,6 +30,10 @@ export interface StoredSession {
    *  without blowing up storage. */
   historyPast?: Deck[];
   historyFuture?: Deck[];
+  /** What this deck looked like right after import/generation - what Reset
+   *  restores. Absent (legacy sessions, or a deck that started from the blank
+   *  template) falls back to the generic placeholder deck. */
+  baselineDeck?: Deck;
 }
 
 interface ProjectIndex {
