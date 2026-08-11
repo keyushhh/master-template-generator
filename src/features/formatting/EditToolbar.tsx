@@ -22,7 +22,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { ImportedShape, OverlayShape, SlotStyle } from '../deck/types';
+import type { ImportedShape, OverlayChartType, OverlayShape, SlotStyle } from '../deck/types';
 import {
   ACCENT_SWATCHES,
   NEUTRAL_SWATCHES,
@@ -363,6 +363,16 @@ interface EditToolbarProps {
   onDeleteShape: () => void;
   onSetFill: (hex: string | undefined) => void;
 
+  /** Table-specific structure edits, when the selected shape is kind==='table'. */
+  onTableAddRow: () => void;
+  onTableDeleteRow: () => void;
+  onTableAddCol: () => void;
+  onTableDeleteCol: () => void;
+
+  /** Chart-specific controls, when the selected shape is kind==='chart'. */
+  onSetChartType: (t: OverlayChartType) => void;
+  onOpenChartData: () => void;
+
   /** The imported shape a 'run' selection points at, when it has one - the
    *  shape itself, not the particular run, since fill/stroke/delete are
    *  shape-level. */
@@ -403,6 +413,12 @@ export function EditToolbar({
   onToggleBehind,
   onDeleteShape,
   onSetFill,
+  onTableAddRow,
+  onTableDeleteRow,
+  onTableAddCol,
+  onTableDeleteCol,
+  onSetChartType,
+  onOpenChartData,
   importedShape,
   isImportedSelection,
   importedShapeGroupCount,
@@ -420,7 +436,10 @@ export function EditToolbar({
   const bounds = selectedShape ? layerBounds(shapes, selectedShape.id) : null;
   const shown = textStyle?.sizePx ?? effectiveSizePx;
   const grouped = selectedSlotCount > 1;
-  const isFillable = selectedShape && selectedShape.kind !== 'text' && selectedShape.kind !== 'image';
+  const isFillable = selectedShape && (selectedShape.kind === 'rect' || selectedShape.kind === 'ellipse');
+  const tableDims = selectedShape?.kind === 'table'
+    ? { rows: selectedShape.rows?.length ?? 0, cols: selectedShape.colWidthsPx?.length ?? 0 }
+    : null;
 
   return (
     <div
@@ -469,6 +488,14 @@ export function EditToolbar({
             <Row
               label="Image" onClick={() => { onInsert('image'); close(); }}
               icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="3" y="4" width="18" height="16" /><path d="M3 16l5-5 4 4 3-3 6 6" /></svg>}
+            />
+            <Row
+              label="Table" onClick={() => { onInsert('table'); close(); }}
+              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="4" width="18" height="16" /><path d="M3 10h18M3 16h18M9 4v16M15 4v16" /></svg>}
+            />
+            <Row
+              label="Chart" onClick={() => { onInsert('chart'); close(); }}
+              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 20V10M11 20V4M18 20v-7" /></svg>}
             />
           </>
         )}
@@ -582,6 +609,19 @@ export function EditToolbar({
               </svg>
             </button>
           )}
+
+          {/* Formatting a table cell still needs the table's own delete
+              button - the shape-controls branch below is skipped entirely
+              while a cell is the text target. */}
+          {selectedShape?.kind === 'table' && (
+            <button title="Delete this table" aria-label="Delete table" onClick={onDeleteShape}
+              style={{ ...ctl, padding: '0 7px', color: '#fca5a5' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          )}
         </>
       ) : selectedShape ? (
         <>
@@ -594,6 +634,46 @@ export function EditToolbar({
               <button title="Emerald tint — for the payoff, one per slide" aria-label="Emerald tint fill"
                 onClick={() => onSetFill('ECFDF5')} style={{ ...ctl, padding: '0 7px' }}>
                 <span style={{ width: 14, height: 14, background: '#ECFDF5', border: '1.5px solid #10B981' }} />
+              </button>
+              <Sep />
+            </>
+          )}
+
+          {selectedShape.kind === 'table' && tableDims && (
+            <>
+              <Menu title="Table structure" label="Table" width={190}>
+                {(close) => (
+                  <>
+                    <Row label="Add row" onClick={() => { onTableAddRow(); close(); }} />
+                    <Row label="Delete row" disabled={tableDims.rows <= 1}
+                      onClick={() => { onTableDeleteRow(); close(); }} />
+                    <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '6px 4px' }} />
+                    <Row label="Add column" onClick={() => { onTableAddCol(); close(); }} />
+                    <Row label="Delete column" disabled={tableDims.cols <= 1}
+                      onClick={() => { onTableDeleteCol(); close(); }} />
+                  </>
+                )}
+              </Menu>
+              <Sep />
+            </>
+          )}
+
+          {selectedShape.kind === 'chart' && (
+            <>
+              {(['bar', 'line', 'pie'] as const).map((t) => (
+                <button
+                  key={t}
+                  title={`${t[0].toUpperCase()}${t.slice(1)} chart`}
+                  aria-label={`${t} chart`}
+                  aria-pressed={(selectedShape.chartType ?? 'bar') === t}
+                  onClick={() => onSetChartType(t)}
+                  style={{ ...ctl, padding: '0 8px', textTransform: 'capitalize', ...((selectedShape.chartType ?? 'bar') === t ? ctlOn : {}) }}
+                >
+                  {t}
+                </button>
+              ))}
+              <button title="Edit chart data" aria-label="Edit chart data" onClick={onOpenChartData} style={{ ...ctl, padding: '0 8px' }}>
+                Data
               </button>
               <Sep />
             </>

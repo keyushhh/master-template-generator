@@ -10,10 +10,11 @@ import { PresentMode } from '../features/generator/PresentMode';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
 import { useToast } from '../features/toast/Toast';
 import type { DocumentNode } from '../features/business-record/parser/ast';
-import type { Deck, OverlayShape, SlideContent, SlideTemplateId, SlotStyle } from '../features/deck/types';
+import type { Deck, OverlayChartSeries, OverlayChartType, OverlayShape, SlideContent, SlideTemplateId, SlotStyle } from '../features/deck/types';
 import { applySwitch } from '../features/deck/templateSwitch';
 import { TemplateSwitchModal } from '../features/generator/TemplateSwitchModal';
 import { EditToolbar } from '../features/formatting/EditToolbar';
+import { ChartDataEditor } from '../features/formatting/ChartDataEditor';
 import {
   createOverlayShape,
   moveLayer,
@@ -407,9 +408,16 @@ export function MasterTemplatePage() {
     if (!selection || !selectedSlide) return undefined;
     if (selection.kind === 'slot') return selectedSlide.content.styles?.[selection.slot];
     if (selection.kind === 'overlay') {
+      const shape = selectedSlide.content.overlay?.find((s) => s.id === selection.shapeId);
+      // A table cell owns its style independently of the shape - a header
+      // cell and a body cell need to diverge from each other, not just from
+      // the template.
+      if (selection.cell && shape?.kind === 'table') {
+        return shape.rows?.[selection.cell.row]?.cells[selection.cell.col]?.style;
+      }
       // An overlay text box owns its style outright, so it is already a
       // SlotStyle - no translation needed.
-      return selectedSlide.content.overlay?.find((s) => s.id === selection.shapeId)?.style;
+      return shape?.style;
     }
     const shape = selectedSlide.content.shapes?.find((s) => s.id === selection.shapeId);
     const para = shape?.paragraphs?.[selection.paragraph];
@@ -466,17 +474,31 @@ export function MasterTemplatePage() {
       }
 
       if (sel.kind === 'overlay') {
-        // Overlay text box: the style lives on the shape, so the patch merges
-        // straight in. Undefined fields are stripped so "unset" really unsets.
+        const cell = sel.cell;
+        // Overlay text box or table cell: the style lives on the shape (or,
+        // for a table, on the specific cell), so the patch merges straight
+        // in. Undefined fields are stripped so "unset" really unsets.
+        const merge = (prevStyle: SlotStyle | undefined) => {
+          const merged: SlotStyle = { ...(prevStyle ?? {}), ...patch };
+          for (const k of Object.keys(patch) as (keyof SlotStyle)[]) {
+            if (patch[k] === undefined) delete merged[k];
+          }
+          return Object.keys(merged).length ? merged : undefined;
+        };
         handleEditSlide(sel.instanceId, (c) => ({
           ...c,
           overlay: (c.overlay ?? []).map((s) => {
             if (s.id !== sel.shapeId) return s;
-            const merged = { ...(s.style ?? {}), ...patch };
-            for (const k of Object.keys(patch) as (keyof typeof merged)[]) {
-              if (patch[k] === undefined) delete merged[k];
+            if (cell && s.kind === 'table') {
+              return {
+                ...s,
+                rows: (s.rows ?? []).map((r, ri) => ri !== cell.row ? r : {
+                  ...r,
+                  cells: r.cells.map((c2, ci) => (ci !== cell.col ? c2 : { ...c2, style: merge(c2.style) })),
+                }),
+              };
             }
-            return { ...s, style: Object.keys(merged).length ? merged : undefined };
+            return { ...s, style: merge(s.style) };
           }),
         }));
         return;
@@ -560,7 +582,8 @@ export function MasterTemplatePage() {
     !!selection &&
     (selection.kind === 'slot' ||
       (selection.kind === 'run' && importedShapeHasText && !importedShapeGroup) ||
-      selectedOverlayShape?.kind === 'text');
+      selectedOverlayShape?.kind === 'text' ||
+      (selection.kind === 'overlay' && !!selection.cell && selectedOverlayShape?.kind === 'table'));
 
   const handleInsertShape = useCallback(
     (kind: OverlayShape['kind']) => {
@@ -620,6 +643,76 @@ export function MasterTemplatePage() {
           ? { color: '10B981', widthPx: 1 }
           : { color: 'E5E5E5', widthPx: 1 },
       });
+    },
+    [patchSelectedShape]
+  );
+
+  /** Adds a row the same height as the table's existing rows (or a sensible
+   *  default for a table with none), with as many empty cells as columns. */
+  const handleTableAddRow = useCallback(() => {
+    if (!selectedOverlayShape || selectedOverlayShape.kind !== 'table') return;
+    const rows = selectedOverlayShape.rows ?? [];
+    const cols = selectedOverlayShape.colWidthsPx?.length ?? rows[0]?.cells.length ?? 1;
+    const heightPx = rows[rows.length - 1]?.heightPx ?? 60;
+    patchSelectedShape({
+      rows: [...rows, { heightPx, cells: Array.from({ length: cols }, () => ({})) }],
+    });
+  }, [selectedOverlayShape, patchSelectedShape]);
+
+  const handleTableDeleteRow = useCallback(() => {
+    if (!selectedOverlayShape || selectedOverlayShape.kind !== 'table') return;
+    const rows = selectedOverlayShape.rows ?? [];
+    if (rows.length <= 1) return;
+    patchSelectedShape({ rows: rows.slice(0, -1) });
+  }, [selectedOverlayShape, patchSelectedShape]);
+
+  /** Adds a column by giving every existing row one more empty cell, and
+   *  shrinking every column's width so the new one fits within the table's
+   *  existing box rather than growing it. */
+  const handleTableAddCol = useCallback(() => {
+    if (!selectedOverlayShape || selectedOverlayShape.kind !== 'table') return;
+    const prevCols = selectedOverlayShape.colWidthsPx ?? [];
+    const nextCount = prevCols.length + 1;
+    const colWidthsPx = Array.from({ length: nextCount }, () => selectedOverlayShape.w / nextCount);
+    const rows = (selectedOverlayShape.rows ?? []).map((r) => ({ ...r, cells: [...r.cells, {}] }));
+    patchSelectedShape({ colWidthsPx, rows });
+  }, [selectedOverlayShape, patchSelectedShape]);
+
+  const handleTableDeleteCol = useCallback(() => {
+    if (!selectedOverlayShape || selectedOverlayShape.kind !== 'table') return;
+    const prevCols = selectedOverlayShape.colWidthsPx ?? [];
+    if (prevCols.length <= 1) return;
+    const nextCount = prevCols.length - 1;
+    const colWidthsPx = Array.from({ length: nextCount }, () => selectedOverlayShape.w / nextCount);
+    const rows = (selectedOverlayShape.rows ?? []).map((r) => ({ ...r, cells: r.cells.slice(0, -1) }));
+    patchSelectedShape({ colWidthsPx, rows });
+  }, [selectedOverlayShape, patchSelectedShape]);
+
+  const handleSetChartType = useCallback(
+    (t: OverlayChartType) => {
+      // A pie slice is one value per category, not one per series - collapsing
+      // down to the first series on switch keeps the data that survives visible
+      // rather than silently discarding it.
+      patchSelectedShape({
+        chartType: t,
+        chartSeries: t === 'pie' ? selectedOverlayShape?.chartSeries?.slice(0, 1) : selectedOverlayShape?.chartSeries,
+      });
+    },
+    [selectedOverlayShape, patchSelectedShape]
+  );
+
+  const [chartEditorOpen, setChartEditorOpen] = useState(false);
+
+  // Follow-the-selection: the data panel belongs to whichever chart is
+  // selected, so it closes rather than silently editing whatever the user
+  // clicks next.
+  useEffect(() => {
+    if (selectedOverlayShape?.kind !== 'chart') setChartEditorOpen(false);
+  }, [selectedOverlayShape]);
+
+  const handleChartDataChange = useCallback(
+    (next: { categories: string[]; series: OverlayChartSeries[] }) => {
+      patchSelectedShape({ chartCategories: next.categories, chartSeries: next.series });
     },
     [patchSelectedShape]
   );
@@ -1407,6 +1500,12 @@ export function MasterTemplatePage() {
             onToggleBehind={() => patchSelectedShape({ behind: !selectedOverlayShape?.behind })}
             onDeleteShape={handleDeleteShape}
             onSetFill={handleSetShapeFill}
+            onTableAddRow={handleTableAddRow}
+            onTableDeleteRow={handleTableDeleteRow}
+            onTableAddCol={handleTableAddCol}
+            onTableDeleteCol={handleTableDeleteCol}
+            onSetChartType={handleSetChartType}
+            onOpenChartData={() => setChartEditorOpen(true)}
             importedShape={selectedImportedShape}
             isImportedSelection={selection?.kind === 'run'}
             importedShapeGroupCount={importedShapeIds.length}
@@ -1418,6 +1517,16 @@ export function MasterTemplatePage() {
             onNotesChange={handleNotesChange}
           />
         </div>
+      )}
+
+      {editing && chartEditorOpen && selectedOverlayShape?.kind === 'chart' && (
+        <ChartDataEditor
+          chartType={selectedOverlayShape.chartType ?? 'bar'}
+          categories={selectedOverlayShape.chartCategories ?? []}
+          series={selectedOverlayShape.chartSeries ?? []}
+          onChange={handleChartDataChange}
+          onClose={() => setChartEditorOpen(false)}
+        />
       )}
 
       <TemplateSwitchModal

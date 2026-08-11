@@ -1096,20 +1096,9 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
       lineSpacingMultiple: 1.5,
       slot: 'body',
     });
-    const imgBox = box(1000, 160, 780, 760);
-    if (content.imageUrl) {
-      addImageCover(slide, content.imageUrl, imgBox);
-    } else {
-      addRect(slide, imgBox, NEUTRAL_100);
-      addText(slide, 'CLICK TO ADD AN IMAGE', imgBox, {
-        fontFace: FONT_MONO,
-        size: 18,
-        color: NEUTRAL_400,
-        align: 'center',
-        valign: 'middle',
-        letterSpacingEm: 0.12,
-      });
-    }
+    // No image slot and no fixed table here - the right column's table is a
+    // draggable OverlayShape (auto-inserted when this layout is picked), so
+    // it exports through the generic addOverlayShapes() pass instead.
     return;
   }
 
@@ -1124,9 +1113,14 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
     lineSpacingMultiple: 1.5,
     slot: 'body',
   });
-  if (content.imageUrl && !content.hideImage) {
-    addImageCover(slide, content.imageUrl, box(140, 620, 1640, 380));
-  }
+  addText(slide, content.secondHeading ?? 'Second Section.', box(140, 620, 1640, 80), { size: 40, bold: true, slot: 'secondHeading' });
+  addText(slide, content.secondBody ?? 'Click to add more content…', box(140, 710, 1200, 200), {
+    fontFace: FONT_DISPLAY,
+    size: 28,
+    color: NEUTRAL_500,
+    lineSpacingMultiple: 1.5,
+    slot: 'secondBody',
+  });
 }
 
 /**
@@ -1245,6 +1239,43 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
         align: s.style?.align ?? 'left',
         valign: s.vAlign ?? 'top',
         lineSpacingMultiple: 1.3,
+      });
+      continue;
+    }
+
+    if (s.kind === 'table' && s.rows) {
+      const colW = (s.colWidthsPx ?? []).map((w) => inch(w));
+      const rows: pptxgen.TableRow[] = s.rows.map((row) => row.cells.map((cell) => ({
+        text: cell.text ?? '',
+        options: {
+          fill: cell.fill ? { color: cell.fill } : undefined,
+          fontFace: FONT_DISPLAY,
+          fontSize: pt(cell.style?.sizePx ?? 16),
+          bold: cell.style?.bold,
+          italic: cell.style?.italic,
+          underline: cell.style?.underline ? { style: 'sng' } : undefined,
+          color: cell.style?.color ?? NEUTRAL_900,
+          align: cell.style?.align ?? 'left',
+          border: { type: 'solid', color: 'D9D9D9', pt: 0.75 },
+        },
+      })));
+      slide.addTable(rows, { ...b, colW: colW.length ? colW : undefined, autoPage: false });
+      continue;
+    }
+
+    if (s.kind === 'chart' && s.chartSeries?.length) {
+      const data = s.chartSeries.map((series) => ({
+        name: series.name,
+        labels: s.chartCategories ?? [],
+        values: series.values,
+      }));
+      // Plain string literals rather than the pptxgen.ChartType enum - this
+      // file only imports pptxgenjs's types, not its runtime, and the string
+      // literals are the same values the enum resolves to.
+      slide.addChart(s.chartType ?? 'bar', data, {
+        ...b,
+        showLegend: data.length > 1,
+        showTitle: false,
       });
       continue;
     }

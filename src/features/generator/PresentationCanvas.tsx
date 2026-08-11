@@ -6,7 +6,7 @@ import { clampToSlide, FINE, guidesFromSiblings, SLIDE_W, snapMove, snapResize, 
 import { shapeIdsOf, slotsOf, type Selection } from '../formatting/selection';
 import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
 import { ShapeOverlay } from '../formatting/ShapeOverlay';
-import { overlayOf, withOverlay } from '../formatting/overlayModel';
+import { createOverlayShape, overlayOf, withOverlay } from '../formatting/overlayModel';
 
 interface PresentationCanvasProps {
   ast: DocumentNode | null;
@@ -2736,7 +2736,7 @@ function BlankLayoutPicker({
   );
 }
 
-type BlankField = 'eyebrow' | 'heading' | 'body';
+type BlankField = 'eyebrow' | 'heading' | 'body' | 'secondHeading' | 'secondBody';
 
 /** Freeform user slide - editable eyebrow, heading, body, and an optional image,
  *  in one of three layouts the author can switch between while editing.
@@ -2747,7 +2747,20 @@ type BlankField = 'eyebrow' | 'heading' | 'body';
 function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }: SlideRenderProps) {
   const layout = content.blankLayout ?? 'standard';
   const setLayout = (v: 'standard' | 'two-column' | 'full-bleed') =>
-    onEdit((c) => ({ ...c, blankLayout: v }));
+    onEdit((c) => {
+      const next = { ...c, blankLayout: v };
+      // Two-column's right-hand table is a real OverlayShape (draggable,
+      // resizable, editable like any inserted table) rather than fixed
+      // template content - seed one the first time this layout is picked, so
+      // switching to it doesn't hand the user an empty column. Nudged left of
+      // where the old image slot sat, so it doesn't hug the slide's edge.
+      if (v === 'two-column' && !(c.overlay ?? []).some((s) => s.kind === 'table')) {
+        const tableShape = createOverlayShape('table', (c.overlay ?? []).length);
+        Object.assign(tableShape, { x: 940, y: 260, w: 620, h: 560 });
+        return withOverlay(next, [...overlayOf(next), tableShape]);
+      }
+      return next;
+    });
 
   const pendingFocusField = useRef<BlankField | null>(null);
   useEffect(() => {
@@ -2820,9 +2833,33 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
       onDeleteContainer={onDeleteContainer}
     />
   );
-  /** Two-column/full-bleed have no "optional" image slot - the layout IS the
-   *  image area - so "deleting" it means dropping back to the Standard layout. */
+  /** Full-bleed has no "optional" image slot - the layout IS the image area -
+   *  so "deleting" it means dropping back to the Standard layout. */
   const dropToStandard = () => onEdit((c) => ({ ...c, blankLayout: 'standard', imageUrl: undefined }));
+  const secondHeading = (fontSize: number) => (
+    <h3 style={{ ...DISPLAY_HEADING_BASE, fontSize, fontWeight: 600, marginBottom: 20 }}>
+      <E slot="secondHeading"
+        value={content.secondHeading ?? 'Second Section.'}
+        editing={editing}
+        multiline
+        dataField="secondHeading"
+        onActivate={activate('secondHeading')}
+        onCommit={(v) => onEdit((c) => ({ ...c, secondHeading: v || undefined }))}
+      />
+    </h3>
+  );
+  const secondBody = (maxWidth?: number) => (
+    <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth }}>
+      <E slot="secondBody"
+        value={content.secondBody ?? 'Click to add more content…'}
+        editing={editing}
+        multiline
+        dataField="secondBody"
+        onActivate={activate('secondBody')}
+        onCommit={(v) => onEdit((c) => ({ ...c, secondBody: v || undefined }))}
+      />
+    </p>
+  );
   const hudLabel = (
     <E slot="hudLabel"
       value={content.hudLabel ?? 'Custom Slide'}
@@ -2860,15 +2897,12 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
         <SlideGrid />
         <HudTop label={hudLabel} num={num} />
         {editing && <BlankLayoutPicker value={layout} onChange={setLayout} />}
-        <div style={{ position: 'absolute', top: 160, bottom: 0, left: 140, right: 0, zIndex: 10, display: 'flex' }}>
-          <div style={{ flex: '0 0 50%', paddingRight: 60, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            {eyebrow}
-            {heading(64)}
-            {body()}
-          </div>
-          <div style={{ flex: '0 0 50%', paddingBottom: 160 }}>
-            {image('Click to add an image', undefined, dropToStandard)}
-          </div>
+        {/* The right-hand table is a draggable OverlayShape, seeded by
+            setLayout above - nothing template-fixed renders in that half. */}
+        <div style={{ position: 'absolute', top: 160, bottom: 0, left: 140, right: '50%', zIndex: 10, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingRight: 60 }}>
+          {eyebrow}
+          {heading(64)}
+          {body()}
         </div>
       </>
     );
@@ -2883,18 +2917,10 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
         {eyebrow}
         <div style={{ color: 'var(--neutral-900)' }}>{heading(88)}</div>
         {body(1200)}
-        {(content.imageUrl || editing) && !content.hideImage && (
-          <div style={{ marginTop: 48, flex: 1, minHeight: 0 }}>
-            {image('Click to add an image (optional)', undefined, () =>
-              onEdit((c) => ({ ...c, hideImage: true, imageUrl: undefined }))
-            )}
-          </div>
-        )}
-        {content.hideImage && editing && (
-          <div style={{ marginTop: 32 }}>
-            <AddBtn label="Add image area back" onClick={() => onEdit((c) => ({ ...c, hideImage: false }))} />
-          </div>
-        )}
+        <div style={{ marginTop: 48, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          {secondHeading(40)}
+          {secondBody(1200)}
+        </div>
       </div>
     </>
   );
@@ -3606,8 +3632,13 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
                     ? selection.shapeId
                     : undefined
                 }
-                onSelect={(shapeId) =>
-                  onSelect?.({ kind: 'overlay', instanceId: slide.instanceId, shapeId })
+                selectedCell={
+                  selection?.kind === 'overlay' && selection.instanceId === slide.instanceId
+                    ? selection.cell
+                    : undefined
+                }
+                onSelect={(shapeId, cell) =>
+                  onSelect?.({ kind: 'overlay', instanceId: slide.instanceId, shapeId, cell })
                 }
                 onPatch={(shapeId, patch) =>
                   onEditSlide(slide.instanceId, (c) =>

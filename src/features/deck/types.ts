@@ -92,9 +92,33 @@ export interface SlotStyle {
   align?: 'left' | 'center' | 'right';
 }
 
+/** One cell of a freshly-inserted (not imported) table: a single string
+ *  rather than paragraphs/runs, since there is no source pptx formatting to
+ *  preserve here - see ImportedTableCell for that richer case. */
+export interface OverlayTableCell {
+  text?: string;
+  /** Hex, no '#'. Absent means transparent. */
+  fill?: string;
+  /** Reuses SlotStyle so a header row can be told apart from body cells with
+   *  the same Bold/size/colour controls as everything else in the toolbar. */
+  style?: SlotStyle;
+}
+
+export interface OverlayTableRow {
+  heightPx: number;
+  cells: OverlayTableCell[];
+}
+
+export type OverlayChartType = 'bar' | 'line' | 'pie';
+
+export interface OverlayChartSeries {
+  name: string;
+  values: number[];
+}
+
 /**
  * A user-inserted element sitting on top of (or behind) a slide's template
- * content: a text box, a rectangle, an ellipse, or an image.
+ * content: a text box, a rectangle, an ellipse, an image, a table, or a chart.
  *
  * Deliberately a separate field from the imported `shapes` array. Those are an
  * imported .pptx slide's actual content; these are additions the user made in
@@ -106,7 +130,7 @@ export interface SlotStyle {
  */
 export interface OverlayShape {
   id: string;
-  kind: 'rect' | 'ellipse' | 'text' | 'image';
+  kind: 'rect' | 'ellipse' | 'text' | 'image' | 'table' | 'chart';
   /** Geometry in the 1920x1080 design space, matching every other coordinate
    *  in the deck model. */
   x: number;
@@ -128,6 +152,14 @@ export interface OverlayShape {
    *  the common case of a tinted panel sitting behind existing copy - without
    *  it, a highlight rectangle would bury the text it is meant to highlight. */
   behind?: boolean;
+  /** kind === 'table' - column widths sum to `w`. */
+  colWidthsPx?: number[];
+  /** kind === 'table' */
+  rows?: OverlayTableRow[];
+  /** kind === 'chart' */
+  chartType?: OverlayChartType;
+  chartCategories?: string[];
+  chartSeries?: OverlayChartSeries[];
 }
 
 /**
@@ -247,9 +279,9 @@ export interface SlideContent {
 
   // s10 Image Editorial - uploaded image as a (downscaled) data URL
   imageUrl?: string;
-  /** User dismissed the image area entirely (s10/s12, and blank's 'standard'
-   *  layout) - the template falls back to a text-only layout instead of
-   *  showing an empty upload placeholder. Re-adding an image clears this. */
+  /** User dismissed the image area entirely (s10/s12) - the template falls
+   *  back to a text-only layout instead of showing an empty upload
+   *  placeholder. Re-adding an image clears this. */
   hideImage?: boolean;
 
   // s13 Featured Quote
@@ -266,6 +298,11 @@ export interface SlideContent {
 
   // blank - freeform slide layout choice
   blankLayout?: 'standard' | 'two-column' | 'full-bleed';
+  /** 'standard' layout's second text container, stacked below heading/body -
+   *  standard has no image slot, so a slide needing two blocks of content
+   *  gets a second heading+body instead. */
+  secondHeading?: string;
+  secondBody?: string;
 
   /** Per-slot formatting overrides, keyed by the slot's stable name. For a
    *  plain field the key is the SlideContent field it writes ('heading',

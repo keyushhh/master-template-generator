@@ -1,0 +1,187 @@
+/**
+ * The small panel behind a chart's "Data" button: lets the user rename
+ * categories, edit series values, and add/remove rows or series.
+ *
+ * Deliberately not a Menu (formatting's usual dropdown) - it needs to sit
+ * open next to the toolbar while the user edits several fields in a row, and
+ * a Menu closes on outside click, which would fight typing into its own
+ * inputs the moment the pointer left the input's own box.
+ */
+
+import { Fragment, useEffect, useRef } from 'react';
+import type { OverlayChartSeries, OverlayChartType } from '../deck/types';
+
+const mono: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)', fontSize: 10,
+  textTransform: 'uppercase', letterSpacing: '0.12em',
+};
+
+const cellInput: React.CSSProperties = {
+  width: '100%', height: 26, padding: '0 6px', boxSizing: 'border-box',
+  fontFamily: 'var(--font-sans)', fontSize: 12,
+  color: '#fff', background: 'rgba(255,255,255,0.08)',
+  border: '1px solid rgba(255,255,255,0.18)',
+  borderRadius: 'var(--radius-sharp)',
+};
+
+const iconBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  width: 22, height: 22, padding: 0,
+  border: '1px solid rgba(255,255,255,0.18)', background: 'transparent',
+  color: 'rgba(255,255,255,0.7)', cursor: 'pointer',
+  borderRadius: 'var(--radius-sharp)', fontSize: 13, lineHeight: 1,
+};
+
+interface ChartDataEditorProps {
+  chartType: OverlayChartType;
+  categories: string[];
+  series: OverlayChartSeries[];
+  onChange: (next: { categories: string[]; series: OverlayChartSeries[] }) => void;
+  onClose: () => void;
+}
+
+export function ChartDataEditor({ chartType, categories, series, onChange, onClose }: ChartDataEditorProps) {
+  const wrap = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
+  }, [onClose]);
+
+  // Pie has one slice value per category, not one value per series - editing
+  // more than the first series would have nothing to render.
+  const shownSeries = chartType === 'pie' ? series.slice(0, 1) : series;
+
+  const setCategory = (i: number, label: string) => {
+    const next = [...categories];
+    next[i] = label;
+    onChange({ categories: next, series });
+  };
+
+  const setValue = (si: number, ci: number, raw: string) => {
+    const n = parseFloat(raw);
+    const nextSeries = series.map((s, i) => i === si
+      ? { ...s, values: s.values.map((v, j) => (j === ci ? (Number.isFinite(n) ? n : 0) : v)) }
+      : s);
+    onChange({ categories, series: nextSeries });
+  };
+
+  const setSeriesName = (si: number, name: string) => {
+    onChange({ categories, series: series.map((s, i) => (i === si ? { ...s, name } : s)) });
+  };
+
+  const addCategory = () => {
+    onChange({
+      categories: [...categories, `Category ${categories.length + 1}`],
+      series: series.map((s) => ({ ...s, values: [...s.values, 0] })),
+    });
+  };
+
+  const removeCategory = (i: number) => {
+    if (categories.length <= 1) return;
+    onChange({
+      categories: categories.filter((_, ci) => ci !== i),
+      series: series.map((s) => ({ ...s, values: s.values.filter((_, ci) => ci !== i) })),
+    });
+  };
+
+  const addSeries = () => {
+    onChange({
+      categories,
+      series: [...series, { name: `Series ${series.length + 1}`, values: categories.map(() => 0) }],
+    });
+  };
+
+  const removeSeries = (si: number) => {
+    if (series.length <= 1) return;
+    onChange({ categories, series: series.filter((_, i) => i !== si) });
+  };
+
+  return (
+    <div
+      ref={wrap}
+      onMouseDown={(e) => {
+        if ((e.target as HTMLElement).closest('input')) return;
+        e.preventDefault();
+      }}
+      style={{
+        position: 'fixed', bottom: 84, left: 'calc(50% + 150px)', transform: 'translateX(-50%)',
+        zIndex: 102, width: 420, maxHeight: 380, overflowY: 'auto', padding: 12,
+        background: 'var(--neutral-900)',
+        boxShadow: 'var(--shadow-soft)',
+        border: '1px solid rgba(255,255,255,0.15)',
+        borderRadius: 'var(--radius-sharp)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ ...mono, color: 'rgba(255,255,255,0.4)' }}>Chart data</span>
+        <button title="Close" aria-label="Close" onClick={onClose} style={{ ...iconBtn, border: 'none' }}>✕</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: `1fr repeat(${shownSeries.length}, 96px) 24px`, gap: 6, alignItems: 'center' }}>
+        <span />
+        {shownSeries.map((s, si) => (
+          <input
+            key={si}
+            value={s.name}
+            onChange={(e) => setSeriesName(si, e.target.value)}
+            style={{ ...cellInput, ...mono, fontSize: 9, textAlign: 'center' }}
+            aria-label={`Series ${si + 1} name`}
+          />
+        ))}
+        {chartType !== 'pie' && (
+          <button title="Remove last series" aria-label="Remove last series" onClick={() => removeSeries(series.length - 1)}
+            disabled={series.length <= 1} style={{ ...iconBtn, opacity: series.length <= 1 ? 0.3 : 1 }}>−</button>
+        )}
+        {chartType === 'pie' && <span />}
+
+        {categories.map((cat, ci) => (
+          <Fragment key={ci}>
+            <input
+              value={cat}
+              onChange={(e) => setCategory(ci, e.target.value)}
+              style={cellInput}
+              aria-label={`Category ${ci + 1} label`}
+            />
+            {shownSeries.map((s, si) => (
+              <input
+                key={si}
+                type="number"
+                value={s.values[ci] ?? 0}
+                onChange={(e) => setValue(si, ci, e.target.value)}
+                style={{ ...cellInput, textAlign: 'right' }}
+                aria-label={`${s.name} value for ${cat}`}
+              />
+            ))}
+            <button
+              title="Remove category" aria-label="Remove category"
+              onClick={() => removeCategory(ci)}
+              disabled={categories.length <= 1}
+              style={{ ...iconBtn, opacity: categories.length <= 1 ? 0.3 : 1 }}
+            >
+              −
+            </button>
+          </Fragment>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button
+          onClick={addCategory}
+          style={{ ...cellInput, cursor: 'pointer', width: 'auto', padding: '0 10px', fontWeight: 600 }}
+        >
+          + Category
+        </button>
+        {chartType !== 'pie' && (
+          <button
+            onClick={addSeries}
+            style={{ ...cellInput, cursor: 'pointer', width: 'auto', padding: '0 10px', fontWeight: 600 }}
+          >
+            + Series
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

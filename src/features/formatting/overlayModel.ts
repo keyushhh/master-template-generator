@@ -31,7 +31,12 @@ const DEFAULTS: Record<OverlayShape['kind'], Rect> = {
   rect: { x: 240, y: 480, w: 480, h: 240 },
   ellipse: { x: 240, y: 480, w: 240, h: 240 },
   image: { x: 240, y: 360, w: 600, h: 360 },
+  table: { x: 240, y: 360, w: 900, h: 300 },
+  chart: { x: 240, y: 300, w: 800, h: 480 },
 };
+
+const TABLE_ROWS = 3;
+const TABLE_COLS = 3;
 
 /**
  * Builds a new shape.
@@ -65,6 +70,22 @@ export function createOverlayShape(
     // fill means "this is the point". Context is the safer default - a filled
     // shape dropped onto a slide would claim emphasis the user didn't ask for.
     shape.line = { color: NEUTRAL_200, widthPx: 1 };
+  } else if (kind === 'table') {
+    // A plain 3x3 starter grid, PowerPoint's own default table insert -
+    // equal columns, empty cells the user fills in by double-clicking.
+    const colW = rect.w / TABLE_COLS;
+    const rowH = rect.h / TABLE_ROWS;
+    shape.colWidthsPx = Array.from({ length: TABLE_COLS }, () => colW);
+    shape.rows = Array.from({ length: TABLE_ROWS }, () => ({
+      heightPx: rowH,
+      cells: Array.from({ length: TABLE_COLS }, () => ({})),
+    }));
+  } else if (kind === 'chart') {
+    // Sample data so the chart is legible the instant it lands, rather than an
+    // empty axis the user has to populate before it means anything.
+    shape.chartType = 'bar';
+    shape.chartCategories = ['Q1', 'Q2', 'Q3', 'Q4'];
+    shape.chartSeries = [{ name: 'Series 1', values: [30, 45, 60, 80] }];
   }
   return shape;
 }
@@ -117,5 +138,7 @@ export function shapeLabel(s: OverlayShape): string {
     return t ? (t.length > 24 ? `${t.slice(0, 24)}…` : t) : 'Text box';
   }
   if (s.kind === 'image') return 'Image';
+  if (s.kind === 'table') return 'Table';
+  if (s.kind === 'chart') return 'Chart';
   return s.kind === 'ellipse' ? 'Ellipse' : 'Rectangle';
 }

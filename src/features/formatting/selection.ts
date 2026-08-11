@@ -69,6 +69,11 @@ export interface OverlaySelection {
   kind: 'overlay';
   instanceId: string;
   shapeId: string;
+  /** Present when the shape is a table and a specific cell is targeted - its
+   *  formatting lives on that cell, not on the shape, since a header row and
+   *  its body need to look different from each other. Absent for every other
+   *  overlay kind, and for a table selected as a whole (no cell picked). */
+  cell?: { row: number; col: number };
   effectiveSizePx?: number;
   /** The font this text is actually rendering in, read from the live DOM at
    *  selection time. Shown in the toolbar in place of the internal slot name:
@@ -180,7 +185,12 @@ export function sameSelection(a: Selection | null, b: Selection | null): boolean
     );
   }
   if (a.kind === 'overlay' && b.kind === 'overlay') {
-    return a.instanceId === b.instanceId && a.shapeId === b.shapeId;
+    return (
+      a.instanceId === b.instanceId &&
+      a.shapeId === b.shapeId &&
+      a.cell?.row === b.cell?.row &&
+      a.cell?.col === b.cell?.col
+    );
   }
   return false;
 }

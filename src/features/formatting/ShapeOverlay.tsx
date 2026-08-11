@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { OverlayShape } from '../deck/types';
+import { ChartVisual } from './chartRender';
 import { applyToCss } from './resolve';
 import { MIN_SIZE, clampToSlide, guidesFromSiblings, snapMove, snapResize, type ExtraGuides, type Handle, type Rect } from './snap';
 
@@ -30,7 +31,13 @@ interface ShapeOverlayProps {
   editing: boolean;
   /** Id of the currently selected shape, if the selection is on this slide. */
   selectedId?: string;
-  onSelect: (id: string) => void;
+  /** `cell` is present when a table cell is being targeted specifically -
+   *  its formatting lives on the cell, not the shape. */
+  onSelect: (id: string, cell?: { row: number; col: number }) => void;
+  /** Which table cell (by shape id) the current selection is pointed at, so
+   *  the cell's own `contentEditable` span can pick up the toolbar's live
+   *  formatting the same way an inserted text box does via `applyToCss`. */
+  selectedCell?: { row: number; col: number };
   /** Geometry/content patch for one shape. */
   onPatch: (id: string, patch: Partial<OverlayShape>) => void;
 }
@@ -73,11 +80,15 @@ function slideScale(el: HTMLElement | null): number {
   return rect.width ? rect.width / 1920 : 1;
 }
 
-export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }: ShapeOverlayProps) {
+export function ShapeOverlay({ shapes, editing, selectedId, onSelect, selectedCell, onPatch }: ShapeOverlayProps) {
   /** Which text box is in text-entry mode. Kept separate from selection so a
    *  selected text box can still be dragged - only an actively-edited one
    *  surrenders pointer drags to the caret. */
   const [textEditId, setTextEditId] = useState<string | null>(null);
+
+  /** Which table cell is in text-entry mode, addressed by shape/row/col since a
+   *  table has no run-selection model of its own (unlike an imported shape). */
+  const [editingCell, setEditingCell] = useState<{ shapeId: string; row: number; col: number } | null>(null);
 
   /** Live geometry during a drag, so the shape follows the pointer without
    *  writing to the deck (and pushing an undo entry) on every mouse move. */
@@ -99,7 +110,7 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
   } | null>(null);
 
   useEffect(() => {
-    if (!editing) { setTextEditId(null); setLive(null); }
+    if (!editing) { setTextEditId(null); setEditingCell(null); setLive(null); }
   }, [editing]);
 
   // Leaving a shape selected but dropping out of text-edit mode when the
@@ -107,6 +118,10 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
   useEffect(() => {
     if (textEditId && textEditId !== selectedId) setTextEditId(null);
   }, [selectedId, textEditId]);
+
+  useEffect(() => {
+    if (editingCell && editingCell.shapeId !== selectedId) setEditingCell(null);
+  }, [selectedId, editingCell]);
 
   useEffect(() => {
     if (!live) return;
@@ -131,7 +146,26 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
       const d = dragRef.current;
       // Only commit when something actually moved - a plain click should select
       // without creating an undo step.
-      if (d?.moved && live) onPatch(live.id, live.rect);
+      if (d?.moved && live) {
+        const shape = shapes.find((s) => s.id === live.id);
+        if (shape?.kind === 'table' && shape.rows) {
+          // The render scales columns/rows against `shape.w`/`shape.h`, but
+          // those fields are about to become the *new* box size once this
+          // patch lands - leaving colWidthsPx/heightPx unscaled would make
+          // that ratio silently drop back to 1 and strand the table's visible
+          // cells at their pre-resize size, with the bounding box (and its
+          // selection outline) the only thing that actually grew.
+          const wScale = d.startRect.w ? live.rect.w / d.startRect.w : 1;
+          const hScale = d.startRect.h ? live.rect.h / d.startRect.h : 1;
+          onPatch(live.id, {
+            ...live.rect,
+            colWidthsPx: (shape.colWidthsPx ?? []).map((w) => w * wScale),
+            rows: shape.rows.map((r) => ({ ...r, heightPx: r.heightPx * hScale })),
+          });
+        } else {
+          onPatch(live.id, live.rect);
+        }
+      }
       dragRef.current = null;
       setLive(null);
     };
@@ -142,17 +176,18 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [live, onPatch]);
+  }, [live, onPatch, shapes]);
 
   const beginDrag = (
     e: React.PointerEvent,
     shape: OverlayShape,
-    handle: Handle | null
+    handle: Handle | null,
+    cell?: { row: number; col: number }
   ) => {
     if (!editing || textEditId === shape.id) return;
     e.stopPropagation();
     e.preventDefault();
-    onSelect(shape.id);
+    onSelect(shape.id, cell);
     const rect: Rect = { x: shape.x, y: shape.y, w: shape.w, h: shape.h };
     dragRef.current = {
       id: shape.id,
@@ -187,6 +222,7 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
         const isSel = editing && selectedId === shape.id;
         const rect = live?.id === shape.id ? live.rect : shape;
         const inTextEdit = textEditId === shape.id;
+        const inCellEdit = editingCell?.shapeId === shape.id;
 
         const frame: React.CSSProperties = {
           position: 'absolute',
@@ -199,7 +235,7 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
           // Shapes must not intercept clicks outside edit mode, or they would
           // block the template's own editable fields underneath.
           pointerEvents: editing ? 'auto' : 'none',
-          cursor: editing ? (inTextEdit ? 'text' : 'move') : 'default',
+          cursor: editing ? (inTextEdit || inCellEdit ? 'text' : 'move') : 'default',
           background: shape.fill ? `#${shape.fill}` : undefined,
           border: shape.line
             ? `${Math.max(1, shape.line.widthPx)}px solid #${shape.line.color}`
@@ -250,6 +286,116 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
               >
                 Double-click to add image
               </div>
+            )}
+
+            {shape.kind === 'table' && shape.rows && (
+              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                {shape.rows.map((row, ri) => {
+                  const wScale = shape.w ? rect.w / shape.w : 1;
+                  const hScale = shape.h ? rect.h / shape.h : 1;
+                  return (
+                    <div key={ri} style={{ display: 'flex', minHeight: row.heightPx * hScale, flexShrink: 0 }}>
+                      {row.cells.map((cell, ci) => {
+                        const isCellEdit = inCellEdit && editingCell?.row === ri && editingCell?.col === ci;
+                        const isCellSelected = isSel && selectedCell?.row === ri && selectedCell?.col === ci;
+                        return (
+                          <div
+                            key={ci}
+                            style={{
+                              width: (shape.colWidthsPx?.[ci] ?? shape.w / row.cells.length) * wScale,
+                              flexShrink: 0,
+                              background: cell.fill ? `#${cell.fill}` : undefined,
+                              border: '1px solid color-mix(in srgb, var(--neutral-900) 12%, transparent)',
+                              boxSizing: 'border-box',
+                              padding: '4px 10px',
+                              overflow: 'hidden',
+                              lineHeight: 1.35,
+                              cursor: editing ? (isCellEdit ? 'text' : 'move') : 'default',
+                            }}
+                            onPointerDown={(e) => {
+                              if (isCellEdit) return;
+                              // Switching cells mid-edit: blur the outgoing
+                              // cell explicitly rather than just clearing
+                              // `editingCell` - removing contentEditable out
+                              // from under a still-focused element doesn't
+                              // reliably fire blur, so its onBlur commit (the
+                              // only place a cell's typed text is saved) could
+                              // silently never run and the keystrokes would
+                              // be lost when the span goes back to plain text.
+                              if (inCellEdit) (document.activeElement as HTMLElement | null)?.blur();
+                              beginDrag(e, shape, null, { row: ri, col: ci });
+                            }}
+                            onDoubleClick={(e) => {
+                              if (!editing) return;
+                              e.stopPropagation();
+                              setEditingCell({ shapeId: shape.id, row: ri, col: ci });
+                            }}
+                          >
+                            <span
+                              // Becoming contentEditable doesn't move DOM focus
+                              // by itself - the caret shown to a user clicking
+                              // with a real mouse comes from the browser's own
+                              // click handling against whatever the DOM already
+                              // was *before* this render, which was still plain
+                              // text. Focus it explicitly the moment the ref
+                              // attaches to the now-editable span.
+                              ref={(el) => { if (isCellEdit) el?.focus(); }}
+                              contentEditable={isCellEdit}
+                              suppressContentEditableWarning
+                              spellCheck={false}
+                              onPointerDown={(e) => { if (isCellEdit) e.stopPropagation(); }}
+                              onBlur={(e) => {
+                                setEditingCell(null);
+                                const next = (e.currentTarget as HTMLElement).innerText.replace(/ /g, ' ');
+                                if (next !== (cell.text ?? '')) {
+                                  const rows = (shape.rows ?? []).map((r, rri) => rri !== ri ? r : {
+                                    ...r,
+                                    cells: r.cells.map((c, cci) => (cci === ci ? { ...c, text: next } : c)),
+                                  });
+                                  onPatch(shape.id, { rows });
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                  (e.currentTarget as HTMLElement).innerText = cell.text ?? '';
+                                  (e.currentTarget as HTMLElement).blur();
+                                }
+                              }}
+                              onPaste={(e) => {
+                                e.preventDefault();
+                                document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+                              }}
+                              style={{
+                                display: 'block',
+                                fontFamily: 'var(--font-sans)',
+                                fontSize: 16,
+                                color: 'var(--neutral-900)',
+                                whiteSpace: 'pre-wrap',
+                                outline: isCellEdit
+                                  ? '1px dashed var(--emerald-400)'
+                                  : isCellSelected ? '1px solid color-mix(in srgb, var(--emerald-500) 50%, transparent)' : 'none',
+                                ...applyToCss(cell.style),
+                              }}
+                            >
+                              {cell.text ?? ''}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {shape.kind === 'chart' && (
+              <ChartVisual
+                chartType={shape.chartType ?? 'bar'}
+                categories={shape.chartCategories ?? []}
+                series={shape.chartSeries ?? []}
+                width={rect.w}
+                height={rect.h}
+              />
             )}
 
             {shape.kind === 'text' && (
@@ -303,7 +449,7 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, onPatch }:
 
             {/* Resize handles - edit mode only, so the exported/view-mode DOM
                 that html2canvas captures stays clean. */}
-            {isSel && !inTextEdit && HANDLES.map((h) => {
+            {isSel && !inTextEdit && !inCellEdit && HANDLES.map((h) => {
               const pos: React.CSSProperties = { position: 'absolute' };
               if (h.includes('n')) pos.top = -5;
               if (h.includes('s')) pos.bottom = -5;
