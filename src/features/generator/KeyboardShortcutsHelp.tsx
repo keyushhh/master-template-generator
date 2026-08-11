@@ -13,6 +13,19 @@ const GLOBAL_SHORTCUTS: Shortcut[] = [
   { keys: ['?'], description: 'Show this shortcuts overlay' },
 ];
 
+/** Edit-mode gestures. Documented here because several of them (shift-click to
+ *  build a group, Alt to escape snapping) are otherwise invisible - discoverable
+ *  only from a tooltip you have to already be hovering to see. */
+const EDIT_SHORTCUTS: Shortcut[] = [
+  { keys: ['Shift', 'Click'], description: 'Add another text field to the selection' },
+  { keys: ['↑', '↓', '←', '→'], description: 'Nudge the selection' },
+  { keys: ['Shift', 'Arrows'], description: 'Nudge by a full grid cell' },
+  { keys: ['Alt'], description: 'Hold while dragging to ignore snapping' },
+  { keys: ['Alt', '↑ / ↓'], description: 'Bring a shape forward / send it backward' },
+  { keys: ['Delete'], description: 'Remove the selected shape' },
+  { keys: ['Esc'], description: 'Clear the selection' },
+];
+
 const PRESENT_SHORTCUTS: Shortcut[] = [
   { keys: ['→', 'Space'], description: 'Next slide' },
   { keys: ['←'], description: 'Previous slide' },
@@ -79,6 +92,14 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
           ))}
         </div>
         <div className="px-5 pt-1 pb-2 text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-400">
+          While editing
+        </div>
+        <div className="px-5 divide-y divide-neutral-100">
+          {EDIT_SHORTCUTS.map((s, i) => (
+            <ShortcutRow key={i} shortcut={s} />
+          ))}
+        </div>
+        <div className="px-5 pt-3 pb-2 text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-400">
           While presenting
         </div>
         <div className="px-5 pb-4 divide-y divide-neutral-100">

@@ -146,7 +146,9 @@ export async function exportToPPTX(
   slides: SlideInstance[],
   deckTitle: string,
   logoUrl: string | undefined,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  /** Deck-level logo size multiplier, so a resized logo exports resized. */
+  logoScale = 1
 ) {
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
@@ -158,7 +160,7 @@ export async function exportToPPTX(
     onProgress?.(i, total);
     const num = String(i + 1).padStart(2, '0');
     const slide = pptx.addSlide();
-    await addNativeSlide(slide, slides[i], num, logoUrl, `${i + 1} / ${total}`);
+    await addNativeSlide(slide, slides[i], num, logoUrl, `${i + 1} / ${total}`, logoScale);
   }
 
   onProgress?.(total, total);

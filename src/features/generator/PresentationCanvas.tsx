@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { DocumentNode } from '../business-record/parser/ast';
-import type { Deck, SlideContent, SlideInstance } from '../deck/types';
+import type { Deck, SlideContent, SlideInstance, SlotOffset, SlotStyle } from '../deck/types';
+import { applyToCss, offsetFor, shiftOffsets, styleFor } from '../formatting/resolve';
+import { FINE, SLIDE_W, snapValue } from '../formatting/snap';
+import { slotsOf, type Selection } from '../formatting/selection';
+import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
+import { ShapeOverlay } from '../formatting/ShapeOverlay';
+import { overlayOf, withOverlay } from '../formatting/overlayModel';
 
 interface PresentationCanvasProps {
   ast: DocumentNode | null;
@@ -10,9 +16,27 @@ interface PresentationCanvasProps {
   onEditSlide: (instanceId: string, updater: (content: SlideContent) => SlideContent) => void;
   /** Set/clear the deck-level client logo (edit mode). */
   onLogoChange?: (dataUrl: string | undefined) => void;
+  /** Deck-level logo size multiplier, and its setter. */
+  logoScale?: number;
+  onLogoScaleChange?: (next: number) => void;
   /** Enter edit mode (used so a click on an empty blank-slide field can jump
    *  straight into editing instead of requiring a separate "Edit Content" click). */
   onRequestEdit?: () => void;
+  /** What the formatting toolbar is currently pointed at, and how to move it.
+   *  Absent outside edit mode. */
+  selection?: Selection | null;
+  /** `additive` (a shift-click) adds the slot to the current selection instead
+   *  of replacing it, which is how a group is built. */
+  onSelect?: (selection: Selection, additive?: boolean) => void;
+  /** Reports which slide currently holds focus, so the page's Insert controls
+   *  know which slide a new shape or a note belongs to. */
+  onActiveSlideChange?: (instanceId: string) => void;
+  /** Renames a slide - the footer label is editable on the slide itself, not
+   *  only in the sidebar. */
+  onRenameSlide?: (instanceId: string, title: string) => void;
+  /** Bumped on every undo/redo, so the editable text nodes are rebuilt from the
+   *  model instead of keeping whatever the user had typed into them. */
+  revision?: number;
 }
 
 /** Props every slide renderer receives: parsed document (for the logo), the
@@ -27,10 +51,20 @@ interface SlideRenderProps {
   /** Deck-level client logo + its setter (edit mode). */
   logoUrl?: string;
   onLogoChange?: (dataUrl: string | undefined) => void;
+  /** Deck-level logo size multiplier, and its setter. */
+  logoScale?: number;
+  onLogoScaleChange?: (next: number) => void;
   /** DOM id of this slide's wrapper - lets a renderer target its own fields. */
   instanceId?: string;
   /** Enter edit mode from a view-mode click (see SlideBlank). */
   onRequestEdit?: () => void;
+  /** Formatting-toolbar target. Templates get this via SlotContext and can
+   *  ignore it; the imported renderer needs it directly, because its runs are
+   *  addressed by shape/paragraph/run rather than by slot name. */
+  selection?: Selection | null;
+  /** `additive` (a shift-click) adds the slot to the current selection instead
+   *  of replacing it, which is how a group is built. */
+  onSelect?: (selection: Selection, additive?: boolean) => void;
 }
 
 const PLACEHOLDER =
@@ -50,6 +84,199 @@ const DISPLAY_HEADING_BASE: React.CSSProperties = {
 // Editable slot primitive
 // ---------------------------------------------------------------------------
 
+/** Per-slide formatting wiring, supplied by context rather than props.
+ *
+ *  There are ~74 <E> call sites across the 14 renderers. Passing the styles
+ *  map, the selection and its setter down through every one of them (and
+ *  through the intermediate layout components they sit inside) would be a lot
+ *  of prop-drilling for values that are constant per slide, so the slide
+ *  wrapper publishes them once and E reads them. Each call site only has to
+ *  declare its own `slot`. */
+interface SlotContextValue {
+  /** Overrides for this slide, keyed by slot name. */
+  styles?: Record<string, SlotStyle>;
+  /** Drag offsets for this slide, keyed by slot name. */
+  offsets?: Record<string, SlotOffset>;
+  /** The selected slots on this slide - drives the focus rings. Usually one;
+   *  more when the user shift-clicked to build a group. */
+  selectedSlots?: string[];
+  /** In-flight drag, applied on top of every selected slot's stored offset.
+   *
+   *  One shared delta rather than per-slot state is what makes a group move as a
+   *  block: each member renders `its own offset + this`, so their relative
+   *  positions are preserved by construction rather than by arithmetic that
+   *  could drift. */
+  dragDelta?: SlotOffset | null;
+  /** Reports that a slot became the formatting target. `additive` (shift-click)
+   *  adds it to the current group instead of replacing it. */
+  onSelectSlot?: (
+    slot: string,
+    effectiveSizePx?: number,
+    effectiveFont?: string,
+    additive?: boolean
+  ) => void;
+  /** Starts dragging the whole selection. Owned by the provider, not by the
+   *  slot that was grabbed, because every member has to move together. */
+  onBeginDrag?: (e: React.PointerEvent) => void;
+  /** Bumped by undo/redo. Used as the editable spans' key so they are rebuilt
+   *  from the model - see the note on that key in <E>. */
+  revision?: number;
+}
+
+const SlotContext = createContext<SlotContextValue>({});
+
+/**
+ * Published by a wrapper that has taken over a slot's drag offset.
+ *
+ * Some slots are not a bare span - an eyebrow is a short emerald rule and its
+ * text, laid out as a flex row. The rule is decoration the user never thinks of
+ * as a separate object, so dragging the eyebrow has to move both. Translating
+ * the <E> span alone would slide the text out from under its own rule.
+ *
+ * When a frame claims a slot, it applies the transform to the whole unit and the
+ * slot's <E> stops applying its own (otherwise the displacement would double).
+ * <E> keeps the drag gesture, since that is where the user's pointer is.
+ */
+const FrameContext = createContext<string | null>(null);
+
+/**
+ * Where a slot is actually drawn: its stored offset plus any drag in flight.
+ *
+ * Both <E> and the frames that wrap it resolve position through here, so a
+ * decorated slot and a bare one can never disagree about where they are, and a
+ * group drag reaches every member without any of them knowing about each other.
+ */
+function useSlotOffset(slot: string | undefined): SlotOffset | undefined {
+  const { offsets, selectedSlots, dragDelta } = useContext(SlotContext);
+  const base = offsetFor(offsets, slot);
+  if (!slot || !dragDelta || !selectedSlots?.includes(slot)) return base;
+  const dx = (base?.dx ?? 0) + dragDelta.dx;
+  const dy = (base?.dy ?? 0) + dragDelta.dy;
+  return dx || dy ? { dx, dy } : undefined;
+}
+
+/**
+ * Publishes one slide's formatting wiring and owns dragging its selected slots.
+ *
+ * The drag lives here rather than in the slot that was grabbed because a
+ * selection can span several slots: one owner holding one delta is what makes
+ * them move as a block. It also keeps the in-flight offset local to this slide,
+ * so following the pointer re-renders one slide instead of the whole deck.
+ */
+function SlideSlots({
+  instanceId,
+  content,
+  selection,
+  onSelect,
+  onEditSlide,
+  revision,
+  children,
+}: {
+  instanceId: string;
+  content: SlideContent;
+  selection: Selection | null;
+  onSelect?: (sel: Selection, additive?: boolean) => void;
+  onEditSlide: (instanceId: string, updater: (c: SlideContent) => SlideContent) => void;
+  revision?: number;
+  children: React.ReactNode;
+}) {
+  const [dragDelta, setDragDelta] = useState<SlotOffset | null>(null);
+  /** The drag's own bookkeeping. The delta is kept here as well as in state
+   *  because the commit reads it: a state updater has to stay pure, and calling
+   *  onEditSlide from inside one applies the move twice under StrictMode's
+   *  double-invoke - which is exactly the bug this shape avoids. */
+  const drag = useRef<{
+    sx: number;
+    sy: number;
+    scale: number;
+    slots: string[];
+    delta: SlotOffset;
+  } | null>(null);
+
+  const selectedSlots =
+    selection?.kind === 'slot' && selection.instanceId === instanceId
+      ? slotsOf(selection)
+      : undefined;
+
+  const onBeginDrag = (e: React.PointerEvent) => {
+    if (!selectedSlots?.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement)
+      .closest<HTMLElement>('[data-slide]')
+      ?.getBoundingClientRect();
+    drag.current = {
+      sx: e.clientX,
+      sy: e.clientY,
+      // The slide is CSS-scaled to fit the viewport, so pointer travel has to be
+      // divided back into design px or text would move faster than the cursor.
+      scale: rect?.width ? rect.width / SLIDE_W : 1,
+      slots: selectedSlots,
+      delta: { dx: 0, dy: 0 },
+    };
+    setDragDelta({ dx: 0, dy: 0 });
+  };
+
+  useEffect(() => {
+    if (!dragDelta) return;
+    const onMove = (e: PointerEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      const dx = (e.clientX - d.sx) / d.scale;
+      const dy = (e.clientY - d.sy) / d.scale;
+      // Alt frees it; otherwise the delta itself lands on the fine step, so a
+      // group keeps its internal spacing exactly and still ends up on the grid.
+      const next = e.altKey
+        ? { dx: Math.round(dx), dy: Math.round(dy) }
+        : { dx: Math.round(dx / FINE) * FINE, dy: Math.round(dy / FINE) * FINE };
+      d.delta = next;
+      setDragDelta(next);
+    };
+    const finish = () => {
+      const d = drag.current;
+      drag.current = null;
+      setDragDelta(null);
+      if (!d || (!d.delta.dx && !d.delta.dy)) return;
+      onEditSlide(instanceId, (c) => ({
+        ...c,
+        offsets: shiftOffsets(c.offsets, d.slots, d.delta),
+      }));
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', finish);
+    // Without this a drag that ends outside the window (or is cancelled by the
+    // OS) would leave the text stuck following a pointer that no longer exists.
+    window.addEventListener('pointercancel', finish);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+  }, [dragDelta, instanceId, onEditSlide]);
+
+  return (
+    <SlotContext.Provider
+      value={{
+        styles: content.styles,
+        offsets: content.offsets,
+        selectedSlots,
+        dragDelta,
+        onBeginDrag,
+        revision,
+        onSelectSlot: onSelect
+          ? (slot, effectiveSizePx, effectiveFont, additive) =>
+              onSelect(
+                { kind: 'slot', instanceId, slot, effectiveSizePx, effectiveFont },
+                additive
+              )
+          : undefined,
+      }}
+    >
+      {children}
+    </SlotContext.Provider>
+  );
+}
+
 interface EditableProps {
   value: string;
   editing: boolean;
@@ -62,28 +289,126 @@ interface EditableProps {
   /** Called when this field is clicked while still in view mode - lets a
    *  slide jump straight into editing that exact field with one click. */
   onActivate?: () => void;
+  /** Stable slot name - the SlideContent field this slot writes ('heading'),
+   *  or a dotted path for a list item ('bars.0.label'). Present on every slot
+   *  that should be formattable; a slot without one still edits its text but
+   *  the toolbar cannot target it. */
+  slot?: string;
 }
 
 /** Renders plain text normally; in edit mode becomes a contentEditable span
  *  that commits on blur. Committing an empty string signals "revert to the
  *  template placeholder" (callers map '' → undefined). */
-function E({ value, editing, onCommit, multiline, dataField, onActivate }: EditableProps) {
+function E({ value, editing, onCommit, multiline, dataField, onActivate, slot }: EditableProps) {
+  const { styles, selectedSlots, onSelectSlot, onBeginDrag, revision } = useContext(SlotContext);
+  const framedSlot = useContext(FrameContext);
+  const override = styleFor(styles, slot);
+  const css = applyToCss(override);
+  const offset = useSlotOffset(slot);
+
+  /** A frame around this slot (an eyebrow's rule, say) moves the whole unit, so
+   *  this span must not move itself as well - the displacement would double. */
+  const framed = !!slot && framedSlot === slot;
+  const shown = framed ? undefined : offset;
+
+  /** Whether the click currently in progress held Shift - set on mousedown and
+   *  read on mouseup, because only mouse events carry modifier state. */
+  const additiveClick = useRef(false);
+
+  // translate() rather than left/top: the slot is laid out by its template
+  // (flex, padding, computed sizes), so nudging it must not take it out of that
+  // flow - otherwise moving one slot would reflow everything around it.
+  const moved: React.CSSProperties = shown
+    ? { transform: `translate(${shown.dx}px, ${shown.dy}px)`, position: 'relative' }
+    : {};
+
   if (!editing) {
-    if (!onActivate) return <>{value}</>;
+    // View mode still applies the override - otherwise saved formatting would
+    // vanish the moment edit mode closed, and (worse) the exported PDF/PNG
+    // capture, which renders view mode, would disagree with the editor.
+    const viewCss = { ...css, ...moved };
+    const hasCss = Object.keys(viewCss).length > 0;
+    if (!onActivate) return hasCss ? <span style={viewCss}>{value}</span> : <>{value}</>;
     return (
-      <span onClick={onActivate} style={{ cursor: 'text' }}>
+      <span onClick={onActivate} style={{ cursor: 'text', ...viewCss }}>
         {value}
       </span>
     );
   }
+
+  const selected = !!slot && !!selectedSlots?.includes(slot);
+  const grouped = (selectedSlots?.length ?? 0) > 1;
+
+  /** Tell the toolbar what it is pointing at, including the size this slot is
+   *  actually rendering at. Read from the DOM rather than from the override,
+   *  because with no override the effective size is whatever the template
+   *  computed - and the stepper has to start from the visible value. The CSS
+   *  transform that scales the slide does not affect computed styles, so this
+   *  is already in design px. */
+  const select = (el: HTMLElement, additive = false) => {
+    if (!slot || !onSelectSlot) return;
+    const cs = window.getComputedStyle(el);
+    const px = parseFloat(cs.fontSize);
+    onSelectSlot(slot, Number.isFinite(px) ? Math.round(px) : undefined, cs.fontFamily, additive);
+  };
+
   return (
     <span
+      // Changing the key discards this node and builds a fresh one from `value`.
+      //
+      // A contentEditable is uncontrolled: the user's keystrokes mutate the DOM
+      // behind React's back, while React still believes the text is whatever it
+      // last rendered. Undo hits that head-on - it commits the typed text on
+      // blur and then reverts it, so the net prop change across the batch is
+      // zero, React patches nothing, and the typing the user just undid stays on
+      // screen over a model that no longer contains it. Remounting rebuilds the
+      // node from props, which is exactly what undo means.
+      key={revision}
       data-editable
       data-field={dataField}
+      data-slot={slot}
       contentEditable
       suppressContentEditableWarning
       spellCheck={false}
-      title="Press Esc to revert this field"
+      title="Shift-click to add to the selection · Esc reverts this field"
+      // Focus fires between mousedown and mouseup, so on a shift-click it would
+      // report a plain selection first and the mouseup would then toggle that
+      // single member straight back off. Deferring to mouseup keeps the gesture
+      // in one place.
+      onMouseDown={(e) => { additiveClick.current = e.shiftKey; }}
+      onFocus={(e) => { if (!additiveClick.current) select(e.currentTarget); }}
+      onMouseUp={(e) => {
+        const additive = additiveClick.current;
+        additiveClick.current = false;
+        // Shift-click in a contentEditable also extends the caret across the
+        // text; the user meant "add this field", not "select these words".
+        // Guarded on rangeCount: collapseToEnd throws outright when there is no
+        // range - which is exactly the case when the first thing a user does is
+        // shift-click, and an exception here would abort before the selection
+        // was ever reported.
+        const dom = additive ? window.getSelection() : null;
+        if (dom?.rangeCount) dom.collapseToEnd();
+        select(e.currentTarget, additive);
+      }}
+      style={{
+        ...css,
+        ...moved,
+        // Always positioned so the drag grip has something to anchor to. On an
+        // inline span this changes nothing visually.
+        position: 'relative',
+        // Small labels (eyebrows, HUD lines, footers) render at 10-12 design px,
+        // which is ~6px on screen at typical zoom - too small to click reliably.
+        // Padding gives them a real hit area in edit mode; the negative margin
+        // cancels it so nothing on the slide shifts. Group measurement subtracts
+        // the same constants, so alignment reads the text's real edges.
+        padding: `${HIT_PAD_Y}px ${HIT_PAD_X}px`,
+        margin: `${-HIT_PAD_Y}px ${-HIT_PAD_X}px`,
+        // A visible target for the toolbar. Uses outline, not border, so it
+        // costs no layout space and cannot reflow the slide it sits on.
+        ...(selected
+          ? { outline: '2px solid var(--emerald-500)', outlineOffset: 2, borderRadius: 2 }
+          : {}),
+      }}
       onKeyDown={(e) => {
         if (!multiline && e.key === 'Enter') {
           e.preventDefault();
@@ -105,6 +430,43 @@ function E({ value, editing, onCommit, multiline, dataField, onActivate }: Edita
       }}
     >
       {value}
+      {/* Drag grip. Appears only on the selected slot, and moving is kept a
+          separate gesture from typing: dragging the text itself must go on
+          selecting words, or editing would break. Select first, then drag. */}
+      {selected && onBeginDrag && (
+        <span
+          contentEditable={false}
+          role="button"
+          aria-label={grouped ? 'Drag to move the selected text' : 'Drag to move this text'}
+          title={
+            (grouped ? 'Drag to move all selected text \u00b7 ' : 'Drag to move \u00b7 ') +
+            'arrow keys to nudge \u00b7 Alt ignores the grid'
+          }
+          onPointerDown={onBeginDrag}
+          style={{
+            position: 'absolute',
+            top: -11,
+            left: -11,
+            width: 18,
+            height: 18,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--emerald-500)',
+            color: '#fff',
+            cursor: 'move',
+            borderRadius: 2,
+            zIndex: 30,
+            userSelect: 'none',
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+            <circle cx="5" cy="4" r="1.3" /><circle cx="11" cy="4" r="1.3" />
+            <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+            <circle cx="5" cy="12" r="1.3" /><circle cx="11" cy="12" r="1.3" />
+          </svg>
+        </span>
+      )}
     </span>
   );
 }
@@ -337,16 +699,28 @@ function HudTop({ label, num }: { label: React.ReactNode; num: React.ReactNode }
   );
 }
 
-/** Editorial eyebrow label with leading rule (uses accent colour) */
+/** Editorial eyebrow label with leading rule (uses accent colour).
+ *
+ *  Pass `slot` when the label wraps a single editable slot: the label then acts
+ *  as that slot's frame (see FrameContext), so dragging the text carries the
+ *  emerald rule with it instead of leaving it stranded. Labels holding fixed
+ *  text ('Navigation') take no slot and never move. */
 function EditorialLabel({
   children,
   style,
+  slot,
 }: {
   children: React.ReactNode;
   style?: React.CSSProperties;
+  slot?: string;
 }) {
-  return (
+  const shown = useSlotOffset(slot);
+
+  const row = (
     <div
+      // Marks this row as the slot's movable unit, so group measurement can find
+      // the rule as well as the text (see measureSlot).
+      data-slot-frame={slot}
       style={{
         fontFamily: 'var(--font-mono)',
         fontSize: 14,
@@ -359,6 +733,10 @@ function EditorialLabel({
         gap: 15,
         fontWeight: 600,
         ...style,
+        // After `style` so a call site's own styling can never drop the offset.
+        ...(shown
+          ? { transform: `translate(${shown.dx}px, ${shown.dy}px)`, position: 'relative' }
+          : {}),
       }}
     >
       <span
@@ -373,6 +751,8 @@ function EditorialLabel({
       {children}
     </div>
   );
+
+  return slot ? <FrameContext.Provider value={slot}>{row}</FrameContext.Provider> : row;
 }
 
 /** Oversized background numeral used by dark divider / monument slides. */
@@ -406,6 +786,142 @@ function GhostNumeral({
   );
 }
 
+/** Bounds for uploaded-media scaling. Below a quarter the image is unreadable;
+ *  above 4x a logo would dominate the slide it's meant to sign. */
+const SCALE_MIN = 0.25;
+const SCALE_MAX = 4;
+
+/**
+ * Corner grip that scales an uploaded image proportionally.
+ *
+ * Aspect ratio is never editable here on purpose - a stretched client logo is
+ * always a mistake, so the only gesture offered is "bigger" or "smaller". The
+ * drag is measured against the element's own rendered width, which makes the
+ * grip feel the same whether the slide is zoomed to 40% or 100%.
+ */
+function ScaleHandle({
+  scale,
+  onScale,
+  onLive,
+  title = 'Drag to resize',
+}: {
+  scale: number;
+  onScale: (next: number) => void;
+  /** In-progress value during a drag, and null when it ends. The host renders
+   *  this so the image actually grows under the pointer - without it the badge
+   *  counts up while the image sits still, which reads as broken. */
+  onLive?: (next: number | null) => void;
+  title?: string;
+}) {
+  const [live, setLive] = useState<number | null>(null);
+  const drag = useRef<{ sx: number; sy: number; startScale: number; startW: number } | null>(null);
+
+  useEffect(() => {
+    if (live === null) return;
+    const onMove = (e: PointerEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      const dx = e.clientX - d.sx;
+      const dy = e.clientY - d.sy;
+      // The grip sits at the top-left, so dragging away from the image (up or
+      // left) grows it - the same direction sense as any corner handle. Whichever
+      // axis the user moved most drives the change, so a pure horizontal or
+      // vertical drag feels as responsive as a diagonal one.
+      const travel = Math.abs(dx) > Math.abs(dy) ? -dx : -dy;
+      const next = d.startScale * (1 + travel / Math.max(24, d.startW));
+      const clamped = Math.min(SCALE_MAX, Math.max(SCALE_MIN, next));
+      setLive(clamped);
+      onLive?.(clamped);
+    };
+    const finish = () => {
+      if (live !== null) onScale(Math.round(live * 100) / 100);
+      drag.current = null;
+      setLive(null);
+      onLive?.(null);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+  }, [live, onScale, onLive]);
+
+  const shown = live ?? scale;
+
+  return (
+    <>
+      <span
+        role="button"
+        aria-label="Resize image"
+        title={title}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const host = (e.currentTarget as HTMLElement).parentElement;
+          drag.current = {
+            sx: e.clientX,
+            sy: e.clientY,
+            startScale: scale,
+            startW: host?.getBoundingClientRect().width ?? 100,
+          };
+          setLive(scale);
+        }}
+        style={{
+          position: 'absolute',
+          // Top-left, not bottom-right: a corner grip tucked under the
+          // bottom-right edge of a small logo reads as decoration and gets
+          // missed. Top-left is the first place the eye lands on the element.
+          left: -13,
+          top: -13,
+          width: 26,
+          height: 26,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--emerald-500)',
+          color: '#fff',
+          cursor: 'nwse-resize',
+          borderRadius: 3,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.22)',
+          zIndex: 30,
+          userSelect: 'none',
+        }}
+      >
+        {/* Arrow pointing up-left: the direction that makes it bigger. */}
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M2 10V2h8" /><path d="M2 2l7 7" />
+        </svg>
+      </span>
+      {/* Live percentage, so scaling is a number the user can aim at rather than
+          pure guesswork - and so two logos can be matched across slides. */}
+      {live !== null && (
+        <span
+          style={{
+            position: 'absolute',
+            left: -13,
+            top: -19,
+            transform: 'translateY(-100%)',
+            padding: '3px 7px',
+            background: 'var(--neutral-900)',
+            color: '#fff',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            borderRadius: 2,
+            whiteSpace: 'nowrap',
+            zIndex: 31,
+            pointerEvents: 'none',
+          }}
+        >
+          {Math.round(shown * 100)}%
+        </span>
+      )}
+    </>
+  );
+}
+
 /** Client logo slot — deck-level `logoUrl` (seeded from the Business Record's
  *  optional `logo` frontmatter). In edit mode the slot becomes click-to-upload
  *  with a remove control, so users can set the brand logo without a URL. */
@@ -413,13 +929,22 @@ function Logo({
   src,
   editing,
   onChange,
+  onScaleChange,
+  scale = 1,
   style,
 }: {
   src?: string;
   editing?: boolean;
   onChange?: (dataUrl: string | undefined) => void;
+  /** Commits a new deck-level logo scale. Absent means scaling isn't offered. */
+  onScaleChange?: (next: number) => void;
+  scale?: number;
   style?: React.CSSProperties;
 }) {
+  // The template's resting logo height; the scale multiplies it.
+  const LOGO_H = 40;
+  const [preview, setPreview] = useState<number | null>(null);
+  const h = Math.round(LOGO_H * (preview ?? scale));
   const inputRef = useRef<HTMLInputElement>(null);
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -442,14 +967,18 @@ function Logo({
   const placeholder: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
     height: 44, padding: '0 18px',
-    border: '1.5px dashed rgba(120,120,135,0.6)', borderRadius: 'var(--radius-sharp)',
+    // Long-hand: callers override borderColor alone (dark slides need a light
+    // dashed pill), and mixing that with the `border` shorthand makes React warn
+    // and can drop the colour on re-render.
+    borderWidth: 1.5, borderStyle: 'dashed', borderColor: 'rgba(120,120,135,0.6)',
+    borderRadius: 'var(--radius-sharp)',
     fontFamily: 'var(--font-mono)', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.14em',
     textTransform: 'uppercase', color: 'rgba(90,90,105,0.9)', whiteSpace: 'nowrap',
   };
 
   if (!editing) {
     return src ? (
-      <img src={src} alt="Client logo" style={{ height: 40, width: 'auto', objectFit: 'contain', zIndex: 10, ...style }} />
+      <img src={src} alt="Client logo" style={{ height: h, width: 'auto', objectFit: 'contain', zIndex: 10, ...style }} />
     ) : (
       <div style={{ zIndex: 10, ...placeholder, ...style }}>{uploadIcon}Client Logo</div>
     );
@@ -471,9 +1000,17 @@ function Logo({
         }}
       >
         {src
-          ? <img src={src} alt="Client logo" style={{ height: 40, width: 'auto', objectFit: 'contain' }} />
+          ? <img src={src} alt="Client logo" style={{ height: h, width: 'auto', objectFit: 'contain' }} />
           : <>{uploadIcon}Upload Logo</>}
       </div>
+      {src && onScaleChange && (
+        <ScaleHandle
+          scale={scale}
+          onScale={onScaleChange}
+          onLive={setPreview}
+          title="Drag to resize the logo"
+        />
+      )}
       {src && (
         <button
           onClick={(e) => { e.stopPropagation(); onChange?.(undefined); }}
@@ -493,7 +1030,7 @@ function Logo({
 // Individual slide renderers
 // ---------------------------------------------------------------------------
 
-function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
+function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
   const lines = content.headingLines ?? ['Master Primary', 'Heading.'];
   // Auto-fit the hero: shrink the font and tighten the top padding for longer
   // titles so the headline never overflows the fixed 1080px slide and keeps a
@@ -509,14 +1046,14 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sl
       <Glow style={{ top: -300, right: -300 }} />
       <HudTop
         label={
-          <E
+          <E slot="projectLabel"
             value={content.projectLabel ?? 'Project Name Placeholder'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, projectLabel: v || undefined }))}
           />
         }
         num={
-          <E
+          <E slot="versionLabel"
             value={content.versionLabel ?? 'YYYY // Version 0.0'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, versionLabel: v || undefined }))}
@@ -525,8 +1062,8 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sl
       />
       {/* Top padding adapts to the number of hero lines so long titles fit cleanly. */}
       <div style={{ padding: `${heroTopPad}px 140px`, position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>
-          <E
+        <EditorialLabel slot="eyebrow">
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Presentation Subtitle'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -543,6 +1080,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sl
         >
           {editing ? (
             <E
+              slot="headingLines"
               value={lines.join('\n')}
               editing
               multiline
@@ -579,7 +1117,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sl
               color: 'var(--neutral-500)',
             }}
           >
-            <E
+            <E slot="tagline"
               value={content.tagline ?? PLACEHOLDER}
               editing={editing}
               multiline
@@ -603,8 +1141,19 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sl
           zIndex: 10,
         }}
       >
-        <span>PROPRIETARY AND CONFIDENTIAL</span>
-        <Logo src={logoUrl} editing={editing} onChange={onLogoChange} />
+        {/* Editable, and clearable: not every deck is confidential, so an empty
+            value removes the line rather than leaving a stuck legal notice. */}
+        {(content.confidentialLabel ?? 'PROPRIETARY AND CONFIDENTIAL') !== '' && (
+          <span>
+            <E
+              slot="confidentialLabel"
+              value={content.confidentialLabel ?? 'PROPRIETARY AND CONFIDENTIAL'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, confidentialLabel: v }))}
+            />
+          </span>
+        )}
+        <Logo src={logoUrl} editing={editing} onChange={onLogoChange} scale={logoScale} onScaleChange={onLogoScaleChange} />
       </div>
     </>
   );
@@ -631,7 +1180,7 @@ function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
       <SlideGrid />
       <HudTop
         label={
-          <E
+          <E slot="hudLabel"
             value={content.hudLabel ?? 'Agenda'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -652,7 +1201,7 @@ function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
               whiteSpace: 'pre-line',
             }}
           >
-            <E
+            <E slot="heading"
               value={content.heading ?? 'Presentation\nStructure.'}
               editing={editing}
               multiline
@@ -684,6 +1233,7 @@ function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
                   }}
                 >
                   <E
+                    slot={`parts.${i}.title`}
                     value={part.title}
                     editing={editing}
                     onCommit={(v) => editPart(i, { title: v || part.title })}
@@ -691,6 +1241,7 @@ function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
                 </h4>
                 <p style={{ fontSize: 18, color: 'var(--neutral-500)', lineHeight: 1.5 }}>
                   <E
+                    slot={`parts.${i}.description`}
                     value={part.description}
                     editing={editing}
                     multiline
@@ -712,7 +1263,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
       <SlideGrid />
       <HudTop
         label={
-          <E
+          <E slot="hudLabel"
             value={content.hudLabel ?? 'Executive Summary'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -721,8 +1272,8 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
         num={num}
       />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>
-          <E
+        <EditorialLabel slot="eyebrow">
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Executive Summary'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -738,7 +1289,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
             whiteSpace: 'pre-line',
           }}
         >
-          <E
+          <E slot="heading"
             value={content.heading ?? 'Core Strategic\nObjective.'}
             editing={editing}
             multiline
@@ -747,7 +1298,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
         </h2>
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 120 }}>
           <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
-            <E
+            <E slot="body"
               value={content.body ?? PLACEHOLDER}
               editing={editing}
               multiline
@@ -761,8 +1312,8 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
               alignSelf: 'center',
             }}
           >
-            <EditorialLabel>
-              <E
+            <EditorialLabel slot="metricLabel">
+              <E slot="metricLabel"
                 value={content.metricLabel ?? 'Variable Metric'}
                 editing={editing}
                 onCommit={(v) => onEdit((c) => ({ ...c, metricLabel: v || undefined }))}
@@ -779,7 +1330,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
                 margin: '18px 0 24px',
               }}
             >
-              <E
+              <E slot="metricText"
                 value={content.metricText ?? '00.0%'}
                 editing={editing}
                 multiline
@@ -793,7 +1344,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
   );
 }
 
-function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
+function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
   return (
     <>
       {/* Clean, flat design layout for SlideSectionDivider - no shadows or glow blurs */}
@@ -809,6 +1360,8 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
           src={logoUrl}
           editing={editing}
           onChange={onLogoChange}
+          scale={logoScale}
+          onScaleChange={onLogoScaleChange}
           style={
             logoUrl
               ? undefined
@@ -828,7 +1381,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
           color: 'rgba(255,255,255,0.4)',
         }}
       >
-        <E
+        <E slot="hudLabel"
           value={content.hudLabel ?? 'Section Marker'}
           editing={editing}
           onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -845,8 +1398,8 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
           zIndex: 10,
         }}
       >
-        <EditorialLabel style={{ color: 'var(--emerald-500)' }}>
-          <E
+        <EditorialLabel slot="eyebrow" style={{ color: 'var(--emerald-500)' }}>
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Part 02'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -861,7 +1414,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
             margin: '42px 0 48px',
           }}
         >
-          <E
+          <E slot="heading"
             value={content.heading ?? 'Section Title.'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
@@ -876,7 +1429,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
             margin: 0,
           }}
         >
-          <E
+          <E slot="subtitle"
             value={content.subtitle ?? PLACEHOLDER}
             editing={editing}
             multiline
@@ -903,7 +1456,7 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
       <SlideGrid />
       <HudTop
         label={
-          <E
+          <E slot="hudLabel"
             value={content.hudLabel ?? 'Strategic Context'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -922,8 +1475,8 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
             justifyContent: 'center',
           }}
         >
-          <EditorialLabel>
-            <E
+          <EditorialLabel slot="leftLabel">
+            <E slot="leftLabel"
               value={content.leftLabel ?? 'Condition A'}
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, leftLabel: v || undefined }))}
@@ -939,7 +1492,7 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
               whiteSpace: 'pre-line',
             }}
           >
-            <E
+            <E slot="leftHeading"
               value={content.leftHeading ?? 'Current State\nEnvironment.'}
               editing={editing}
               multiline
@@ -947,7 +1500,7 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
             />
           </h2>
           <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', marginBottom: 40, whiteSpace: 'pre-line' }}>
-            <E
+            <E slot="leftBody"
               value={content.leftBody ?? PLACEHOLDER}
               editing={editing}
               multiline
@@ -965,7 +1518,7 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
             {attributes.map((attr, i) => (
               <li key={i} style={{ marginBottom: 10 }}>
                 [{String(i + 1).padStart(2, '0')}]{' '}
-                <E value={attr} editing={editing} onCommit={(v) => editAttribute(i, v)} />
+                <E slot={`leftAttributes.${i}`} value={attr} editing={editing} onCommit={(v) => editAttribute(i, v)} />
               </li>
             ))}
           </ul>
@@ -980,8 +1533,8 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
             background: 'var(--neutral-50)',
           }}
         >
-          <EditorialLabel>
-            <E
+          <EditorialLabel slot="rightLabel">
+            <E slot="rightLabel"
               value={content.rightLabel ?? 'Condition B'}
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, rightLabel: v || undefined }))}
@@ -997,7 +1550,7 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
               whiteSpace: 'pre-line',
             }}
           >
-            <E
+            <E slot="rightHeading"
               value={content.rightHeading ?? 'Strategic Pivot\nTarget State.'}
               editing={editing}
               multiline
@@ -1005,7 +1558,7 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
             />
           </h2>
           <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-900)', whiteSpace: 'pre-line' }}>
-            <E
+            <E slot="rightBody"
               value={content.rightBody ?? PLACEHOLDER}
               editing={editing}
               multiline
@@ -1034,8 +1587,8 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
           zIndex: 10,
         }}
       >
-        <EditorialLabel>
-          <E
+        <EditorialLabel slot="eyebrow">
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Performance Metric'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -1053,13 +1606,13 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
             color: 'var(--neutral-900)',
           }}
         >
-          <E
+          <E slot="value"
             value={content.value ?? '000.0'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, value: v || undefined }))}
           />
           <span style={{ color: 'var(--emerald-500)', fontSize: '0.3em', marginLeft: 10 }}>
-            <E
+            <E slot="unit"
               value={content.unit ?? 'M'}
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, unit: v || undefined }))}
@@ -1075,14 +1628,14 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
             color: 'var(--neutral-900)',
           }}
         >
-          <E
+          <E slot="heading"
             value={content.heading ?? 'Primary Performance Variable Title.'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
         </h3>
         <p style={{ marginTop: 60, maxWidth: 800, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
-          <E
+          <E slot="body"
             value={content.body ?? PLACEHOLDER}
             editing={editing}
             multiline
@@ -1132,7 +1685,7 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
       <SlideGrid />
       <HudTop
         label={
-          <E
+          <E slot="hudLabel"
             value={content.hudLabel ?? 'Metrics Dashboard'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -1141,8 +1694,8 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
         num={num}
       />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>
-          <E
+        <EditorialLabel slot="eyebrow">
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Temporal Performance'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -1180,7 +1733,7 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
                   color: 'var(--neutral-500)',
                 }}
               >
-                <E value={b.label} editing={editing} onCommit={(v) => editBar(i, v)} />
+                <E slot={`bars.${i}.label`} value={b.label} editing={editing} onCommit={(v) => editBar(i, v)} />
               </span>
             </div>
           ))}
@@ -1231,6 +1784,7 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
               )}
               <EditorialLabel style={{ fontSize: 10 }}>
                 <E
+                  slot={`kpis.${i}.label`}
                   value={k.label}
                   editing={editing}
                   onCommit={(v) => editKpi(i, { label: v || k.label })}
@@ -1245,6 +1799,7 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
                 }}
               >
                 <E
+                  slot={`kpis.${i}.value`}
                   value={k.value}
                   editing={editing}
                   onCommit={(v) => editKpi(i, { value: v || k.value })}
@@ -1297,7 +1852,7 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
       <SlideGrid />
       <HudTop
         label={
-          <E
+          <E slot="hudLabel"
             value={content.hudLabel ?? 'Comparative Framework'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -1306,8 +1861,8 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
         num={num}
       />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>
-          <E
+        <EditorialLabel slot="eyebrow">
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Benchmark Comparison'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -1350,16 +1905,16 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
             {rows.map((r, i) => (
               <tr key={i}>
                 <td style={cellStyle}>
-                  <E value={r.dim} editing={editing} onCommit={(v) => editRow(i, { dim: v || r.dim })} />
+                  <E slot={`rows.${i}.dim`} value={r.dim} editing={editing} onCommit={(v) => editRow(i, { dim: v || r.dim })} />
                 </td>
                 <td style={cellStyle}>
-                  <E value={r.cur} editing={editing} onCommit={(v) => editRow(i, { cur: v || r.cur })} />
+                  <E slot={`rows.${i}.cur`} value={r.cur} editing={editing} onCommit={(v) => editRow(i, { cur: v || r.cur })} />
                 </td>
                 <td style={cellStyle}>
-                  <E value={r.tgt} editing={editing} onCommit={(v) => editRow(i, { tgt: v || r.tgt })} />
+                  <E slot={`rows.${i}.tgt`} value={r.tgt} editing={editing} onCommit={(v) => editRow(i, { tgt: v || r.tgt })} />
                 </td>
                 <td style={{ ...cellStyle, color: 'var(--emerald-600)' }}>
-                  <E value={r.delta} editing={editing} onCommit={(v) => editRow(i, { delta: v || r.delta })} />
+                  <E slot={`rows.${i}.delta`} value={r.delta} editing={editing} onCommit={(v) => editRow(i, { delta: v || r.delta })} />
                 </td>
                 {editing && (
                   <td style={{ ...cellStyle, textAlign: 'right' }}>
@@ -1400,7 +1955,7 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
       <SlideGrid />
       <HudTop
         label={
-          <E
+          <E slot="hudLabel"
             value={content.hudLabel ?? 'Execution Timeline'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -1409,8 +1964,8 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
         num={num}
       />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>
-          <E
+        <EditorialLabel slot="eyebrow">
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Milestone Projection'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -1425,7 +1980,7 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
             color: 'var(--neutral-900)',
           }}
         >
-          <E
+          <E slot="heading"
             value={content.heading ?? 'Pathway to Execution.'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
@@ -1478,6 +2033,7 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
                     }}
                   >
                     <E
+                      slot={`phases.${i}.title`}
                       value={p.title}
                       editing={editing}
                       onCommit={(v) => editPhase(i, { title: v || p.title })}
@@ -1485,6 +2041,7 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
                   </h4>
                   <p style={{ fontSize: 18, lineHeight: 1.5, color: 'var(--neutral-500)' }}>
                     <E
+                      slot={`phases.${i}.description`}
                       value={p.description || PLACEHOLDER}
                       editing={editing}
                       multiline
@@ -1522,8 +2079,8 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
             justifyContent: 'center',
           }}
         >
-          <EditorialLabel>
-            <E
+          <EditorialLabel slot="eyebrow">
+            <E slot="eyebrow"
               value={content.eyebrow ?? 'Visual Narrative'}
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -1537,14 +2094,14 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
               color: 'var(--neutral-900)',
             }}
           >
-            <E
+            <E slot="heading"
               value={content.heading ?? 'Primary Insight Statement.'}
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
             />
           </h2>
           <p style={{ marginTop: 40, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
-            <E
+            <E slot="body"
               value={content.body ?? PLACEHOLDER}
               editing={editing}
               multiline
@@ -1601,7 +2158,7 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
       <SlideGrid />
       <HudTop
         label={
-          <E
+          <E slot="hudLabel"
             value={content.hudLabel ?? 'System Logic'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -1610,8 +2167,8 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
         num={num}
       />
       <div style={{ padding: '160px 140px', position: 'relative', zIndex: 10 }}>
-        <EditorialLabel>
-          <E
+        <EditorialLabel slot="eyebrow">
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Architectural Protocol'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -1626,7 +2183,7 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
             color: 'var(--neutral-900)',
           }}
         >
-          <E
+          <E slot="heading"
             value={content.heading ?? 'Operational Flow.'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
@@ -1667,6 +2224,7 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
                 }}
               >
                 <E
+                  slot={`steps.${i}.title`}
                   value={s.title}
                   editing={editing}
                   onCommit={(v) => editStep(i, { title: v || s.title })}
@@ -1674,6 +2232,7 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
               </h4>
               <p style={{ fontSize: 18, lineHeight: 1.5, color: 'var(--neutral-500)' }}>
                 <E
+                  slot={`steps.${i}.description`}
                   value={s.description || PLACEHOLDER}
                   editing={editing}
                   multiline
@@ -1713,7 +2272,7 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
       <SlideGrid />
       <HudTop
         label={
-          <E
+          <E slot="hudLabel"
             value={content.hudLabel ?? 'Reach Distribution'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -1742,7 +2301,7 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
               color: 'var(--neutral-900)',
             }}
           >
-            <E
+            <E slot="heading"
               value={content.heading ?? 'Regional Impact.'}
               editing={editing}
               onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
@@ -1784,6 +2343,7 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
               )}
               <EditorialLabel style={{ fontSize: 10 }}>
                 <E
+                  slot={`sectors.${i}.label`}
                   value={s.label}
                   editing={editing}
                   onCommit={(v) => editSector(i, { label: v || s.label })}
@@ -1799,6 +2359,7 @@ function SlideGlobalMap({ content, num, editing, onEdit }: SlideRenderProps) {
                 }}
               >
                 <E
+                  slot={`sectors.${i}.value`}
                   value={s.value}
                   editing={editing}
                   onCommit={(v) => editSector(i, { value: v || s.value })}
@@ -1835,6 +2396,11 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
   };
 
   const avatarSrc = content.avatarUrl;
+  // The template's resting headshot diameter; avatarScale multiplies it.
+  const AVATAR_D = 84;
+  const avatarScale = content.avatarScale ?? 1;
+  const [avatarPreview, setAvatarPreview] = useState<number | null>(null);
+  const avatarD = Math.round(AVATAR_D * (avatarPreview ?? avatarScale));
 
   return (
     <>
@@ -1842,7 +2408,7 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
       <Glow style={{ bottom: -500, left: -500 }} />
       <HudTop
         label={
-          <E
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Key Insight'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -1884,7 +2450,7 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
             color: 'var(--neutral-900)',
           }}
         >
-          <E
+          <E slot="quote"
             value={content.quote ?? PLACEHOLDER}
             editing={editing}
             multiline
@@ -1894,15 +2460,15 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
           {/* Circular avatar - static in view mode, uploadable in edit mode */}
           <div
-            style={{ position: 'relative', flexShrink: 0, width: 84, height: 84 }}
+            style={{ position: 'relative', flexShrink: 0, width: avatarD, height: avatarD }}
           >
             {/* The circle itself */}
             <div
               onClick={() => editing && avatarInputRef.current?.click()}
               title={editing ? (avatarSrc ? 'Replace photo' : 'Upload author photo') : undefined}
               style={{
-                width: 84,
-                height: 84,
+                width: avatarD,
+                height: avatarD,
                 borderRadius: '50%',
                 overflow: 'hidden',
                 background: avatarSrc ? 'transparent' : 'var(--neutral-200)',
@@ -1935,6 +2501,14 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
                 )
               )}
             </div>
+            {editing && avatarSrc && (
+              <ScaleHandle
+                scale={avatarScale}
+                onScale={(next) => onEdit((c) => ({ ...c, avatarScale: next === 1 ? undefined : next }))}
+                onLive={setAvatarPreview}
+                title="Drag to resize the photo"
+              />
+            )}
             {editing && avatarSrc && (
               <button
                 onClick={(e) => { e.stopPropagation(); onEdit((c) => ({ ...c, avatarUrl: undefined })); }}
@@ -1981,7 +2555,7 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
                 color: 'var(--neutral-900)',
               }}
             >
-              <E
+              <E slot="author"
                 value={content.author ?? 'Author Name'}
                 editing={editing}
                 onCommit={(v) => onEdit((c) => ({ ...c, author: v || undefined }))}
@@ -1994,7 +2568,7 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
                 color: 'var(--neutral-500)',
               }}
             >
-              <E
+              <E slot="role"
                 value={content.role ?? 'Author Title Placeholder'}
                 editing={editing}
                 onCommit={(v) => onEdit((c) => ({ ...c, role: v || undefined }))}
@@ -2010,7 +2584,7 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
 const DEFAULT_CONTACTS = ['email@placeholder.com', '@social_handle', 'www.domain.com'];
 
 // Exit slide: inherits DISPLAY_HEADING_BASE for unified presentation style
-function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: SlideRenderProps) {
+function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
   const contacts = content.contacts && content.contacts.length ? content.contacts : DEFAULT_CONTACTS;
   const editContact = (i: number, v: string) =>
     onEdit((c) => {
@@ -2033,6 +2607,8 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
           src={logoUrl}
           editing={editing}
           onChange={onLogoChange}
+          scale={logoScale}
+          onScaleChange={onLogoScaleChange}
           style={
             logoUrl
               ? undefined
@@ -2051,8 +2627,8 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
           zIndex: 10,
         }}
       >
-        <EditorialLabel>
-          <E
+        <EditorialLabel slot="eyebrow">
+          <E slot="eyebrow"
             value={content.eyebrow ?? 'Conclusion'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
@@ -2067,7 +2643,7 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
             marginBottom: 40,
           }}
         >
-          <E
+          <E slot="heading"
             value={content.heading ?? 'Thank You.'}
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
@@ -2082,7 +2658,7 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
             whiteSpace: 'pre-line',
           }}
         >
-          <E
+          <E slot="body"
             value={content.body ?? PLACEHOLDER}
             editing={editing}
             multiline
@@ -2101,7 +2677,7 @@ function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange }: Sli
         >
           {contacts.map((c, i) => (
             <span key={i}>
-              <E value={c} editing={editing} onCommit={(v) => editContact(i, v)} />
+              <E slot={`contacts.${i}`} value={c} editing={editing} onCommit={(v) => editContact(i, v)} />
             </span>
           ))}
         </div>
@@ -2138,7 +2714,9 @@ function BlankLayoutPicker({
             fontWeight: 700,
             textTransform: 'uppercase',
             letterSpacing: '0.06em',
-            border: '1px solid',
+            // Long-hand, since borderColor is set conditionally alongside it.
+            borderWidth: 1,
+            borderStyle: 'solid',
             borderColor: value === l.id ? 'var(--emerald-500)' : 'var(--neutral-300)',
             background: value === l.id ? 'var(--emerald-500)' : '#ffffff',
             color: value === l.id ? '#ffffff' : 'var(--neutral-600)',
@@ -2193,8 +2771,8 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
   };
 
   const eyebrow = (
-    <EditorialLabel>
-      <E
+    <EditorialLabel slot="eyebrow">
+      <E slot="eyebrow"
         value={content.eyebrow ?? 'Section'}
         editing={editing}
         dataField="eyebrow"
@@ -2205,7 +2783,7 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
   );
   const heading = (fontSize: number) => (
     <h2 style={{ ...DISPLAY_HEADING_BASE, fontSize, fontWeight: 600, marginBottom: 40 }}>
-      <E
+      <E slot="heading"
         value={content.heading ?? 'Blank Slide.'}
         editing={editing}
         multiline
@@ -2217,7 +2795,7 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
   );
   const body = (maxWidth?: number) => (
     <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth }}>
-      <E
+      <E slot="body"
         value={content.body ?? 'Click to add your content…'}
         editing={editing}
         multiline
@@ -2241,7 +2819,7 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
    *  image area - so "deleting" it means dropping back to the Standard layout. */
   const dropToStandard = () => onEdit((c) => ({ ...c, blankLayout: 'standard', imageUrl: undefined }));
   const hudLabel = (
-    <E
+    <E slot="hudLabel"
       value={content.hudLabel ?? 'Custom Slide'}
       editing={editing}
       onCommit={(v) => onEdit((c) => ({ ...c, hudLabel: v || undefined }))}
@@ -2320,6 +2898,187 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
 // ---------------------------------------------------------------------------
 // Slide type registry - maps template id → renderer
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// s-imported - a slide lifted from an uploaded .pptx, original layout intact
+// ---------------------------------------------------------------------------
+
+/** True when an imported slide's own background is dark, so the footer and
+ *  chrome flip to light-on-dark like the s4/s14 templates do. */
+export function importedIsDark(base?: string): boolean {
+  if (!base) return false;
+  const h = base.replace('#', '');
+  if (!/^[0-9A-Fa-f]{6}$/.test(h)) return false;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+}
+
+/**
+ * Renders an imported slide's shapes at their original coordinates in the
+ * 1920x1080 design space, over the brand's grid and ambient glow.
+ *
+ * Every text run is separately editable, rather than the paragraph as a whole,
+ * so editing a bold label inside a mixed-format line doesn't flatten the rest
+ * of it back to plain text.
+ */
+function SlideImported({ content, editing, onEdit, instanceId, selection, onSelect }: SlideRenderProps) {
+  const shapes = content.shapes ?? [];
+  const base = content.importedBase ?? 'FFFFFF';
+  const dark = importedIsDark(base);
+
+  /** True if the toolbar is currently pointed at this exact run. */
+  const runSelected = (shapeId: string, p: number, r: number) =>
+    selection?.kind === 'run' &&
+    selection.instanceId === instanceId &&
+    selection.shapeId === shapeId &&
+    selection.paragraph === p &&
+    selection.run === r;
+
+  /** Imported runs are addressed by shape/paragraph/run rather than by slot
+   *  name, so they can't go through SlotContext like a template slot does -
+   *  the run span reports its own selection instead. */
+  const selectRun = (shapeId: string, p: number, r: number, el: HTMLElement) => {
+    if (!onSelect || !instanceId) return;
+    const cs = window.getComputedStyle(el);
+    const px = parseFloat(cs.fontSize);
+    onSelect({
+      kind: 'run',
+      instanceId,
+      shapeId,
+      paragraph: p,
+      run: r,
+      effectiveSizePx: Number.isFinite(px) ? Math.round(px) : undefined,
+      effectiveFont: cs.fontFamily,
+    });
+  };
+
+  const patchRun = (shapeId: string, p: number, r: number, text: string) =>
+    onEdit((c) => ({
+      ...c,
+      shapes: (c.shapes ?? []).map((sh) =>
+        sh.id !== shapeId
+          ? sh
+          : {
+            ...sh,
+            paragraphs: (sh.paragraphs ?? []).map((para, pi) =>
+              pi !== p
+                ? para
+                : {
+                  ...para,
+                  runs: para.runs.map((run, ri) => (ri === r ? { ...run, text } : run)),
+                }),
+          }),
+    }));
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: `#${base}`, overflow: 'hidden' }}>
+      {dark ? (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage:
+              'linear-gradient(rgba(255,255,255,0.11) 1px, transparent 1px),'
+              + ' linear-gradient(90deg, rgba(255,255,255,0.11) 1px, transparent 1px)',
+            backgroundSize: '120px 120px',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        />
+      ) : (
+        <SlideGrid />
+      )}
+      <Glow style={{ top: -260, right: -300 }} />
+      <Glow style={{ bottom: -420, left: -360, opacity: 0.6 }} />
+
+      {shapes.map((sh) => {
+        const boxStyle: React.CSSProperties = {
+          position: 'absolute',
+          left: sh.x,
+          top: sh.y,
+          width: sh.w,
+          height: sh.h,
+          zIndex: 1,
+          borderRadius: sh.kind === 'ellipse' ? '50%' : 0,
+          background: sh.fill ? `#${sh.fill}` : undefined,
+          border: sh.line ? `${Math.max(1, sh.line.widthPx)}px solid #${sh.line.color}` : undefined,
+          boxSizing: 'border-box',
+        };
+
+        if (sh.kind === 'image') {
+          return (
+            <img
+              key={sh.id}
+              src={sh.imageUrl}
+              alt=""
+              style={{ ...boxStyle, objectFit: 'contain' }}
+            />
+          );
+        }
+
+        if (!sh.paragraphs?.length) return <div key={sh.id} style={boxStyle} />;
+
+        return (
+          <div
+            key={sh.id}
+            style={{
+              ...boxStyle,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent:
+                sh.vAlign === 'middle' ? 'center' : sh.vAlign === 'bottom' ? 'flex-end' : 'flex-start',
+              // Imported boxes are sized to the source deck's font metrics. Once
+              // the type is remapped to the brand stack a line can run a few px
+              // long, so text is allowed to spill rather than be clipped.
+              overflow: 'visible',
+            }}
+          >
+            {sh.paragraphs.map((para, pi) => (
+              <div
+                key={pi}
+                style={{
+                  textAlign: para.align ?? 'left',
+                  minHeight: para.runs.length ? undefined : '0.7em',
+                  lineHeight: 1.35,
+                }}
+              >
+                {para.runs.map((run, ri) => (
+                  <span
+                    key={ri}
+                    // Focus bubbles, so listening here catches the editable span
+                    // inside without wrapping every run in another element.
+                    onFocus={(e) => editing && selectRun(sh.id, pi, ri, e.currentTarget)}
+                    onMouseUp={(e) => editing && selectRun(sh.id, pi, ri, e.currentTarget)}
+                    style={{
+                      fontFamily: run.font ? `"${run.font}", var(--font-sans)` : 'var(--font-sans)',
+                      fontSize: run.sizePx ?? 18,
+                      fontWeight: run.bold ? 700 : 400,
+                      fontStyle: run.italic ? 'italic' : undefined,
+                      textDecoration: run.underline ? 'underline' : undefined,
+                      color: run.color ? `#${run.color}` : dark ? '#ffffff' : 'var(--neutral-900)',
+                      whiteSpace: 'pre-wrap',
+                      ...(editing && runSelected(sh.id, pi, ri)
+                        ? { outline: '2px solid var(--emerald-500)', outlineOffset: 2, borderRadius: 2 }
+                        : {}),
+                    }}
+                  >
+                    <E
+                      value={run.text}
+                      editing={editing}
+                      onCommit={(v) => patchRun(sh.id, pi, ri, v)}
+                    />
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const SLIDE_RENDERERS: Record<string, (props: SlideRenderProps) => React.ReactElement> = {
   s1: SlideCover,
   s2: SlideIndex,
@@ -2336,9 +3095,17 @@ const SLIDE_RENDERERS: Record<string, (props: SlideRenderProps) => React.ReactEl
   s13: SlideFeaturedQuote,
   s14: SlideExit,
   blank: SlideBlank,
+  imported: SlideImported,
 };
 
 const DARK_TEMPLATES = new Set(['s4', 's14']);
+
+/** Imported slides carry their own background colour, so darkness is a
+ *  property of the slide instance rather than of its template id. */
+export function slideIsDark(slide: SlideInstance): boolean {
+  if (slide.templateId === 'imported') return importedIsDark(slide.content.importedBase);
+  return DARK_TEMPLATES.has(slide.templateId);
+}
 
 /**
  * Renders a single slide at an arbitrary scale, read-only. Shared by the Review
@@ -2359,7 +3126,7 @@ export function SlideStage({
   logoUrl?: string;
 }) {
   const Renderer = SLIDE_RENDERERS[slide.templateId];
-  const isDark = DARK_TEMPLATES.has(slide.templateId);
+  const isDark = slideIsDark(slide);
   return (
     <div style={{ width: 1920 * scale, height: 1080 * scale, flexShrink: 0, overflow: 'hidden' }}>
       <div
@@ -2377,10 +3144,20 @@ export function SlideStage({
         }}
       >
         {Renderer && <Renderer ast={ast} content={slide.content} num={num} editing={false} onEdit={() => { }} logoUrl={logoUrl} />}
-        <div className="footer-row" style={{ zIndex: 10 }}>
-          <span>{slide.title}</span>
-          <span>{num}</span>
-        </div>
+        {/* Inserted shapes must appear here too, or Present mode and the Review
+            thumbnails would disagree with the editor (and with the export). */}
+        <ShapeOverlay
+          shapes={overlayOf(slide.content)}
+          editing={false}
+          onSelect={() => { }}
+          onPatch={() => { }}
+        />
+        {!slide.content.hideFooter && (
+          <div className="footer-row" style={{ zIndex: 10 }}>
+            <span>{slide.title}</span>
+            <span>{num}</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2389,7 +3166,7 @@ export function SlideStage({
 // ---------------------------------------------------------------------------
 // PresentationCanvas
 // ---------------------------------------------------------------------------
-export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange, onRequestEdit }: PresentationCanvasProps) {
+export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChange, onLogoScaleChange, onRequestEdit, selection, onSelect, onActiveSlideChange, onRenameSlide, revision }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   // Which slide currently holds focus while editing - drives the "you're
   // editing this one" outline so all slides don't look identically active.
@@ -2446,7 +3223,7 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
     >
       {visibleSlides.map((slide, i) => {
         const Renderer = SLIDE_RENDERERS[slide.templateId];
-        const isDark = DARK_TEMPLATES.has(slide.templateId);
+        const isDark = slideIsDark(slide);
         const num = String(i + 1).padStart(2, '0');
 
         const isActiveEdit = editing && activeSlideId === slide.instanceId;
@@ -2457,7 +3234,19 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
             id={slide.instanceId}
             data-slide
             className="page"
-            onFocus={() => editing && setActiveSlideId(slide.instanceId)}
+            onFocus={() => {
+              if (!editing) return;
+              setActiveSlideId(slide.instanceId);
+              onActiveSlideChange?.(slide.instanceId);
+            }}
+            // Pointer-down as well as focus: clicking a shape (which isn't a
+            // focusable element) has to be able to make its slide the active
+            // one, or Insert would target whichever slide was last typed in.
+            onPointerDown={() => {
+              if (!editing) return;
+              setActiveSlideId(slide.instanceId);
+              onActiveSlideChange?.(slide.instanceId);
+            }}
             style={{
               /* 1920 × 1080 base - scaled by the engine above */
               width: 1920,
@@ -2508,26 +3297,130 @@ export function PresentationCanvas({ ast, deck, editing, onEditSlide, onLogoChan
               </span>
             )}
             {Renderer && (
-              <Renderer
-                ast={ast}
-                content={slide.content}
-                num={num}
-                editing={editing}
-                onEdit={(updater) => onEditSlide(slide.instanceId, updater)}
-                logoUrl={deck.logoUrl}
-                onLogoChange={onLogoChange}
+              <SlideSlots
                 instanceId={slide.instanceId}
-                onRequestEdit={onRequestEdit}
-              />
+                content={slide.content}
+                selection={selection ?? null}
+                onSelect={onSelect}
+                onEditSlide={onEditSlide}
+                revision={revision}
+              >
+                <Renderer
+                  ast={ast}
+                  content={slide.content}
+                  num={num}
+                  editing={editing}
+                  onEdit={(updater) => onEditSlide(slide.instanceId, updater)}
+                  logoUrl={deck.logoUrl}
+                  onLogoChange={onLogoChange}
+                  logoScale={deck.logoScale}
+                  onLogoScaleChange={onLogoScaleChange}
+                  instanceId={slide.instanceId}
+                  onRequestEdit={onRequestEdit}
+                  selection={selection}
+                  onSelect={onSelect}
+                />
+              </SlideSlots>
             )}
 
+            {/* User-inserted shapes and text boxes. Rendered here rather than
+                inside each renderer so every template - all 14, plus blank and
+                imported - gets them from one place. */}
+            <ShapeOverlay
+              shapes={overlayOf(slide.content)}
+              editing={editing}
+              selectedId={
+                selection?.kind === 'overlay' && selection.instanceId === slide.instanceId
+                  ? selection.shapeId
+                  : undefined
+              }
+              onSelect={(shapeId) =>
+                onSelect?.({ kind: 'overlay', instanceId: slide.instanceId, shapeId })
+              }
+              onPatch={(shapeId, patch) =>
+                onEditSlide(slide.instanceId, (c) =>
+                  withOverlay(
+                    c,
+                    overlayOf(c).map((s) => (s.id === shapeId ? { ...s, ...patch } : s))
+                  )
+                )
+              }
+            />
+
             {/* Footer row - preserved from original shell */}
-            <div className="footer-row" style={{ zIndex: 10 }}>
-              <span>{slide.title}</span>
-              <span>
-                {i + 1} / {visibleSlides.length}
-              </span>
-            </div>
+            {/* Footer strip. The label is the slide's own title, editable here
+                as well as in the sidebar; hideFooter removes the whole strip for
+                slides that want a clean bottom edge (covers, full-bleed
+                dividers). The slide number is generated, so it isn't editable. */}
+            {!slide.content.hideFooter && (
+              <div className="footer-row" style={{ zIndex: 10, position: 'relative' }}>
+                <span>
+                  {editing ? (
+                    <span
+                      data-editable
+                      contentEditable
+                      suppressContentEditableWarning
+                      spellCheck={false}
+                      title="Slide label - also shown in the sidebar"
+                      style={{ padding: '6px 8px', margin: '-6px -8px', outline: 'none' }}
+                      onBlur={(e) => {
+                        const next = (e.target as HTMLElement).innerText.trim();
+                        if (next && next !== slide.title) onRenameSlide?.(slide.instanceId, next);
+                        else if (!next) (e.target as HTMLElement).innerText = slide.title;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).blur(); }
+                        if (e.key === 'Escape') {
+                          (e.target as HTMLElement).innerText = slide.title;
+                          (e.target as HTMLElement).blur();
+                        }
+                      }}
+                    >
+                      {slide.title}
+                    </span>
+                  ) : (
+                    slide.title
+                  )}
+                </span>
+                <span>
+                  {i + 1} / {visibleSlides.length}
+                </span>
+                {editing && (
+                  <button
+                    onClick={() => onEditSlide(slide.instanceId, (c) => ({ ...c, hideFooter: true }))}
+                    title="Remove this slide's footer"
+                    aria-label="Remove footer"
+                    style={{
+                      position: 'absolute', right: -34, top: '50%', transform: 'translateY(-50%)',
+                      width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: '#fff', color: '#dc2626',
+                      border: '1px solid #fecaca', cursor: 'pointer',
+                      borderRadius: '50%', fontSize: 18, lineHeight: 1, padding: 0,
+                    }}
+                  >
+                    \u00d7
+                  </button>
+                )}
+              </div>
+            )}
+            {/* Restoring it needs an affordance, or hiding it would be one-way. */}
+            {editing && slide.content.hideFooter && (
+              <button
+                onClick={() => onEditSlide(slide.instanceId, (c) => ({ ...c, hideFooter: undefined }))}
+                title="Bring the footer back"
+                style={{
+                  position: 'absolute', bottom: 24, left: 80, zIndex: 20,
+                  height: 34, padding: '0 16px',
+                  fontFamily: 'var(--font-mono)', fontSize: 15,
+                  textTransform: 'uppercase', letterSpacing: '0.1em',
+                  color: 'var(--emerald-600)', background: 'var(--emerald-50)',
+                  border: '1.5px dashed var(--emerald-400)', cursor: 'pointer',
+                  borderRadius: 'var(--radius-sharp)',
+                }}
+              >
+                + Footer
+              </button>
+            )}
           </div>
         );
       })}

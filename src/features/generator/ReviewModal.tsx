@@ -149,7 +149,7 @@ export function ReviewModal({
       const onProgress = (current: number, total: number) => setProgress({ current, total });
       if (kind === 'pdf') await mod.exportToPDF(visibleIds, title, onProgress);
       else if (kind === 'png') await mod.exportSlidesAsPngZip(visibleIds, title, onProgress);
-      else await mod.exportToPPTX(visible, title, deck.logoUrl, onProgress);
+      else await mod.exportToPPTX(visible, title, deck.logoUrl, onProgress, deck.logoScale);
     } catch (err) {
       console.error(`${kind} export error:`, err);
       showToast(`${kind.toUpperCase()} export failed. Please try again.`, 'error');

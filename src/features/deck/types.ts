@@ -11,7 +11,123 @@ export type SlideTemplateId =
   | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7'
   | 's8' | 's9' | 's10' | 's11' | 's12' | 's13' | 's14'
   /** User-inserted freeform slide (heading + body + optional image). */
-  | 'blank';
+  | 'blank'
+  /** A slide imported from an uploaded .pptx, keeping its original layout.
+   *  Carries positioned shapes rather than template slots - see ImportedShape. */
+  | 'imported';
+
+/** One text run inside an imported shape: the smallest span of characters that
+ *  share formatting. Kept as runs (not flattened) so bold labels, coloured
+ *  emphasis and mixed sizes survive the round trip. */
+export interface ImportedRun {
+  text: string;
+  sizePx?: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  /** Hex, no '#'. Already mapped onto the brand palette at import. */
+  color?: string;
+  /** Already mapped onto the brand type stack at import. */
+  font?: string;
+}
+
+export interface ImportedParagraph {
+  runs: ImportedRun[];
+  align?: 'left' | 'center' | 'right';
+}
+
+/** A shape lifted from an uploaded .pptx, positioned in the 1920x1080 design
+ *  space. Geometry is preserved exactly; fill, line and type are mapped onto
+ *  the brand palette so the slide reads as Wozku without moving. */
+export interface ImportedShape {
+  id: string;
+  kind: 'rect' | 'ellipse' | 'image';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Hex, no '#'. Absent means no fill. */
+  fill?: string;
+  line?: { color: string; widthPx: number };
+  /** Present for kind==='image'. Data URL. */
+  imageUrl?: string;
+  paragraphs?: ImportedParagraph[];
+  vAlign?: 'top' | 'middle' | 'bottom';
+}
+
+/** A per-slot formatting override applied on top of whatever the template
+ *  renderer already specifies. Every field is optional and an absent field
+ *  means "keep the template's value" - so a slide with no overrides renders
+ *  pixel-identically to how it did before formatting existed, and existing
+ *  saved decks are unaffected.
+ *
+ *  Both renderers consume these through src/features/formatting/resolve.ts:
+ *  the React canvas as CSS, the native exporter as pptxgenjs text options.
+ *  Adding a field here means teaching both sides about it. */
+export interface SlotStyle {
+  /** Design px, in the 1920x1080 canvas space - the same unit the renderers
+   *  and the exporter's `size` option already use. */
+  sizePx?: number;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  /** Hex, no '#'. */
+  color?: string;
+  align?: 'left' | 'center' | 'right';
+}
+
+/**
+ * A user-inserted element sitting on top of (or behind) a slide's template
+ * content: a text box, a rectangle, an ellipse, or an image.
+ *
+ * Deliberately a separate field from the imported `shapes` array. Those are an
+ * imported .pptx slide's actual content; these are additions the user made in
+ * the app. Keeping them apart means an imported slide can carry both, and that
+ * "clear my insertions" can never eat imported content.
+ *
+ * Text formatting reuses SlotStyle, so the same format toolbar drives a text
+ * box with no extra plumbing.
+ */
+export interface OverlayShape {
+  id: string;
+  kind: 'rect' | 'ellipse' | 'text' | 'image';
+  /** Geometry in the 1920x1080 design space, matching every other coordinate
+   *  in the deck model. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Hex, no '#'. Absent means no fill (an outlined shape, or a plain text box). */
+  fill?: string;
+  line?: { color: string; widthPx: number };
+  /** kind === 'image' - a downscaled data URL, as elsewhere in the deck. */
+  imageUrl?: string;
+  /** kind === 'text' - the text box's content. Newlines are honoured. */
+  text?: string;
+  /** kind === 'text' - size/weight/colour/alignment, shared with template slots. */
+  style?: SlotStyle;
+  /** Vertical placement of text within the box. */
+  vAlign?: 'top' | 'middle' | 'bottom';
+  /** Renders behind the template's own content instead of over it. Needed for
+   *  the common case of a tinted panel sitting behind existing copy - without
+   *  it, a highlight rectangle would bury the text it is meant to highlight. */
+  behind?: boolean;
+}
+
+/**
+ * How far a template slot has been dragged from where its template puts it, in
+ * design px.
+ *
+ * Stored as a delta rather than an absolute position on purpose. Template slots
+ * are laid out by their renderer (flex, padding, computed hero sizes), so there
+ * is no absolute coordinate to overwrite - and a delta means a slot the user
+ * nudged still follows the template if the template's own layout changes.
+ * Absent (the default) means the slot sits exactly where the template put it.
+ */
+export interface SlotOffset {
+  dx: number;
+  dy: number;
+}
 
 export interface IndexPart {
   title: string;
@@ -66,6 +182,13 @@ export interface SlideContent {
   projectLabel?: string;
   versionLabel?: string;
   tagline?: string;
+  /** The cover's legal line ("Proprietary and confidential"). Editable, and an
+   *  empty string hides it - some decks aren't confidential. */
+  confidentialLabel?: string;
+
+  /** Hides the slide's footer strip (title + slide number). Per slide, because
+   *  a cover or a full-bleed divider often wants a clean bottom edge. */
+  hideFooter?: boolean;
 
   // s2 Index
   parts?: IndexPart[];
@@ -119,12 +242,38 @@ export interface SlideContent {
   role?: string;
   /** Uploaded author headshot (downscaled data URL). */
   avatarUrl?: string;
+  /** Size multiplier for the headshot, 1 = the template's default 84px. */
+  avatarScale?: number;
 
   // s14 Exit
   contacts?: string[];
 
   // blank - freeform slide layout choice
   blankLayout?: 'standard' | 'two-column' | 'full-bleed';
+
+  /** Per-slot formatting overrides, keyed by the slot's stable name. For a
+   *  plain field the key is the SlideContent field it writes ('heading',
+   *  'eyebrow'); for an item inside a list it is dotted ('bars.0.label'), so
+   *  reordering a list carries its formatting with the index. Absent (the
+   *  default) means every slot uses its template styling. */
+  styles?: Record<string, SlotStyle>;
+
+  /** Per-slot drag offsets, keyed the same way as `styles`. Lets a user move a
+   *  slot the template positioned, without having to delete it and re-create it
+   *  as a free-floating text box. */
+  offsets?: Record<string, SlotOffset>;
+
+  /** User-inserted text boxes, shapes and images layered on this slide.
+   *  Available on every template, including imported slides. Array order is
+   *  z-order (later = in front); `behind` drops an item below the template's
+   *  own content. */
+  overlay?: OverlayShape[];
+
+  // imported - positioned shapes lifted from an uploaded .pptx
+  shapes?: ImportedShape[];
+  /** The source slide's own background colour, so a deck's black divider or
+   *  closing slides keep their dark treatment instead of being forced white. */
+  importedBase?: string;
 }
 
 export interface SlideInstance {
@@ -139,6 +288,14 @@ export interface SlideInstance {
   /** Hidden slides stay in the deck (and nav, dimmed) but are excluded from
    *  the canvas and from numbering. */
   hidden: boolean;
+  /** Speaker notes. Exported into PowerPoint's notes pane and shown in Present
+   *  mode; never rendered on the slide itself. */
+  notes?: string;
+  /** True once the user has renamed this slide by hand. Template switching
+   *  reads it to decide whether it may adopt the new template's default name:
+   *  a title the user chose must survive the switch, an untouched default
+   *  should follow the template. */
+  titleCustomized?: boolean;
   content: SlideContent;
 }
 
@@ -148,4 +305,8 @@ export interface Deck {
   generated: boolean;
   /** Deck-level client logo (data URL or frontmatter URL); editable in edit mode. */
   logoUrl?: string;
+  /** Size multiplier for the logo, 1 = the template's default height. Deck-level
+   *  rather than per-slide so one client's mark stays a consistent size across
+   *  the cover, dividers and the closing slide. */
+  logoScale?: number;
 }

@@ -73,6 +73,33 @@ export function createTemplateDeck(): Deck {
   };
 }
 
+/**
+ * True when a deck is indistinguishable from a freshly-created master template.
+ *
+ * Used to decide whether Reset has anything to do. The naive test - "was this
+ * deck generated, or is it mid-edit?" - went stale the moment a user saved their
+ * edits: `dirty` cleared, `generated` was still false, and Reset greyed out with
+ * a deck full of changes in front of it.
+ *
+ * Instance ids are minted randomly, so this compares what a user would actually
+ * notice rather than doing a deep equality check.
+ */
+export function deckIsPristine(deck: Deck): boolean {
+  if (deck.generated) return false;
+  if (deck.logoUrl) return false;
+  if (deck.slides.length !== TEMPLATE_SLIDES.length) return false;
+
+  return deck.slides.every((s, i) => {
+    const t = TEMPLATE_SLIDES[i];
+    if (!t || s.templateId !== t.templateId) return false;
+    if (s.title !== t.title || s.titleCustomized) return false;
+    if (s.hidden) return false;
+    if (s.notes?.trim()) return false;
+    // Any content at all - a slot, an override, an inserted shape - counts.
+    return Object.keys(s.content).length === 0;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // AST helpers
 // ---------------------------------------------------------------------------
