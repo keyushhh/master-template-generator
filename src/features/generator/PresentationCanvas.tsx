@@ -7,6 +7,7 @@ import { shapeIdsOf, slotsOf, type Selection } from '../formatting/selection';
 import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
 import { ShapeOverlay } from '../formatting/ShapeOverlay';
 import { createOverlayShape, overlayOf, withOverlay } from '../formatting/overlayModel';
+import { TrashIcon } from '../ui/icons';
 
 /** Overlay shapes actually shown for this slide right now - everything, minus
  *  any shape pinned to a different 'blank' layout than the one in effect
@@ -695,9 +696,7 @@ function ImageSlot({ src, editing, onChange, placeholder, style, onDeleteContain
             title="Remove this image area entirely"
             style={{ ...btn, background: 'rgba(220,38,38,0.92)', display: 'inline-flex', alignItems: 'center', gap: 8 }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
+            <TrashIcon size={16} />
             Delete Container
           </button>
         </div>
@@ -778,7 +777,9 @@ function HudTop({ label, num }: { label: React.ReactNode; num: React.ReactNode }
         display: 'flex',
         justifyContent: 'space-between',
         fontFamily: 'var(--font-mono)',
-        fontSize: 12,
+        // Corner metadata floor: 16 design px = 8pt exported. At 12 it came out
+        // 6pt, which is below anything legible on a projected slide.
+        fontSize: 16,
         textTransform: 'uppercase',
         letterSpacing: '0.12em',
         color: 'var(--neutral-500)',
@@ -1230,7 +1231,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
           justifyContent: 'space-between',
           alignItems: 'center',
           fontFamily: 'var(--font-mono)',
-          fontSize: 11,
+          fontSize: 16,
           color: 'var(--neutral-400)',
           zIndex: 10,
         }}
@@ -1470,7 +1471,7 @@ function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLo
           right: 80,
           zIndex: 10,
           fontFamily: 'var(--font-mono)',
-          fontSize: 15,
+          fontSize: 16,
           letterSpacing: '0.2em',
           color: 'rgba(255,255,255,0.4)',
         }}

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { SlideInstance } from '../deck/types';
 import type { DocumentNode } from '../business-record/parser/ast';
 import { SlideStage } from './PresentationCanvas';
+import { CopyIcon, CreateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, GripIcon, LayersIcon, TrashIcon } from '../ui/icons';
 
 interface SlideNavListProps {
   slides: SlideInstance[];
@@ -74,70 +75,10 @@ const SlideThumb = memo(function SlideThumb({
   );
 });
 
-function EyeIcon({ off }: { off?: boolean }) {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {off ? (
-        <>
-          <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-          <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
-          <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-          <line x1="2" y1="2" x2="22" y2="22" />
-        </>
-      ) : (
-        <>
-          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-          <circle cx="12" cy="12" r="3" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function MoreIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
-    </svg>
-  );
-}
-
-function LayoutIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="3" y="4" width="18" height="16" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="11" y1="10" x2="11" y2="20" />
-    </svg>
-  );
-}
-
-function CopyIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="9" y="9" width="12" height="12" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
-    </svg>
-  );
-}
-
 function InsertAfterIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <line x1="12" y1="3" x2="12" y2="15" /><polyline points="7 10 12 15 17 10" /><line x1="5" y1="20" x2="19" y2="20" />
-    </svg>
-  );
-}
-
-function PencilIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
     </svg>
   );
 }
@@ -155,17 +96,6 @@ function MenuRow({ label, icon, onClick, danger }: { label: string; icon: React.
       <span className="shrink-0 flex items-center">{icon}</span>
       {label}
     </button>
-  );
-}
-
-/** Six-dot grab affordance, matching the drag grip on the canvas. */
-function GripIcon() {
-  return (
-    <svg width="10" height="14" viewBox="0 0 10 16" fill="currentColor" aria-hidden>
-      <circle cx="2.5" cy="3" r="1.2" /><circle cx="7.5" cy="3" r="1.2" />
-      <circle cx="2.5" cy="8" r="1.2" /><circle cx="7.5" cy="8" r="1.2" />
-      <circle cx="2.5" cy="13" r="1.2" /><circle cx="7.5" cy="13" r="1.2" />
-    </svg>
   );
 }
 
@@ -383,7 +313,7 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
                         style={{ color: 'var(--chrome-text-faint)' }}
                         title="Drag to reorder"
                       >
-                        <GripIcon />
+                        <GripIcon size={14} />
                       </span>
                     </div>
 
@@ -455,7 +385,7 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
                             label={slide.hidden ? 'Show slide' : 'Hide slide'}
                             onClick={() => onToggleHidden(slide.instanceId)}
                           >
-                            <EyeIcon off={slide.hidden} />
+                            {slide.hidden ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
                           </CardAction>
                           <CardAction
                             label="More actions"
@@ -467,7 +397,7 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
                               )
                             }
                           >
-                            <MoreIcon />
+                            <EllipsisIcon size={14} />
                           </CardAction>
                         </div>
                       </div>
@@ -532,11 +462,11 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
               boxShadow: '0 10px 30px -8px rgba(15,23,20,0.28)',
             }}
           >
-            <MenuRow icon={<LayoutIcon />} label="Change layout" onClick={() => { onChangeLayout(menu.id); setMenu(null); }} />
-            <MenuRow icon={<CopyIcon />} label="Duplicate" onClick={() => { onDuplicate(menu.id); setMenu(null); }} />
+            <MenuRow icon={<LayersIcon size={15} />} label="Change layout" onClick={() => { onChangeLayout(menu.id); setMenu(null); }} />
+            <MenuRow icon={<CopyIcon size={15} />} label="Duplicate" onClick={() => { onDuplicate(menu.id); setMenu(null); }} />
             <MenuRow icon={<InsertAfterIcon />} label="Insert after" onClick={() => { onInsertAfter(menu.id); setMenu(null); }} />
             <MenuRow
-              icon={<PencilIcon />}
+              icon={<CreateIcon size={15} />}
               label="Rename"
               onClick={() => {
                 setRenamingId(menu.id);
@@ -545,7 +475,7 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
               }}
             />
             <div className="my-1 h-px bg-neutral-200" />
-            <MenuRow icon={<TrashIcon />} label="Delete" danger onClick={() => { onDelete(menu.id); setMenu(null); }} />
+            <MenuRow icon={<TrashIcon size={15} />} label="Delete" danger onClick={() => { onDelete(menu.id); setMenu(null); }} />
           </div>,
           document.body
         )}

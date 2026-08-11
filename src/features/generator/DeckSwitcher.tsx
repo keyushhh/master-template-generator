@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ProjectMeta } from '../deck/deckStore';
+import { AddIcon, AlbumsIcon, CheckIcon, ChevronDownIcon, CreateIcon, TrashIcon } from '../ui/icons';
 
 interface DeckSwitcherProps {
   projects: ProjectMeta[];
@@ -73,7 +74,7 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
           aria-expanded={open}
           className="flex items-center justify-center w-[22px] h-[22px] rounded-[var(--radius-sharp)] text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9" /></svg>
+          <span style={{ display: 'flex', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><ChevronDownIcon size={14} /></span>
         </button>
       ) : (
         <button
@@ -81,10 +82,10 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
           className="w-full flex items-center justify-between gap-2 h-[36px] px-3 rounded-[var(--radius-sharp)] border border-neutral-200 bg-white hover:bg-neutral-50 transition-colors cursor-pointer text-left"
         >
           <span className="flex items-center gap-2 min-w-0">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="0" /><line x1="3" y1="9" x2="21" y2="9" /></svg>
+            <span style={{ display: 'flex', color: '#6b7280' }}><AlbumsIcon size={14} /></span>
             <span className="truncate text-[13px] font-bold text-neutral-800">{active?.name ?? 'Untitled deck'}</span>
           </span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9" /></svg>
+          <span style={{ display: 'flex', color: '#9ca3af', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><ChevronDownIcon size={14} /></span>
         </button>
       )}
 
@@ -121,7 +122,7 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
                   >
                     <span className="w-3.5 shrink-0">
                       {isActive && (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--emerald-600)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        <span style={{ display: 'flex', color: 'var(--emerald-600)' }}><CheckIcon size={14} /></span>
                       )}
                     </span>
                     <span className={`truncate text-[13px] ${isActive ? 'font-bold text-emerald-700' : 'text-neutral-700'}`}>{p.name}</span>
@@ -132,7 +133,7 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
                     aria-label="Rename deck"
                     className="shrink-0 w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-neutral-700 rounded-[var(--radius-sharp)] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
+                    <CreateIcon size={13} />
                   </button>
                   <button
                     onClick={() => setPendingDeleteId(p.id)}
@@ -140,7 +141,7 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
                     aria-label="Delete deck"
                     className="shrink-0 w-6 h-6 flex items-center justify-center rounded-[var(--radius-sharp)] transition-all cursor-pointer text-neutral-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                    <TrashIcon size={13} />
                   </button>
                 </div>
               );
@@ -150,7 +151,7 @@ export function DeckSwitcher({ projects, activeId, onSwitch, onNew, onRename, on
             onClick={() => { onNew(); setOpen(false); }}
             className="w-full flex items-center gap-2 px-3 py-2.5 border-t border-neutral-150 text-[13px] font-bold text-neutral-800 hover:bg-neutral-50 transition-colors cursor-pointer"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            <AddIcon size={14} />
             New deck
           </button>
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useFocusTrap } from '../a11y/useFocusTrap';
+import { CloseIcon } from '../ui/icons';
 
 interface Shortcut {
   keys: string[];
@@ -84,7 +85,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
             aria-label="Close"
             className="shrink-0 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            <CloseIcon size={14} />
           </button>
         </div>
         <div className="px-5 py-3 divide-y divide-neutral-100">

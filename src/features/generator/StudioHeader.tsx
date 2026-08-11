@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ProjectMeta } from '../deck/deckStore';
 import { DeckSwitcher } from './DeckSwitcher';
 import logoBlack from '../../assets/Logo_Black_Transparent.png';
+import { DownloadIcon, RedoIcon, RefreshIcon, UndoIcon } from '../ui/icons';
 
 export type StudioMode = 'view' | 'edit';
 
@@ -392,14 +393,10 @@ export function StudioHeader({
       {/* ── Actions ───────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
         <IconBtn onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z)" label="Undo">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-          </svg>
+          <UndoIcon size={16} />
         </IconBtn>
         <IconBtn onClick={onRedo} disabled={!canRedo} title="Redo (⌘⇧Z)" label="Redo">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
-          </svg>
+          <RedoIcon size={16} />
         </IconBtn>
 
         <span style={{ width: 1, height: 22, background: 'var(--neutral-200)', margin: '0 4px' }} />
@@ -427,11 +424,7 @@ export function StudioHeader({
             whiteSpace: 'nowrap',
           }}
         >
-          {!resetArmed && (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
-            </svg>
-          )}
+          {!resetArmed && <RefreshIcon size={14} />}
           {resetArmed ? 'Confirm reset?' : 'Reset'}
         </button>
 
@@ -452,9 +445,7 @@ export function StudioHeader({
             transition: 'background .15s',
           }}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
+          <DownloadIcon size={14} />
           Export
         </button>
 

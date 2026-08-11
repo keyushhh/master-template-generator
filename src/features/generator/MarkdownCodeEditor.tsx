@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { AlertIcon } from '../ui/icons';
 
 interface MarkdownCodeEditorProps {
   value: string;
@@ -260,9 +261,7 @@ export function MarkdownCodeEditor({
             lineHeight: 1.5,
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }} aria-hidden>
-            <circle cx="12" cy="12" r="10" /><path d="M12 8v5M12 16.5v.01" />
-          </svg>
+          <AlertIcon size={14} />
           <span>{error}</span>
         </div>
       )}

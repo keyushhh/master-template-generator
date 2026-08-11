@@ -167,7 +167,7 @@
 .wg-doc .footer-row {
   position: absolute; left: 64px; right: 64px; bottom: 28px;
   display: flex; justify-content: space-between;
-  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em;
+  font-family: var(--font-mono); font-size: 16px; letter-spacing: .04em;
   color: var(--neutral-400); text-transform: uppercase;
 }
 

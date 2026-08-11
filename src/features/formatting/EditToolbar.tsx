@@ -22,6 +22,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ImportedShape, OverlayChartType, OverlayShape, SlotStyle } from '../deck/types';
 import {
   ACCENT_SWATCHES,
@@ -36,6 +37,7 @@ import {
 } from './rails';
 import { layerBounds, type LayerMove } from './overlayModel';
 import { GROUP_ALIGNMENTS, type GroupAlign } from './group';
+import { TrashIcon } from '../ui/icons';
 
 const BAR_H = 44;
 
@@ -92,18 +94,39 @@ function Menu({
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  /** Where to pin the panel, in viewport coordinates. */
+  const [at, setAt] = useState<{ bottom: number; left: number } | null>(null);
+
+  const place = () => {
+    const r = wrap.current?.getBoundingClientRect();
+    if (!r) return;
+    setAt({
+      // Opens upward from the trigger, and is clamped so a menu near either end
+      // of the bar cannot run off screen.
+      bottom: window.innerHeight - r.top + 10,
+      left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
     const down = (e: MouseEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!wrap.current?.contains(t) && !panel.current?.contains(t)) setOpen(false);
     };
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    // Fixed coordinates stop tracking the trigger once anything moves.
+    const moved = () => setOpen(false);
     document.addEventListener('mousedown', down);
     document.addEventListener('keydown', key);
+    window.addEventListener('resize', moved);
+    window.addEventListener('scroll', moved, true);
     return () => {
       document.removeEventListener('mousedown', down);
       document.removeEventListener('keydown', key);
+      window.removeEventListener('resize', moved);
+      window.removeEventListener('scroll', moved, true);
     };
   }, [open]);
 
@@ -113,7 +136,7 @@ function Menu({
         title={title}
         aria-label={title}
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => { if (!open) place(); setOpen((o) => !o); }}
         style={{ ...ctl, ...(open || active ? ctlOn : {}) }}
       >
         {icon}
@@ -121,20 +144,31 @@ function Menu({
         {badge && <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--emerald-500)' }} />}
         <Caret />
       </button>
-      {open && (
-        <div
-          style={{
-            position: 'absolute', bottom: 'calc(100% + 12px)', left: 0, zIndex: 300,
-            width, padding: 8,
-            background: '#fff',
-            border: '1px solid var(--neutral-200)',
-            boxShadow: '0 2px 4px rgba(15,23,20,0.05), 0 16px 40px -12px rgba(15,23,20,0.20)',
-            borderRadius: 'var(--radius-sharp)',
-          }}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {/* Portalled to the body on purpose. The bar clamps its own width and
+          scrolls horizontally when a table or chart selection expands its
+          middle, which makes it a scroll container - and a panel opening
+          upward out of a scroll container is simply clipped away. */}
+      {open && at &&
+        createPortal(
+          <div
+            ref={panel}
+            onMouseDown={(e) => {
+              if ((e.target as HTMLElement).closest('textarea, input')) return;
+              e.preventDefault();
+            }}
+            style={{
+              position: 'fixed', bottom: at.bottom, left: at.left, zIndex: 300,
+              width, padding: 8,
+              background: '#fff',
+              border: '1px solid var(--neutral-200)',
+              boxShadow: '0 2px 4px rgba(15,23,20,0.05), 0 16px 40px -12px rgba(15,23,20,0.20)',
+              borderRadius: 'var(--radius-sharp)',
+            }}
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -700,10 +734,7 @@ export function EditToolbar({
           {isImportedSelection && (
             <button title="Delete this text box" aria-label="Delete text box" onClick={onDeleteImportedShape}
               style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
+              <TrashIcon size={13} />
             </button>
           )}
 
@@ -713,10 +744,7 @@ export function EditToolbar({
           {selectedShape?.kind === 'table' && (
             <button title="Delete this table" aria-label="Delete table" onClick={onDeleteShape}
               style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
+              <TrashIcon size={13} />
             </button>
           )}
         </>
@@ -805,10 +833,7 @@ export function EditToolbar({
 
           <button title="Delete this shape" aria-label="Delete shape" onClick={onDeleteShape}
             style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
+            <TrashIcon size={13} />
           </button>
         </>
       ) : importedShapeGroupCount && importedShapeGroupCount > 1 ? (
@@ -838,10 +863,7 @@ export function EditToolbar({
 
           <button title="Delete selected shapes" aria-label="Delete selected shapes" onClick={onDeleteImportedShape}
             style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
+            <TrashIcon size={13} />
           </button>
         </>
       ) : importedShape ? (
@@ -892,10 +914,7 @@ export function EditToolbar({
 
           <button title="Delete this shape" aria-label="Delete shape" onClick={onDeleteImportedShape}
             style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
+            <TrashIcon size={13} />
           </button>
         </>
       ) : (

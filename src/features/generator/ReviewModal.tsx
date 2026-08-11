@@ -5,6 +5,7 @@ import { useToast } from '../toast/Toast';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, SlideInstance } from '../deck/types';
+import { CheckIcon, CloseIcon, PlayIcon, WarningIcon } from '../ui/icons';
 
 interface ReviewModalProps {
   open: boolean;
@@ -188,7 +189,7 @@ export function ReviewModal({
             </h2>
           </div>
           <button onClick={() => !busy && onClose()} aria-label="Close" className="shrink-0 w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            <CloseIcon size={16} />
           </button>
         </div>
 
@@ -220,9 +221,9 @@ export function ReviewModal({
             <div className={`mb-4 sm:mb-5 border rounded-[var(--radius-sharp)] px-3.5 py-2.5 sm:px-4 sm:py-3 ${hasWarnings ? 'border-amber-300 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
               <div className="flex items-center gap-2 text-[12px] sm:text-[12.5px] font-bold">
                 {hasWarnings ? (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                  <WarningIcon size={15} />
                 ) : (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  <CheckIcon size={15} />
                 )}
                 <span className={hasWarnings ? 'text-amber-800' : 'text-emerald-800'}>
                   Deck check — {coverage.filled} of {coverage.total} slides filled
@@ -307,7 +308,7 @@ export function ReviewModal({
                               : 'bg-white/90 border-neutral-300 text-transparent hover:border-neutral-400'
                           }`}
                         >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                          <CheckIcon size={13} />
                         </button>
                         {/* Include/exclude toggle */}
                         <button
@@ -361,7 +362,7 @@ export function ReviewModal({
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             <button onClick={onPresent} disabled={!!busy || visible.length === 0} aria-label="Start presenting" className={`${btnBase} text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200`}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+              <PlayIcon size={15} />
               Present
             </button>
             <button onClick={copyLink} disabled={!!busy} className={`${btnBase} text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200`}>

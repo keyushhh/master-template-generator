@@ -9,6 +9,7 @@ import { parsePptx } from '../pptx-import/pptxParser';
 import { buildDeckFromImport } from '../pptx-import/pptxDeckBuilder';
 import type { Deck } from '../deck/types';
 import { MarkdownCodeEditor } from './MarkdownCodeEditor';
+import { ArrowForwardIcon, CheckIcon, CloseIcon, CopyIcon, TrashIcon } from '../ui/icons';
 
 interface SourceMaterialModalProps {
   open: boolean;
@@ -225,7 +226,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
             aria-label="Close"
             className="shrink-0 w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            <CloseIcon size={16} />
           </button>
         </div>
 
@@ -252,14 +253,14 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
         {hasSource && (
           <div className="px-6 pt-3 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-[11.5px] font-semibold text-green-600">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              <CheckIcon size={13} />
               Source loaded
             </span>
             <button
               onClick={() => { onDocumentParsed(null); setError(null); }}
               className="flex items-center gap-1.5 text-[11.5px] font-semibold text-neutral-500 hover:text-red-600 transition-colors cursor-pointer"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+              <TrashIcon size={12} />
               Clear loaded source
             </button>
           </div>
@@ -285,7 +286,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                       <span className="text-[12px] text-neutral-500 leading-relaxed">{s.description}</span>
                     </span>
                     <span className="shrink-0 mt-0.5 text-neutral-400">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                      <ArrowForwardIcon size={16} />
                     </span>
                   </button>
                 ))}
@@ -314,9 +315,9 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                   }`}
                 >
                   {copied ? (
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    <CheckIcon size={15} />
                   ) : (
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                    <CopyIcon size={15} />
                   )}
                   {copied ? 'Copied!' : 'Copy Prompt'}
                 </button>
@@ -325,7 +326,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                   className="h-[40px] px-4 flex items-center gap-1.5 text-[13px] font-semibold text-neutral-700 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
                 >
                   I’ve copied it - Paste result
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                  <ArrowForwardIcon size={14} />
                 </button>
               </div>
             </div>

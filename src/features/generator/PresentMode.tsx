@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { SlideStage } from './PresentationCanvas';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
+import { ChevronBackIcon, ChevronForwardIcon, CloseIcon, DocumentTextIcon } from '../ui/icons';
 
 interface PresentModeProps {
   open: boolean;
@@ -79,7 +80,7 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0 }: Presen
         aria-label="Exit present mode"
         style={{ position: 'absolute', top: 20, right: 24, ...arrow, width: 40, height: 40, background: 'rgba(255,255,255,0.10)' }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+        <CloseIcon size={18} />
       </button>
 
       {/* Slide (click right/left half to navigate) */}
@@ -97,11 +98,11 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0 }: Presen
 
       {/* Prev */}
       <button onClick={prev} disabled={atStart} aria-label="Previous slide" style={{ position: 'absolute', left: 24, top: '50%', transform: 'translateY(-50%)', ...arrow, opacity: atStart ? 0.3 : 1 }}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+        <ChevronBackIcon size={22} />
       </button>
       {/* Next */}
       <button onClick={next} disabled={atEnd} aria-label="Next slide" style={{ position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', ...arrow, opacity: atEnd ? 0.3 : 1 }}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+        <ChevronForwardIcon size={22} />
       </button>
 
       {/* Speaker notes. Toggle is only offered when the deck actually has notes
@@ -118,9 +119,7 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0 }: Presen
             background: notesOpen ? 'var(--emerald-500)' : 'rgba(255,255,255,0.10)',
           }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 5h16M4 10h16M4 15h10" />
-          </svg>
+          <DocumentTextIcon size={18} />
         </button>
       )}
 

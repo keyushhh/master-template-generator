@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { SlideNavList } from './SlideNavList';
 import { SourceMaterialModal } from './SourceMaterialModal';
+import { AddIcon, DocumentIcon, FlashIcon } from '../ui/icons';
 // Sidebar for presenting the generated slides list and actions
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
@@ -70,7 +71,7 @@ export function GeneratorSidebar({
             onClick={onAddBlank}
             className="w-full flex items-center justify-center gap-2 h-[34px] rounded-[var(--radius-sharp)] border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer text-[12.5px] font-bold"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            <AddIcon size={14} />
             Add slide
           </button>
         </div>
@@ -111,7 +112,7 @@ export function GeneratorSidebar({
             onClick={onGenerate}
             className="w-full flex items-center justify-center gap-2 h-[38px] px-3 rounded-[var(--radius-sharp)] font-sans font-bold text-[12.5px] border border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm transition-colors cursor-pointer"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h8l-1 8 10-12h-8z" /></svg>
+            <FlashIcon size={14} />
             Generate deck
           </button>
         )}
@@ -119,7 +120,7 @@ export function GeneratorSidebar({
           onClick={() => setSourceOpen(true)}
           className="w-full flex items-center justify-center gap-2 h-[46px] px-4 rounded-[var(--radius-sharp)] font-sans font-bold text-[13px] bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white shadow-lg transition-colors cursor-pointer"
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+          <DocumentIcon size={15} />
           {hasPresentation ? 'Change source' : 'Add content'}
         </button>
       </div>

@@ -361,7 +361,7 @@ function addHudTop(
 ) {
   addText(slide, label.toUpperCase(), box(80, 55, 800, 30), {
     fontFace: FONT_MONO,
-    size: 12,
+    size: 16,
     color: NEUTRAL_500,
     letterSpacingEm: 0.12,
     valign: 'bottom',
@@ -369,7 +369,7 @@ function addHudTop(
   });
   addText(slide, num.toUpperCase(), box(1040, 55, 800, 30), {
     fontFace: FONT_MONO,
-    size: 12,
+    size: 16,
     color: NEUTRAL_500,
     align: 'right',
     letterSpacingEm: 0.12,
@@ -521,7 +521,7 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
   if (confidential !== '') {
     addText(slide, confidential, box(80, 1000, 500, 26), {
       fontFace: FONT_MONO,
-      size: 11,
+      size: 16,
       color: NEUTRAL_400,
       slot: 'confidentialLabel',
     });
@@ -617,7 +617,7 @@ async function buildSectionDivider(slide: pptxgen.Slide, content: SlideInstance[
   await addLogo(slide, logoUrl, 80, 60, true, logoScale);
   addText(slide, content.hudLabel ?? 'Section Marker', box(1400, 60, 420, 30), {
     fontFace: FONT_MONO,
-    size: 15,
+    size: 16,
     color: WHITE,
     transparency: 60,
     align: 'right',
@@ -1422,13 +1422,13 @@ async function buildSlideBody(
   if (pageLabel && !c.hideFooter) {
     addText(slide, instance.title, box(64, 1032, 700, 24), {
       fontFace: FONT_MONO,
-      size: 10.5,
+      size: 16,
       color: NEUTRAL_400,
       letterSpacingEm: 0.04,
     });
     addText(slide, pageLabel, box(1156, 1032, 700, 24), {
       fontFace: FONT_MONO,
-      size: 10.5,
+      size: 16,
       color: NEUTRAL_400,
       align: 'right',
       letterSpacingEm: 0.04,
