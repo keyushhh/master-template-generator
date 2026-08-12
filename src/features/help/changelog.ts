@@ -27,6 +27,56 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.7.0',
+    date: '2026-08-12',
+    summary: 'Deck setup happens when you create a deck, not after you have built one.',
+    added: [
+      'A New deck screen: name it, choose what it starts from, and choose which client’s brand it is in, with the real cover shown in those colours before you commit.',
+      'New clients can be added from that screen, so the first deck for a new client is one step rather than two.',
+      '"Start from" is a list the app reads rather than a fixed choice, which is where per-client and per-pitch templates will appear in a later phase.',
+    ],
+    improved: [
+      'The brand kit button has left the slide rail. It was a decision about the whole deck sitting among the controls for one slide, and it only offered the choice after the deck had already been built in house colours.',
+      'Changing an existing deck’s brand is now a command in the palette (⌘K, "brand"), so it costs no standing screen space for something you do once.',
+    ],
+  },
+  {
+    version: '0.6.0',
+    date: '2026-08-12',
+    summary: 'A pre-flight before you send, and one place to reach everything.',
+    added: [
+      'Command palette. Press ⌘K (Ctrl+K on Windows) anywhere in the studio to jump to a slide by name, change a layout, export, present, or open any panel without going to find it.',
+      'Borrow a slide from another deck. Pick the case study or the pricing table out of last quarter’s deck and it arrives in this deck’s brand colours, keeping its copy and its layout.',
+      'Fit it. Any slide the studio says is cutting text off now offers a one-press fix that steps the type down until it fits, as a single undo.',
+      'A pre-flight in the export sheet: placeholder text still showing, text being cut off, and anything your source document didn’t land on a slide, all in one list.',
+      'Placeholder detection. A deck cannot quietly go out with "Project Name Placeholder" on the cover any more. Nearly-finished slides are listed first, since those are the ones somebody missed.',
+    ],
+    improved: [
+      'The three export warnings used to be three stacked banners that pushed the format picker off the bottom of the sheet. They are one grouped checklist now.',
+      'Slides borrowed or duplicated get a fresh identity, so editing a copy can never reach back and change the original.',
+    ],
+  },
+  {
+    version: '0.5.0',
+    date: '2026-08-12',
+    summary: 'The studio tells you when a slide is cutting your text off.',
+    added: [
+      'Fit check. Every slide in the rail is measured against its own layout, and any slide where text is being cut off is marked on its thumbnail. Hover the mark to see which text.',
+      'The export sheet warns you before you send a deck with cut-off text, and names the slides. The slots are a fixed size, so anything cut in the studio is cut in the PowerPoint file too.',
+      'A real table for the library’s List view, sortable by name, client, slides and date, with the source of each deck shown.',
+      'Pagination on the library, with First, Back, Next and Last and a rows-per-page choice.',
+    ],
+    improved: [
+      'The library no longer grows without end: it pages instead, so the way back from the oldest deck is one press rather than a long scroll.',
+      'A back-to-top button appears once you have scrolled past the first screen.',
+    ],
+    fixed: [
+      'The library’s pagination was drawing twice in List view.',
+      'The changelog and the keyboard shortcuts sheet were being clipped to the height of the header bar instead of opening over the page.',
+      'Removed the hairline grid behind the library, which was competing with the deck covers.',
+    ],
+  },
+  {
     version: '0.4.0',
     date: '2026-08-12',
     summary: 'A front door for the app: every deck in one place, grouped and searchable.',
@@ -38,7 +88,7 @@ export const CHANGELOG: Release[] = [
       'Rename, duplicate and delete a deck from the library.',
     ],
     improved: [
-      'Decks past the first screenful sit behind a "Show more" press instead of an endless scroll, and are grouped by Today / This week / This month / Older.',
+      'Decks in Grid view are grouped by Today / This week / This month / Older.',
       'The Wozku mark in the studio header now takes you back to the library.',
     ],
   },

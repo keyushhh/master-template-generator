@@ -8,6 +8,8 @@ import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
 import { ShapeOverlay } from '../formatting/ShapeOverlay';
 import { createOverlayShape, overlayOf, withOverlay } from '../formatting/overlayModel';
 import { TrashIcon } from '../ui/icons';
+import { FitProbe } from '../fit/FitProbe';
+import { FitFixChip } from '../fit/FitFixChip';
 import { css as themeCss, themeCssVars, WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 
 /** Overlay shapes actually shown for this slide right now - everything, minus
@@ -866,6 +868,10 @@ function GhostNumeral({
 }) {
   return (
     <div
+      // Runs off the corner of the slide by design, so the fit check has to be
+      // told not to read it as clipped copy. It is the one piece of text on a
+      // slide that is *meant* to be cut.
+      data-no-fit
       style={{
         fontFamily: 'var(--font-display)',
         fontSize: 600,
@@ -3494,6 +3500,10 @@ export function SlideStage({
   /** The deck's theme. Defaults to Wozku's, so a caller that has no deck in
    *  scope still renders the house look rather than an unstyled slide. */
   theme = WOZKU_THEME,
+  /** Check this slide's text for anything the layout is cutting off. Set by the
+   *  thumbnail rail, which is the one place every slide is mounted at once.
+   *  Off elsewhere: Present mode should not be measuring anything. */
+  measureFit = false,
 }: {
   slide: SlideInstance;
   ast: DocumentNode | null;
@@ -3501,12 +3511,15 @@ export function SlideStage({
   scale: number;
   logoUrl?: string;
   theme?: DeckTheme;
+  measureFit?: boolean;
 }) {
   const Renderer = SLIDE_RENDERERS[slide.templateId];
   const isDark = slideIsDark(slide);
+  const rootRef = useRef<HTMLDivElement>(null);
   return (
     <div style={{ width: 1920 * scale, height: 1080 * scale, flexShrink: 0, overflow: 'hidden' }}>
       <div
+        ref={rootRef}
         className="wg-doc"
         style={{
           // The theme's custom properties are scoped to the slide's own root, so
@@ -3540,6 +3553,7 @@ export function SlideStage({
             <span>{num}</span>
           </div>
         )}
+        {measureFit && <FitProbe rootRef={rootRef} slideId={slide.instanceId} />}
       </div>
     </div>
   );
@@ -3856,6 +3870,15 @@ export function PresentationCanvas({
         >
           {current.title}
         </span>
+        {/* Beside the counter and title because this strip is already the layer
+            that speaks about the current slide. Absent unless there is something
+            wrong with this one. */}
+        <FitFixChip
+          slide={current}
+          editing={editing}
+          onRequestEdit={onRequestEdit}
+          onEditSlide={onEditSlide}
+        />
         </div>
 
         <div style={cluster}>

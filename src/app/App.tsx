@@ -3,11 +3,13 @@ import { MasterTemplatePage } from './MasterTemplatePage';
 import { HomePage } from './HomePage';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ToastProvider } from '../features/toast/Toast';
+import { FitDevShortcut } from '../features/fit/FitDevShortcut';
 
 export function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
+        <FitDevShortcut />
         <BrowserRouter>
           <Routes>
             {/* The gallery is the front door; the studio is where one deck is

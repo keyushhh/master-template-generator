@@ -5,7 +5,7 @@ import { AddIcon, DocumentIcon, FlashIcon } from '../ui/icons';
 // Sidebar for presenting the generated slides list and actions
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
-import { WOZKU_THEME, css as themeCss, type DeckTheme } from '../theme/deckTheme';
+import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 
 /** How many px off a scroll extreme still counts as "at the top" / "at the
  *  bottom". Sub-pixel scroll heights mean an exact comparison never matches. */
@@ -37,10 +37,9 @@ interface GeneratorSidebarProps {
   /** The slide on the stage. */
   currentId: string | null;
   onNavigate: (instanceId: string) => void;
-  /** The deck's resolved theme, for the rail's thumbnails and the kit button. */
+  /** The deck's resolved theme, so a rail thumbnail matches the stage. */
   theme?: DeckTheme;
   /** Opens the brand kit picker. */
-  onOpenBrandKit: () => void;
 }
 
 export function GeneratorSidebar({
@@ -63,7 +62,6 @@ export function GeneratorSidebar({
   currentId,
   onNavigate,
   theme = WOZKU_THEME,
-  onOpenBrandKit,
 }: GeneratorSidebarProps) {
   const [sourceOpen, setSourceOpen] = useState(false);
   /** Whether the filmstrip has been scrolled at all. The fade under the pinned
@@ -168,24 +166,11 @@ export function GeneratorSidebar({
 
       {/* Primary action, floating beneath the rail. */}
       <div className="sidenav-cta">
-        {/* Who the deck is for. Deck-level setup, so it sits with the source
-            button rather than in the header, which carries mode and output. */}
-        <button
-          onClick={onOpenBrandKit}
-          title="Set the client's brand colour for this deck"
-          className="w-full flex items-center gap-2 h-[34px] px-2.5 rounded-[var(--radius-sharp)] border border-neutral-200 bg-white hover:border-neutral-400 transition-colors cursor-pointer"
-        >
-          <span
-            className="shrink-0 w-[15px] h-[15px] border border-black/10"
-            style={{ background: themeCss(theme.accent.base) }}
-          />
-          <span className="flex-1 min-w-0 truncate text-left text-[12px] font-bold text-neutral-700">
-            {theme.name}
-          </span>
-          <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-neutral-400">
-            Brand
-          </span>
-        </button>
+        {/* The brand kit button used to sit here, which put "which client is
+            this deck for" among the controls for one slide - and only offered
+            the choice after the deck had already been built in house colours.
+            It is asked when a deck is created now, and changed from the command
+            palette. */}
         {hasPresentation && !deckGenerated && (
           <button
             onClick={onGenerate}

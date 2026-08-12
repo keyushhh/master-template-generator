@@ -613,7 +613,10 @@ export function EditToolbar({
             <Menu
               title={`Typeface: ${fieldLabel}`}
               label=""
-              width={200}
+              // Wide enough for the longest family name plus its role tag on one
+              // line. At 200 both two-word names ("Space Grotesk", "JetBrains
+              // Mono") wrapped, which read as two separate options.
+              width={252}
               active={!!textStyle?.fontFamily}
               icon={
                 <span
@@ -643,9 +646,20 @@ export function EditToolbar({
                         borderRadius: 'var(--radius-sharp)', textAlign: 'left',
                       }}
                     >
-                      <span style={{ fontFamily: f.stack, fontSize: 15, fontWeight: 600 }}>Ag</span>
-                      <span style={{ fontFamily: f.stack, fontSize: 12.5 }}>{f.face}</span>
-                      <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', marginLeft: 'auto' }}>{f.label}</span>
+                      <span style={{ fontFamily: f.stack, fontSize: 15, fontWeight: 600, flexShrink: 0 }}>Ag</span>
+                      {/* nowrap as well as a wider menu: a family name is a
+                          single thing to read, and the fallback if one ever
+                          outgrows the box should be a clipped name, not a
+                          two-line row that looks like two options. */}
+                      <span
+                        style={{
+                          fontFamily: f.stack, fontSize: 12.5,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {f.face}
+                      </span>
+                      <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', marginLeft: 'auto', paddingLeft: 8, flexShrink: 0 }}>{f.label}</span>
                     </button>
                   ))}
                   {textStyle?.fontFamily && (

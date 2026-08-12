@@ -12,7 +12,9 @@ interface Shortcut {
 const GLOBAL_SHORTCUTS: Shortcut[] = [
   { keys: [MOD_KEY, 'Z'], description: 'Undo last committed change' },
   { keys: [MOD_KEY, 'Shift', 'Z'], description: 'Redo' },
-  { keys: [MOD_KEY, 'K'], description: 'Search the deck library' },
+  // Same key in both places, because it means the same thing in both: type what
+  // you want rather than go and find it.
+  { keys: [MOD_KEY, 'K'], description: 'Command palette here, deck search in the library' },
   { keys: ['Esc'], description: 'Close the open dialog' },
   { keys: ['?'], description: 'Show this shortcuts overlay' },
   { keys: ['G'], description: 'Organize the whole deck at once' },

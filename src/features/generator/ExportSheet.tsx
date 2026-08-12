@@ -5,8 +5,10 @@ import { useToast } from '../toast/Toast';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
-import { ArrowForwardIcon, CheckIcon, CloseIcon, LayersIcon, WarningIcon } from '../ui/icons';
+import { AlertIcon, ArrowForwardIcon, CheckIcon, CloseIcon, LayersIcon, WarningIcon } from '../ui/icons';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
+import { useFitReport } from '../fit/fitStore';
+import { placeholderReport } from '../preflight/placeholders';
 
 type ExportKind = 'pptx' | 'pdf' | 'png';
 
@@ -119,6 +121,20 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
   const coverage = open && ast ? analyzeCoverage(ast, deck) : null;
   const issues = coverage ? coverage.unmatchedBullets.length + coverage.insightSections.length : 0;
 
+  // Slides whose text the layout is cutting off, restricted to the ones actually
+  // going out. A clipped slide you have already excluded is not an export
+  // problem, and warning about it here would be noise at the worst moment.
+  const fit = useFitReport();
+  const clipped = visible
+    .map((s, i) => ({ n: i + 1, id: s.instanceId, title: s.title }))
+    .filter((s) => fit.slideIds.includes(s.id));
+
+  // Placeholder copy is checked here and nowhere else. A deck at the start of
+  // its life is entirely placeholder and its author knows it, so a badge on
+  // every thumbnail in the rail would be noise that teaches you to ignore the
+  // rail. The moment it matters is the moment you are about to send it.
+  const unfilled = open ? placeholderReport(visible) : [];
+
   const run = useCallback(async () => {
     if (busy || empty) return;
     setBusy(true);
@@ -223,35 +239,117 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {/* Coverage advisory. Only ever present when something is wrong, and it
-              routes to the place you would fix it. A clean deck says nothing:
-              a permanent green "all good" banner is just furniture. */}
-          {issues > 0 && (
-            <div className="flex items-start gap-2.5 px-5 py-3 bg-amber-50 border-b border-amber-200">
-              <span className="shrink-0 mt-[1px] text-amber-600">
-                <WarningIcon size={14} />
-              </span>
-              <div className="flex flex-col gap-1.5 min-w-0">
-                <span className="text-[12.5px] font-bold text-amber-900 leading-snug">
-                  {issues} thing{issues === 1 ? '' : 's'} from your source didn’t land on a slide
+          {/* ── Before you send ───────────────────────────────────────────────
+              One pre-flight block with up to three findings, rather than three
+              stacked banners. Stacked, they read as unrelated alarms and push
+              the format picker off the bottom of the sheet; grouped, they read
+              as a checklist, which is what they are. Present only when there is
+              something in it: a standing green "all clear" is furniture.
+
+              Nothing here blocks the export. Every one of these is sometimes
+              the right thing to ship, and that call belongs to the designer,
+              not to a dialog. */}
+          {(unfilled.length > 0 || clipped.length > 0 || issues > 0) && (
+            <div className="bg-amber-50 border-b border-amber-200">
+              <div className="flex items-center gap-2 px-5 pt-3 pb-2">
+                <span className="text-amber-600 flex items-center">
+                  <AlertIcon size={13} />
                 </span>
-                <ul className="flex flex-col gap-1 text-[11.5px] text-amber-800/90 leading-relaxed list-disc pl-4">
-                  {coverage?.unmatchedBullets.slice(0, 3).map((b, i) => (
-                    <li key={`u${i}`}>
-                      In <span className="font-semibold">{b.section}</span>:{' '}
-                      <span className="font-mono text-[10.5px]">{b.text}</span>
-                    </li>
-                  ))}
-                  {coverage?.insightSections.slice(0, 3).map((s, i) => (
-                    <li key={`i${i}`}>
-                      <span className="font-semibold">{s}</span> wasn’t a recognized section
-                    </li>
-                  ))}
-                  {issues > 3 && <li className="list-none text-amber-700/80">and {issues - 3} more</li>}
-                </ul>
-                <span className="text-[11px] text-amber-700/80">
-                  Exporting is fine. This is only what your source document didn’t map onto a template.
+                <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-amber-800/90">
+                  Before you send
                 </span>
+              </div>
+
+              <div className="flex flex-col divide-y divide-amber-200/70">
+                {/* Placeholders first: the one that ends a client relationship.
+                    A cover reading "Project Name Placeholder", or a body still
+                    saying "Placeholder content for the Wozku Master Template".
+                    Nearly-finished slides lead the list, because a slide with
+                    one gap left is one somebody missed, while a slide with
+                    eight is one they have not written yet. */}
+                {unfilled.length > 0 && (
+                  <div className="flex flex-col gap-1.5 px-5 py-3">
+                    <span className="text-[12.5px] font-bold text-amber-900 leading-snug">
+                      Template placeholder text is still showing on {unfilled.length} slide
+                      {unfilled.length === 1 ? '' : 's'}
+                    </span>
+                    <ul className="flex flex-col gap-1 text-[11.5px] text-amber-800/90 leading-relaxed">
+                      {unfilled.slice(0, 4).map((s) => (
+                        <li key={s.instanceId} className="truncate">
+                          <span className="font-mono text-[10.5px] font-bold">
+                            {String(s.n).padStart(2, '0')}
+                          </span>{' '}
+                          <span className="font-semibold">{s.title}</span>
+                          <span className="text-amber-700/75">
+                            {' '}
+                            &middot; {s.fields.slice(0, 3).join(', ')}
+                            {s.fields.length > 3 ? ` +${s.fields.length - 3}` : ''}
+                          </span>
+                        </li>
+                      ))}
+                      {unfilled.length > 4 && (
+                        <li className="text-amber-700/80">and {unfilled.length - 4} more</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Clipping. The slots are a fixed size and the exporter is
+                    handed the same box, so whatever is cut on the canvas is cut
+                    in PowerPoint. This is the last screen where that is still
+                    fixable. */}
+                {clipped.length > 0 && (
+                  <div className="flex flex-col gap-1.5 px-5 py-3">
+                    <span className="text-[12.5px] font-bold text-amber-900 leading-snug">
+                      Text is being cut off on {clipped.length} slide
+                      {clipped.length === 1 ? '' : 's'}
+                    </span>
+                    <ul className="flex flex-col gap-1 text-[11.5px] text-amber-800/90 leading-relaxed">
+                      {clipped.slice(0, 3).map((s) => (
+                        <li key={s.id} className="truncate">
+                          <span className="font-mono text-[10.5px] font-bold">
+                            {String(s.n).padStart(2, '0')}
+                          </span>{' '}
+                          <span className="font-semibold">{s.title}</span>
+                        </li>
+                      ))}
+                      {clipped.length > 3 && (
+                        <li className="text-amber-700/80">and {clipped.length - 3} more</li>
+                      )}
+                    </ul>
+                    <span className="text-[11px] text-amber-700/80">
+                      The slots are a fixed size, so anything cut here is cut in the exported file
+                      too. Each of those slides offers a Fit it button under the canvas.
+                    </span>
+                  </div>
+                )}
+
+                {/* Coverage: what the source document had and no template took.
+                    Only ever present when a document was imported. */}
+                {issues > 0 && (
+                  <div className="flex flex-col gap-1.5 px-5 py-3">
+                    <span className="text-[12.5px] font-bold text-amber-900 leading-snug">
+                      {issues} thing{issues === 1 ? '' : 's'} from your source didn&rsquo;t land on a
+                      slide
+                    </span>
+                    <ul className="flex flex-col gap-1 text-[11.5px] text-amber-800/90 leading-relaxed list-disc pl-4">
+                      {coverage?.unmatchedBullets.slice(0, 3).map((b, i) => (
+                        <li key={`u${i}`}>
+                          In <span className="font-semibold">{b.section}</span>:{' '}
+                          <span className="font-mono text-[10.5px]">{b.text}</span>
+                        </li>
+                      ))}
+                      {coverage?.insightSections.slice(0, 3).map((s, i) => (
+                        <li key={`i${i}`}>
+                          <span className="font-semibold">{s}</span> wasn&rsquo;t a recognized section
+                        </li>
+                      ))}
+                      {issues > 3 && (
+                        <li className="list-none text-amber-700/80">and {issues - 3} more</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           )}

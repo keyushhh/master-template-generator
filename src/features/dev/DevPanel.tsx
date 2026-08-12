@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { clearLibrary, seedLibrary } from './seedLibrary';
 import { CloseIcon, FlashIcon } from '../ui/icons';
+import { setFitOutline, useFitOutline } from '../fit/fitStore';
 
 /**
  * Floating state simulator.
@@ -29,6 +30,7 @@ const SEEDS = [1, 3, 8, 20, 40];
 
 export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: DevPanelProps) {
   const [open, setOpen] = useState(false);
+  const outline = useFitOutline();
 
   // Cmd/Ctrl + Shift + D, so the panel can be summoned without a mouse trip to
   // the corner while comparing states.
@@ -133,6 +135,30 @@ export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: De
                   Loading {loading ? 'on' : 'off'}
                 </button>
               </div>
+            </div>
+
+            <div className="h-px bg-white/10" />
+
+            <div className="flex flex-col gap-1.5">
+              <span className="font-mono text-[9px] font-bold tracking-[0.14em] uppercase text-white/35">
+                Fit check
+              </span>
+              <button
+                onClick={() => setFitOutline(!outline)}
+                aria-pressed={outline}
+                className={`${btn} self-start ${
+                  outline
+                    ? 'bg-amber-500 border-amber-500 text-neutral-900'
+                    : 'bg-white/8 border-white/15 text-white hover:bg-white/20'
+                }`}
+              >
+                Outline clipped text {outline ? 'on' : 'off'}
+              </button>
+              <span className="text-[10.5px] text-white/35 leading-snug">
+                Boxes every finding on the slide itself, in the studio and the rail. Amber for an
+                overrun, red once a line is gone. The only way to tell a real clip from a
+                tolerance that is set too tight.
+              </span>
             </div>
 
             <span className="text-[10px] text-white/30 leading-snug">

@@ -7,6 +7,8 @@ import { HelpMenu } from '../features/help/HelpMenu';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
 import { hasModifier, MOD_KEY } from '../features/help/platform';
 import { createTemplateDeck } from '../features/deck/deckBuilder';
+import { NewDeckModal } from '../features/deck/NewDeckModal';
+import type { Deck } from '../features/deck/types';
 import {
   createProject,
   deleteProject,
@@ -211,6 +213,7 @@ export function HomePage() {
   const [presentId, setPresentId] = useState<string | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [newDeckOpen, setNewDeckOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   /** Cmd/Ctrl+K focuses search, and Escape leaves it. The modifier follows the
@@ -275,8 +278,10 @@ export function HomePage() {
     [navigate]
   );
 
-  const startNew = () => {
-    const meta = createProject('Untitled deck', { ast: null, deck: createTemplateDeck() });
+  /** Straight into the deck that was just created: the new-deck screen is where
+   *  the decisions were made, so there is nothing left to do on the library. */
+  const createDeck = (name: string, deck: Deck) => {
+    const meta = createProject(name, { ast: null, deck });
     open(meta.id);
   };
 
@@ -492,7 +497,7 @@ export function HomePage() {
           <div className="justify-self-end flex items-center gap-2">
             <HelpMenu onOpenShortcuts={() => setShortcutsOpen(true)} />
             <button
-              onClick={startNew}
+              onClick={() => setNewDeckOpen(true)}
               className="flex items-center gap-2 h-[34px] px-4 text-[12.5px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer whitespace-nowrap"
             >
               <AddIcon size={14} />
@@ -528,7 +533,7 @@ export function HomePage() {
                 back on brand, then set a client&rsquo;s colour for the whole deck at once.
               </p>
               <button
-                onClick={startNew}
+                onClick={() => setNewDeckOpen(true)}
                 className="self-start flex items-center gap-2 h-[42px] px-5 text-[13px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer"
               >
                 <AddIcon size={15} />
@@ -889,6 +894,11 @@ export function HomePage() {
       <ScrollToTop />
 
       <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <NewDeckModal
+        open={newDeckOpen}
+        onClose={() => setNewDeckOpen(false)}
+        onCreate={createDeck}
+      />
 
       <DevPanel
         loading={loading}

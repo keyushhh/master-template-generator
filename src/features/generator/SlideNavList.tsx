@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom';
 import type { SlideInstance } from '../deck/types';
 import type { DocumentNode } from '../business-record/parser/ast';
 import { SlideStage } from './PresentationCanvas';
-import { CopyIcon, CreateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, GripIcon, LayersIcon, TrashIcon } from '../ui/icons';
+import { CopyIcon, CreateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, GripIcon, LayersIcon, TrashIcon, WarningIcon } from '../ui/icons';
 import type { DeckTheme } from '../theme/deckTheme';
+import { describeIssue, SEVERE_BY } from '../fit/fitScan';
+import { pruneFit, useSlideFit } from '../fit/fitStore';
 
 interface SlideNavListProps {
   slides: SlideInstance[];
@@ -75,10 +77,47 @@ const SlideThumb = memo(function SlideThumb({
 
   return (
     <div ref={ref} className="w-full h-full">
-      <SlideStage slide={slide} ast={ast} num={num} scale={scale} logoUrl={logoUrl} theme={theme} />
+      {/* The rail is the only place all fourteen slides are laid out at once, so
+          it is the only place the fit check can see the whole deck. */}
+      <SlideStage slide={slide} ast={ast} num={num} scale={scale} logoUrl={logoUrl} theme={theme} measureFit />
     </div>
   );
 });
+
+/**
+ * Marks a thumbnail whose text the layout is cutting off.
+ *
+ * On the miniature rather than in a panel somewhere, because at rail scale you
+ * cannot see the clipping yourself - the type is 6px tall. Amber for an overrun,
+ * red once a line or more is gone: the first is a judgement call, the second is
+ * missing content.
+ */
+function FitBadge({ slideId }: { slideId: string }) {
+  const issues = useSlideFit(slideId);
+  if (issues.length === 0) return null;
+  const severe = issues[0].by >= SEVERE_BY;
+  return (
+    <div
+      className="absolute bottom-1.5 left-1.5 z-20 flex items-center gap-1"
+      style={{
+        padding: '2px 5px',
+        background: severe ? 'rgba(185,28,28,0.94)' : 'rgba(180,83,9,0.94)',
+        color: '#fff',
+      }}
+      title={`${issues.length === 1 ? 'Text is' : `${issues.length} pieces of text are`} being cut off on this slide:\n${issues
+        .slice(0, 4)
+        .map((i) => `· “${i.text}” - ${describeIssue(i).toLowerCase()}`)
+        .join('\n')}`}
+    >
+      <WarningIcon size={9} />
+      {issues.length > 1 && (
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 700, lineHeight: 1 }}>
+          {issues.length}
+        </span>
+      )}
+    </div>
+  );
+}
 
 function InsertAfterIcon() {
   return (
@@ -223,6 +262,12 @@ export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDu
    *  whether the menu fits below its trigger, and the reason the menu is hidden
    *  for its first layout pass rather than positioned from a guessed height. */
   const [menuHeight, setMenuHeight] = useState(0);
+
+  // Deleting the one slide with clipped text has to take its warning with it,
+  // or the export sheet keeps flagging a slide that is no longer in the deck.
+  useEffect(() => {
+    pruneFit(slides.map((s) => s.instanceId));
+  }, [slides]);
 
   useLayoutEffect(() => {
     if (!menu) {
@@ -402,6 +447,8 @@ export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDu
                             Hidden
                           </div>
                         )}
+
+                        <FitBadge slideId={slide.instanceId} />
 
                         {/* Hover actions: the one you reach for most, plus a
                             menu. Five icons over every thumbnail was the

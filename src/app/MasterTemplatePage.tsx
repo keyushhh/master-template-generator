@@ -9,10 +9,15 @@ import { ExportSheet } from '../features/generator/ExportSheet';
 import { SlideSorter } from '../features/generator/SlideSorter';
 import { PresentMode } from '../features/generator/PresentMode';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
+import { BorrowSlideModal } from '../features/generator/BorrowSlideModal';
+import { NewDeckModal } from '../features/deck/NewDeckModal';
+import { CommandPalette, type Command } from '../features/command/CommandPalette';
+import { SWITCHABLE } from '../features/deck/templateSwitch';
+import { MOD_KEY } from '../features/help/platform';
 import { StudioHeader } from '../features/generator/StudioHeader';
 import { useToast } from '../features/toast/Toast';
 import type { DocumentNode } from '../features/business-record/parser/ast';
-import type { Deck, OverlayChartSeries, OverlayChartType, OverlayShape, SlideContent, SlideTemplateId, SlotStyle } from '../features/deck/types';
+import type { Deck, OverlayChartSeries, OverlayChartType, OverlayShape, SlideContent, SlideInstance, SlideTemplateId, SlotStyle } from '../features/deck/types';
 import { applySwitch } from '../features/deck/templateSwitch';
 import { TemplateSwitchModal } from '../features/generator/TemplateSwitchModal';
 import { EditToolbar } from '../features/formatting/EditToolbar';
@@ -247,6 +252,9 @@ export function MasterTemplatePage() {
   const projectName = projects.find((p) => p.id === activeId)?.name ?? 'Untitled deck';
   const [presentOpen, setPresentOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [borrowOpen, setBorrowOpen] = useState(false);
+  const [newDeckOpen, setNewDeckOpen] = useState(false);
 
   // Two-step confirm for Reset (disarms after 3 s)
   const [resetArmed, setResetArmed] = useState(false);
@@ -1045,20 +1053,34 @@ export function MasterTemplatePage() {
     ? displayDeck.slides.find((s) => s.instanceId === switchTargetId)
     : undefined;
 
-  const handleConfirmSwitch = useCallback(
-    (to: SlideTemplateId) => {
-      const id = switchTargetId;
-      if (!id) return;
+  /**
+   * Put one slide on a different layout.
+   *
+   * Takes the slide id explicitly so the switcher modal and the command palette
+   * are the same operation. The palette names a layout directly ("Data
+   * Monument") without opening a picker, and that path must not be a second
+   * implementation of the switch, or one of the two will forget to clear the
+   * selection or to say that nothing was thrown away.
+   */
+  const applyLayout = useCallback(
+    (instanceId: string, to: SlideTemplateId) => {
       mutateDeck((prev) => ({
         ...prev,
-        slides: prev.slides.map((s) => (s.instanceId === id ? applySwitch(s, to) : s)),
+        slides: prev.slides.map((s) => (s.instanceId === instanceId ? applySwitch(s, to) : s)),
       }));
       setSwitchTargetId(null);
       // The old selection may point at a slot the new template doesn't render.
       setSelection(null);
       showToast('Layout changed. Nothing was deleted: parked content returns if you switch back.', 'success');
     },
-    [switchTargetId, mutateDeck, showToast]
+    [mutateDeck, showToast]
+  );
+
+  const handleConfirmSwitch = useCallback(
+    (to: SlideTemplateId) => {
+      if (switchTargetId) applyLayout(switchTargetId, to);
+    },
+    [switchTargetId, applyLayout]
   );
 
   const handleToggleHidden = useCallback(
@@ -1208,6 +1230,28 @@ export function MasterTemplatePage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [presentOpen]);
 
+  // Cmd/Ctrl + K opens the palette. Deliberately the same key the library uses
+  // for its search: in both places it means "let me type what I want instead of
+  // going to find it". Allowed while a text field has focus, since the palette
+  // is how you leave what you are doing.
+  const overlayUp =
+    reviewOpen || sorterOpen || presentOpen || brandKitOpen || borrowOpen || shortcutsOpen || newDeckOpen;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'k') return;
+      // Closing is always allowed; opening is not, while something else is up.
+      // A palette stacked over the export sheet or, worse, over a live
+      // presentation is two dialogs deep with commands that act on the screen
+      // behind both of them.
+      if (!paletteOpen && overlayUp) return;
+      e.preventDefault();
+      setPaletteOpen((v) => !v);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [paletteOpen, overlayUp]);
+
   // ── Brand kits ──────────────────────────────────────────────────────────
   /**
    * The deck's theme, resolved in exactly one place and handed down.
@@ -1270,6 +1314,32 @@ export function MasterTemplatePage() {
     setCurrentSlideId(blank.instanceId);
   }, [mutateDeck]);
 
+  /**
+   * Drop slides borrowed from another deck in after the current one.
+   *
+   * After, not at the end: you go looking for the case study slide because of
+   * where you are in the deck, and a slide that lands fourteen positions away
+   * from the thought that summoned it has to be dragged back.
+   */
+  const handleBorrowSlides = useCallback(
+    (borrowed: SlideInstance[]) => {
+      if (borrowed.length === 0) return;
+      mutateDeck((prev) => {
+        const idx = prev.slides.findIndex((s) => s.instanceId === currentSlideId);
+        const at = idx === -1 ? prev.slides.length : idx + 1;
+        const slides = [...prev.slides];
+        slides.splice(at, 0, ...borrowed);
+        return { ...prev, slides };
+      });
+      setCurrentSlideId(borrowed[0].instanceId);
+      showToast(
+        `Added ${borrowed.length} slide${borrowed.length === 1 ? '' : 's'} from another deck.`,
+        'success'
+      );
+    },
+    [mutateDeck, currentSlideId, showToast]
+  );
+
   const handleInsertAfter = useCallback((instanceId: string) => {
     const blank = createBlankSlide();
     mutateDeck((prev) => {
@@ -1316,14 +1386,24 @@ export function MasterTemplatePage() {
     [activeId, flushCurrent, hydrate]
   );
 
-  const handleNewDeck = useCallback(() => {
-    flushCurrent();
-    const session: StoredSession = { ast: null, deck: createTemplateDeck() };
-    const meta = createProject('Untitled deck', session); // also sets store-active
-    setActiveIdState(meta.id);
-    hydrate(session);
-    setProjects(listProjects());
-  }, [flushCurrent, hydrate]);
+  /**
+   * Create a deck from the starter and brand chosen on the new-deck screen.
+   *
+   * The old version took no arguments and always built the house master template
+   * in house colours, which is why the brand had to be corrected afterwards from
+   * a button in the rail.
+   */
+  const handleCreateDeck = useCallback(
+    (name: string, built: Deck) => {
+      flushCurrent();
+      const session: StoredSession = { ast: null, deck: built };
+      const meta = createProject(name, session); // also sets store-active
+      setActiveIdState(meta.id);
+      hydrate(session);
+      setProjects(listProjects());
+    },
+    [flushCurrent, hydrate]
+  );
 
   const handleRenameDeck = useCallback((id: string, name: string) => {
     renameProject(id, name);
@@ -1348,6 +1428,188 @@ export function MasterTemplatePage() {
     [activeId, hydrate]
   );
 
+  /**
+   * Everything the palette can do.
+   *
+   * Assembled here because this component is where the verbs already live. A
+   * palette that owned its own actions would be a second copy of them, and the
+   * two would drift the first time one of these handlers changed.
+   *
+   * Ordering is deliberate and fixed. Actions first, because they are what
+   * someone opening the palette on purpose usually wants; slides next, because
+   * jumping is the most frequent single use; layouts last and marked
+   * `secondary`, so sixteen layout rows do not bury the six things above them
+   * until you actually type a layout's name.
+   */
+  const commands = useMemo<Command[]>(() => {
+    const out: Command[] = [];
+    const visible = displayDeck.slides.filter((s) => !s.hidden);
+    const currentId = currentSlideId ?? visible[0]?.instanceId ?? null;
+
+    out.push(
+      {
+        id: 'present',
+        group: 'Deck',
+        label: 'Present',
+        hint: 'P',
+        keywords: 'play full screen present mode',
+        disabled: visible.length === 0,
+        run: () => setPresentOpen(true),
+      },
+      {
+        id: 'export',
+        group: 'Deck',
+        label: 'Export…',
+        keywords: 'download pptx powerpoint pdf png save',
+        disabled: visible.length === 0,
+        run: () => setReviewOpen(true),
+      },
+      {
+        id: 'organize',
+        group: 'Deck',
+        label: 'Organize slides',
+        hint: 'G',
+        keywords: 'sorter reorder hide bulk',
+        run: () => setSorterOpen(true),
+      },
+      {
+        id: 'brandkit',
+        // The brand is chosen when a deck is created, so this is the way to
+        // change it afterwards. In the palette rather than back in the rail: it
+        // is a once-per-deck decision and does not need standing screen space.
+        group: 'Deck',
+        label: 'Change this deck’s brand…',
+        keywords: 'brand kit theme client accent colour palette',
+        run: () => setBrandKitOpen(true),
+      },
+      {
+        id: 'new-deck',
+        group: 'Deck',
+        label: 'New deck…',
+        keywords: 'create start template blank client',
+        run: () => setNewDeckOpen(true),
+      },
+      {
+        id: 'notes',
+        group: 'Deck',
+        label: notesOpen ? 'Hide speaker notes' : 'Speaker notes',
+        keywords: 'script talk track',
+        run: () => setNotesOpen((v) => !v),
+      }
+    );
+
+    out.push(
+      {
+        id: 'add-blank',
+        group: 'Insert',
+        label: 'Add a blank slide',
+        keywords: 'new empty freeform',
+        run: () => handleAddBlank(),
+      },
+      {
+        id: 'insert-after',
+        group: 'Insert',
+        label: 'Insert a blank slide after this one',
+        keywords: 'new empty here',
+        disabled: !currentId,
+        run: () => currentId && handleInsertAfter(currentId),
+      },
+      {
+        id: 'borrow',
+        group: 'Insert',
+        label: 'Borrow a slide from another deck…',
+        keywords: 'copy reuse steal case study previous',
+        run: () => setBorrowOpen(true),
+      },
+      {
+        id: 'change-layout',
+        group: 'Insert',
+        label: 'Change this slide’s layout…',
+        keywords: 'template switch',
+        disabled: !currentId,
+        run: () => currentId && setSwitchTargetId(currentId),
+      }
+    );
+
+    out.push(
+      {
+        id: 'edit-mode',
+        group: 'Editing',
+        label: editing ? 'Done editing' : 'Edit content',
+        keywords: editing ? 'save exit finish' : 'write type change',
+        run: () => (editing ? handleSaveEdits() : handleEnterEdit()),
+      },
+      {
+        id: 'undo',
+        group: 'Editing',
+        label: 'Undo',
+        hint: `${MOD_KEY}Z`,
+        disabled: !canUndo,
+        run: handleUndo,
+      },
+      {
+        id: 'redo',
+        group: 'Editing',
+        label: 'Redo',
+        hint: `${MOD_KEY}⇧Z`,
+        disabled: !canRedo,
+        run: handleRedo,
+      },
+      {
+        id: 'shortcuts',
+        group: 'Editing',
+        label: 'Keyboard shortcuts',
+        hint: '?',
+        keywords: 'help keys',
+        run: () => setShortcutsOpen(true),
+      }
+    );
+
+    // One row per slide. Hidden slides are left out: you cannot navigate to a
+    // slide that is not in the deck being shown, and offering it would jump to
+    // nothing.
+    for (const [i, s] of visible.entries()) {
+      out.push({
+        id: `goto-${s.instanceId}`,
+        group: 'Go to slide',
+        label: s.title,
+        hint: String(i + 1).padStart(2, '0'),
+        keywords: `slide ${i + 1} ${s.templateId}`,
+        secondary: i > 5,
+        run: () => setCurrentSlideId(s.instanceId),
+      });
+    }
+
+    for (const layout of SWITCHABLE) {
+      out.push({
+        id: `layout-${layout.id}`,
+        group: 'Change layout to',
+        label: layout.title,
+        hint: layout.group,
+        keywords: `layout template ${layout.group}`,
+        secondary: true,
+        disabled: !currentId,
+        run: () => currentId && applyLayout(currentId, layout.id),
+      });
+    }
+
+    return out;
+  }, [
+    displayDeck.slides,
+    currentSlideId,
+    editing,
+    notesOpen,
+    canUndo,
+    canRedo,
+    handleAddBlank,
+    handleInsertAfter,
+    handleSaveEdits,
+    handleEnterEdit,
+    handleUndo,
+    handleRedo,
+    applyLayout,
+  ]);
+
   return (
     <div className="wg-doc">
       <GeneratorSidebar
@@ -1370,7 +1632,6 @@ export function MasterTemplatePage() {
         currentId={currentSlideId}
         onNavigate={setCurrentSlideId}
         theme={deckTheme}
-        onOpenBrandKit={() => setBrandKitOpen(true)}
       />
 
       {/* One floating frosted header carries identity, mode and actions.
@@ -1399,7 +1660,7 @@ export function MasterTemplatePage() {
         projects={projects}
         activeId={activeId}
         onSwitchDeck={handleSwitchDeck}
-        onNewDeck={handleNewDeck}
+        onNewDeck={() => setNewDeckOpen(true)}
         onRenameDeck={handleRenameDeck}
         onDeleteDeck={handleDeleteDeck}
       />
@@ -1578,6 +1839,22 @@ export function MasterTemplatePage() {
         onDeleteKit={handleDeleteKit}
       />
       <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <BorrowSlideModal
+        open={borrowOpen}
+        onClose={() => setBorrowOpen(false)}
+        currentProjectId={activeId}
+        onInsert={handleBorrowSlides}
+      />
+      <NewDeckModal
+        open={newDeckOpen}
+        onClose={() => setNewDeckOpen(false)}
+        onCreate={handleCreateDeck}
+      />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
     </div>
   );
 }
