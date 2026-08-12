@@ -1,6 +1,7 @@
 import type pptxgen from 'pptxgenjs';
 import type { SlideInstance, ComparisonRow, SlotOffset, SlotStyle } from '../deck/types';
 import { applyToPptx, offsetFor, styleFor } from '../formatting/resolve';
+import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 
 /**
  * Native (editable) pptxgenjs equivalent of PresentationCanvas.tsx's DOM
@@ -55,21 +56,68 @@ function estimateWrappedLines(text: string, fontPx: number, widthPx: number): nu
   }, 0);
 }
 
-const FONT_DISPLAY = 'Space Grotesk';
-const FONT_MONO = 'JetBrains Mono';
+// ---------------------------------------------------------------------------
+// Active theme.
+//
+// Module-scoped for the same reason the per-slide formatting overrides below are
+// (see `beginSlideStyles`): the palette is needed by every one of the ~20 build
+// functions in this file, and threading a theme argument through all of them
+// would be a large diff for a value that is constant across a whole export.
+//
+// Set once per export rather than per slide - a deck has one theme - and reset
+// afterwards so an export that throws cannot leave a client's palette applied to
+// the next one.
+// ---------------------------------------------------------------------------
 
-const NEUTRAL_50 = 'FBFBFB';
-const NEUTRAL_100 = 'F5F5F5';
-const NEUTRAL_200 = 'E5E5E5';
-const NEUTRAL_300 = 'D4D4D4';
-const NEUTRAL_400 = 'A3A3A3';
-const NEUTRAL_500 = '737373';
-const NEUTRAL_900 = '171717';
-const EMERALD_400 = '34D399';
-const EMERALD_500 = '10B981';
-const EMERALD_600 = '059669';
-const WHITE = 'FFFFFF';
-const BLACK = '000000';
+let activeTheme: DeckTheme = WOZKU_THEME;
+
+function theme(): DeckTheme {
+  return activeTheme;
+}
+
+/** Sets the theme for the export about to run. Call `clearExportTheme()` when it
+ *  finishes, whether or not it succeeded. */
+export function setExportTheme(next: DeckTheme | undefined): void {
+  activeTheme = next ?? WOZKU_THEME;
+}
+
+export function clearExportTheme(): void {
+  activeTheme = WOZKU_THEME;
+}
+
+/**
+ * Palette and type stack, derived from the deck theme rather than restated here.
+ *
+ * These used to be sixteen hex literals at the top of this file, duplicating the
+ * emerald and neutral ramps that `tokens.css` declares for the canvas. Two copies
+ * of the same palette is how a deck ends up looking one way on screen and another
+ * in the file the client opens, and nobody notices until it has been sent. The
+ * names are kept so the ~200 references below read as they always did; only where
+ * the values come from has changed.
+ *
+ * Read through `theme()` rather than captured at import time, so setting a deck's
+ * theme before an export (see `setExportTheme`) reaches every one of them.
+ */
+const FONT_DISPLAY = () => theme().fonts.display.family;
+const FONT_MONO = () => theme().fonts.mono.family;
+
+const NEUTRAL_50 = () => theme().neutral.n50;
+const NEUTRAL_100 = () => theme().neutral.n100;
+const NEUTRAL_200 = () => theme().neutral.n200;
+const NEUTRAL_300 = () => theme().neutral.n300;
+const NEUTRAL_400 = () => theme().neutral.n400;
+const NEUTRAL_500 = () => theme().neutral.n500;
+const NEUTRAL_900 = () => theme().neutral.n900;
+const EMERALD_400 = () => theme().accent.bright;
+const EMERALD_500 = () => theme().accent.base;
+const EMERALD_600 = () => theme().accent.deep;
+const WHITE = () => theme().surface.light;
+const BLACK = () => theme().surface.dark;
+/** Dim text on a dark slide, and the cooler dim used by the light footer. */
+const INK_DIM_ON_DARK = () => theme().ink.dimOnDark;
+const INK_MUTED_ON_LIGHT = () => theme().ink.mutedOnLight;
+const INK_HEADING_ON_DARK = () => theme().ink.headingOnDark;
+const RULE_TABLE = () => theme().rule.table;
 
 const PLACEHOLDER =
   'Placeholder content for the Wozku Master Template. This section will automatically populate once a Document is provided.';
@@ -100,7 +148,7 @@ interface DecorConfig {
 
 function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, color?: string) {
   ctx.save();
-  ctx.strokeStyle = color ?? 'rgba(245,245,245,0.8)';
+  ctx.strokeStyle = color ?? theme().rule.gridOnLight;
   ctx.lineWidth = 1;
   for (let x = 0; x <= w; x += 120) {
     ctx.beginPath();
@@ -151,22 +199,28 @@ function applyBackground(slide: pptxgen.Slide, cfg: DecorConfig) {
   slide.background = data ? { data } : { color: cfg.base };
 }
 
-const DECOR: Record<string, DecorConfig> = {
-  s1: { base: WHITE, grid: true, glow: { cx: 1520, cy: 400, r: 700 } },
-  s2: { base: WHITE, grid: true },
-  s3: { base: WHITE, grid: true },
-  s4: { base: BLACK },
-  s5: { base: WHITE, grid: true },
-  s6: { base: WHITE, grid: true, glow: { cx: 960, cy: 540, r: 700 } },
-  s7: { base: WHITE, grid: true },
-  s8: { base: WHITE, grid: true },
-  s9: { base: WHITE, grid: true },
-  s10: { base: WHITE, grid: true },
-  s11: { base: WHITE, grid: true },
-  s12: { base: WHITE, grid: true },
-  s13: { base: WHITE, grid: true, glow: { cx: 200, cy: 880, r: 700 } },
-  s14: { base: BLACK },
-};
+/** Per-template background treatment. A function rather than a const table:
+ *  its colours come from the active theme, and a table built at import time
+ *  would bake in whichever theme happened to be loaded first. */
+function decorFor(templateId: string): DecorConfig {
+  const DECOR: Record<string, DecorConfig> = {
+  s1: { base: WHITE(), grid: true, glow: { cx: 1520, cy: 400, r: 700 } },
+  s2: { base: WHITE(), grid: true },
+  s3: { base: WHITE(), grid: true },
+  s4: { base: BLACK() },
+  s5: { base: WHITE(), grid: true },
+  s6: { base: WHITE(), grid: true, glow: { cx: 960, cy: 540, r: 700 } },
+  s7: { base: WHITE(), grid: true },
+  s8: { base: WHITE(), grid: true },
+  s9: { base: WHITE(), grid: true },
+  s10: { base: WHITE(), grid: true },
+  s11: { base: WHITE(), grid: true },
+  s12: { base: WHITE(), grid: true },
+  s13: { base: WHITE(), grid: true, glow: { cx: 200, cy: 880, r: 700 } },
+    s14: { base: BLACK() },
+  };
+  return DECOR[templateId] ?? { base: WHITE() };
+}
 
 interface Box {
   x: number;
@@ -270,12 +324,12 @@ function addText(
   const runs = typeof text === 'string' && text.includes('\n') ? splitLines(text) : text;
   slide.addText(runs, {
     ...placed,
-    fontFace: o.fontFace ?? FONT_DISPLAY,
+    fontFace: o.fontFace ?? FONT_DISPLAY(),
     fontSize: pt(o.size),
     bold: o.bold,
     italic: o.italic,
     underline: o.underline ? { style: 'sng' } : undefined,
-    color: o.color ?? NEUTRAL_900,
+    color: o.color ?? NEUTRAL_900(),
     align: o.align ?? 'left',
     valign: o.valign ?? 'top',
     lineSpacingMultiple: o.lineSpacingMultiple,
@@ -360,32 +414,32 @@ function addHudTop(
   slots?: { label?: string; num?: string }
 ) {
   addText(slide, label.toUpperCase(), box(80, 55, 800, 30), {
-    fontFace: FONT_MONO,
+    fontFace: FONT_MONO(),
     size: 16,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     letterSpacingEm: 0.12,
     valign: 'bottom',
     slot: slots?.label,
   });
   addText(slide, num.toUpperCase(), box(1040, 55, 800, 30), {
-    fontFace: FONT_MONO,
+    fontFace: FONT_MONO(),
     size: 16,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     align: 'right',
     letterSpacingEm: 0.12,
     valign: 'bottom',
     slot: slots?.num,
   });
-  addLine(slide, 80, 92, 1840, 92, NEUTRAL_200, 1);
+  addLine(slide, 80, 92, 1840, 92, NEUTRAL_200(), 1);
 }
 
 /** Editorial eyebrow label: short emerald rule + tracked mono uppercase text. */
 function addEditorialLabel(slide: pptxgen.Slide, text: string, xPx: number, yPx: number, opts?: { size?: number; center?: boolean; color?: string; slot?: string }) {
   const size = opts?.size ?? 14;
-  const color = opts?.color ?? EMERALD_600;
+  const color = opts?.color ?? EMERALD_600();
   if (opts?.center) {
     addText(slide, text.toUpperCase(), box(xPx - 700, yPx, 1400, size + 14), {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       size,
       color,
       align: 'center',
@@ -401,9 +455,9 @@ function addEditorialLabel(slide: pptxgen.Slide, text: string, xPx: number, yPx:
     const off = offsetFor(activeOffsets, opts?.slot);
     const rx = xPx + (off?.dx ?? 0);
     const ry = yPx + (off?.dy ?? 0) + size / 2 + 3;
-    addLine(slide, rx, ry, rx + 40, ry, EMERALD_500, 1);
+    addLine(slide, rx, ry, rx + 40, ry, EMERALD_500(), 1);
     addText(slide, text.toUpperCase(), box(xPx + 55, yPx, 900, size + 14), {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       size,
       color,
       letterSpacingEm: 0.25,
@@ -465,9 +519,9 @@ async function addLogo(
     return;
   }
   addText(slide, 'CLIENT LOGO', box(xPx, yPx, 200, 30), {
-    fontFace: FONT_MONO,
+    fontFace: FONT_MONO(),
     size: 11,
-    color: dark ? 'CCCCCC' : '5A5A69',
+    color: dark ? INK_DIM_ON_DARK() : INK_MUTED_ON_LIGHT(),
     letterSpacingEm: 0.14,
     bold: true,
   });
@@ -497,7 +551,7 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
       ...(i > 0 ? { softBreakBefore: true } : {}),
       // Matches the canvas's cover renderer. Both must change together or the
       // exported deck stops matching what the editor showed.
-      ...(i === lines.length - 1 && lines.length > 1 ? { color: EMERALD_500 } : {}),
+      ...(i === lines.length - 1 && lines.length > 1 ? { color: EMERALD_500() } : {}),
     },
   }));
   addText(slide, runs, box(140, heroTopPad + 55, 1680, headingH + 40), {
@@ -508,11 +562,11 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
   });
 
   const taglineY = heroTopPad + 55 + headingH + 96;
-  addLine(slide, 140, taglineY + 9, 275, taglineY + 9, EMERALD_500, 1);
+  addLine(slide, 140, taglineY + 9, 275, taglineY + 9, EMERALD_500(), 1);
   addText(slide, content.tagline ?? PLACEHOLDER, box(323, taglineY - 10, 1460, 40), {
-    fontFace: FONT_MONO,
+    fontFace: FONT_MONO(),
     size: 18,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     letterSpacingEm: 0.25,
     slot: 'tagline',
   });
@@ -520,9 +574,9 @@ async function buildCover(slide: pptxgen.Slide, content: SlideInstance['content'
   const confidential = content.confidentialLabel ?? 'PROPRIETARY AND CONFIDENTIAL';
   if (confidential !== '') {
     addText(slide, confidential, box(80, 1000, 500, 26), {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       size: 16,
-      color: NEUTRAL_400,
+      color: NEUTRAL_400(),
       slot: 'confidentialLabel',
     });
   }
@@ -562,12 +616,12 @@ function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num
   parts.slice(0, 4).forEach((part, i) => {
     const cx = startX + (i % cols) * (colW + gapX);
     const cy = startY + Math.floor(i / cols) * (rowH + gapY);
-    addLine(slide, cx, cy, cx, cy + rowH, i === 0 ? EMERALD_500 : NEUTRAL_200, 2);
+    addLine(slide, cx, cy, cx, cy + rowH, i === 0 ? EMERALD_500() : NEUTRAL_200(), 2);
     addEditorialLabel(slide, `Part 0${i + 1}`, cx + 30, cy, { size: 10 });
     addText(slide, part.title, box(cx + 30, cy + 30, colW - 30, 50), { size: 32, bold: true, lineSpacingMultiple: 1.05, slot: `parts.${i}.title` });
     addText(slide, part.description, box(cx + 30, cy + 85, colW - 30, 120), {
       size: 18,
-      color: NEUTRAL_500,
+      color: NEUTRAL_500(),
       lineSpacingMultiple: 1.5,
       slot: `parts.${i}.description`,
     });
@@ -594,20 +648,20 @@ function buildExecutiveSummary(slide: pptxgen.Slide, content: SlideInstance['con
   const rightW = 1640 - leftW - gap;
 
   addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, leftW, 400), {
-    fontFace: FONT_DISPLAY,
+    fontFace: FONT_DISPLAY(),
     size: 32,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
     slot: 'body',
   });
 
   const rightPadLeft = 66;
-  addLine(slide, rightX, bodyY, rightX, bodyY + 340, NEUTRAL_200, 1);
+  addLine(slide, rightX, bodyY, rightX, bodyY + 340, NEUTRAL_200(), 1);
   addEditorialLabel(slide, content.metricLabel ?? 'Variable Metric', rightX + rightPadLeft, bodyY + 100, { slot: 'metricLabel' });
   addText(slide, content.metricText ?? '00.0%', box(rightX + rightPadLeft, bodyY + 150, rightW - rightPadLeft, 140), {
     size: 56,
     bold: true,
-    color: NEUTRAL_900,
+    color: NEUTRAL_900(),
     lineSpacingMultiple: 1.1,
     slot: 'metricText',
   });
@@ -616,26 +670,26 @@ function buildExecutiveSummary(slide: pptxgen.Slide, content: SlideInstance['con
 async function buildSectionDivider(slide: pptxgen.Slide, content: SlideInstance['content'], num: string, logoUrl?: string, logoScale = 1) {
   await addLogo(slide, logoUrl, 80, 60, true, logoScale);
   addText(slide, content.hudLabel ?? 'Section Marker', box(1400, 60, 420, 30), {
-    fontFace: FONT_MONO,
+    fontFace: FONT_MONO(),
     size: 16,
-    color: WHITE,
+    color: WHITE(),
     transparency: 60,
     align: 'right',
     letterSpacingEm: 0.2,
     slot: 'hudLabel',
   });
 
-  addEditorialLabel(slide, content.eyebrow ?? 'Part 02', 150, 400, { color: EMERALD_400, slot: 'eyebrow' });
+  addEditorialLabel(slide, content.eyebrow ?? 'Part 02', 150, 400, { color: EMERALD_400(), slot: 'eyebrow' });
   addText(slide, content.heading ?? 'Section Title.', box(150, 463, 1620, 260), {
     size: 180,
     bold: true,
-    color: WHITE,
+    color: WHITE(),
     slot: 'heading',
   });
   addText(slide, content.subtitle ?? PLACEHOLDER, box(150, 730, 960, 100), {
-    fontFace: FONT_DISPLAY,
+    fontFace: FONT_DISPLAY(),
     size: 30,
-    color: WHITE,
+    color: WHITE(),
     transparency: 45,
     lineSpacingMultiple: 1.5,
     slot: 'subtitle',
@@ -648,7 +702,7 @@ const DEFAULT_ATTRIBUTES = ['Placeholder Attribute', 'Placeholder Attribute', 'P
 function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
   const attributes = content.leftAttributes?.length ? content.leftAttributes : DEFAULT_ATTRIBUTES;
   addHudTop(slide, content.hudLabel ?? 'Strategic Context', num, { label: 'hudLabel' });
-  addLine(slide, 960, 0, 960, 1080, NEUTRAL_200, 1);
+  addLine(slide, 960, 0, 960, 1080, NEUTRAL_200(), 1);
 
   addEditorialLabel(slide, content.leftLabel ?? 'Condition A', 140, 250, { slot: 'leftLabel' });
   addText(slide, content.leftHeading ?? 'Current State\nEnvironment.', box(140, 305, 700, 200), {
@@ -658,9 +712,9 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
     slot: 'leftHeading',
   });
   addText(slide, content.leftBody ?? PLACEHOLDER, box(140, 515, 700, 160), {
-    fontFace: FONT_DISPLAY,
+    fontFace: FONT_DISPLAY(),
     size: 32,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
     slot: 'leftBody',
   });
@@ -668,13 +722,13 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
     { text: `[${String(i + 1).padStart(2, '0')}] ${a}`, options: { breakLine: true, ...runOpts(`leftAttributes.${i}`) } },
   ]);
   addText(slide, attrRuns, box(140, 690, 700, 180), {
-    fontFace: FONT_MONO,
+    fontFace: FONT_MONO(),
     size: 20,
-    color: NEUTRAL_400,
+    color: NEUTRAL_400(),
     lineSpacingMultiple: 1.6,
   });
 
-  addRect(slide, box(960, 0, 960, 1080), NEUTRAL_50);
+  addRect(slide, box(960, 0, 960, 1080), NEUTRAL_50());
   addEditorialLabel(slide, content.rightLabel ?? 'Condition B', 1000, 250, { slot: 'rightLabel' });
   addText(slide, content.rightHeading ?? 'Strategic Pivot\nTarget State.', box(1000, 305, 780, 200), {
     size: 72,
@@ -683,9 +737,9 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
     slot: 'rightHeading',
   });
   addText(slide, content.rightBody ?? PLACEHOLDER, box(1000, 515, 780, 300), {
-    fontFace: FONT_DISPLAY,
+    fontFace: FONT_DISPLAY(),
     size: 32,
-    color: NEUTRAL_900,
+    color: NEUTRAL_900(),
     lineSpacingMultiple: 1.5,
     slot: 'rightBody',
   });
@@ -695,7 +749,7 @@ function buildDataMonument(slide: pptxgen.Slide, content: SlideInstance['content
   addEditorialLabel(slide, content.eyebrow ?? 'Performance Metric', 140, 260, { slot: 'eyebrow' });
   const runs: pptxgen.TextProps[] = [
     { text: content.value ?? '000.0', options: { ...runOpts('value') } },
-    { text: ` ${content.unit ?? 'M'}`, options: { color: EMERALD_500, fontSize: pt(420 * 0.3), ...runOpts('unit') } },
+    { text: ` ${content.unit ?? 'M'}`, options: { color: EMERALD_500(), fontSize: pt(420 * 0.3), ...runOpts('unit') } },
   ];
   addText(slide, runs, box(140, 305, 1600, 330), { size: 420, bold: true, lineSpacingMultiple: 0.8 });
   addText(slide, content.heading ?? 'Primary Performance Variable Title.', box(140, 630, 1600, 100), {
@@ -705,9 +759,9 @@ function buildDataMonument(slide: pptxgen.Slide, content: SlideInstance['content
     slot: 'heading',
   });
   addText(slide, content.body ?? PLACEHOLDER, box(140, 745, 800, 220), {
-    fontFace: FONT_DISPLAY,
+    fontFace: FONT_DISPLAY(),
     size: 32,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
     slot: 'body',
   });
@@ -738,15 +792,15 @@ function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['con
   const chartW = 1640;
   const gap = 20;
   const barW = (chartW - gap * (bars.length - 1)) / bars.length;
-  addLine(slide, chartX, chartBottom, chartX + chartW, chartBottom, NEUTRAL_900, 2);
+  addLine(slide, chartX, chartBottom, chartX + chartW, chartBottom, NEUTRAL_900(), 2);
   bars.forEach((b, i) => {
     const h = Math.max(4, (b.pct / 100) * chartH);
     const x = chartX + i * (barW + gap);
-    addRect(slide, box(x, chartBottom - h, barW, h), b.active ? EMERALD_500 : NEUTRAL_200);
+    addRect(slide, box(x, chartBottom - h, barW, h), b.active ? EMERALD_500() : NEUTRAL_200());
     addText(slide, b.label, box(x - 10, chartTop - 40, barW + 20, 30), {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       size: 14,
-      color: NEUTRAL_500,
+      color: NEUTRAL_500(),
       align: 'center',
       slot: `bars.${i}.label`,
     });
@@ -780,12 +834,12 @@ function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['con
   const headerRow: pptxgen.TableRow = headers.map((h) => ({
     text: h,
     options: {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       fontSize: pt(13),
-      color: NEUTRAL_500,
+      color: NEUTRAL_500(),
       bold: false,
       charSpacing: tracking(13, 0.12),
-      border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: NEUTRAL_900, pt: 1.5 }, { type: 'none' }],
+      border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: NEUTRAL_900(), pt: 1.5 }, { type: 'none' }],
       valign: 'bottom',
     },
   }));
@@ -797,20 +851,20 @@ function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['con
     { text: r.dim, options: {}, slot: `rows.${i}.dim` },
     { text: r.cur, options: {}, slot: `rows.${i}.cur` },
     { text: r.tgt, options: {}, slot: `rows.${i}.tgt` },
-    { text: r.delta, options: { color: EMERALD_600 }, slot: `rows.${i}.delta` },
+    { text: r.delta, options: { color: EMERALD_600() }, slot: `rows.${i}.delta` },
   ].map((c) => {
     const ov = styleFor(activeStyles, c.slot);
     return {
       text: c.text,
       options: {
-        fontFace: FONT_DISPLAY,
+        fontFace: FONT_DISPLAY(),
         fontSize: pt(ov?.sizePx ?? cellFont),
-        color: ov?.color ?? c.options.color ?? NEUTRAL_900,
+        color: ov?.color ?? c.options.color ?? NEUTRAL_900(),
         bold: ov?.bold,
         italic: ov?.italic,
         underline: ov?.underline ? { style: 'sng' as const } : undefined,
         align: ov?.align,
-        border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: NEUTRAL_200, pt: 0.75 }, { type: 'none' }],
+        border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', color: NEUTRAL_200(), pt: 0.75 }, { type: 'none' }],
         valign: 'top',
       },
     };
@@ -839,7 +893,7 @@ function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['con
   addText(slide, content.heading ?? 'Pathway to Execution.', box(140, 315, 1640, 100), { size: 100, bold: true, slot: 'heading' });
 
   const railY = 490;
-  addLine(slide, 140, railY, 1780, railY, NEUTRAL_200, 2);
+  addLine(slide, 140, railY, 1780, railY, NEUTRAL_200(), 2);
 
   const itemW = 320;
   const n = phases.length;
@@ -847,13 +901,13 @@ function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['con
   const spacing = n > 1 ? (totalW - itemW) / (n - 1) : 0;
   phases.forEach((p, i) => {
     const x = 140 + i * spacing;
-    addCircle(slide, box(x, railY - 10, 20, 20), p.completed ? EMERALD_500 : NEUTRAL_300);
+    addCircle(slide, box(x, railY - 10, 20, 20), p.completed ? EMERALD_500() : NEUTRAL_300());
     addEditorialLabel(slide, `Phase ${String(i + 1).padStart(2, '0')}`, x, railY + 42, { size: 12 });
     addText(slide, p.title, box(x, railY + 85, itemW, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05, slot: `phases.${i}.title` });
     addText(slide, p.description || PLACEHOLDER, box(x, railY + 140, itemW, 140), {
-      fontFace: FONT_DISPLAY,
+      fontFace: FONT_DISPLAY(),
       size: 18,
-      color: NEUTRAL_500,
+      color: NEUTRAL_500(),
       lineSpacingMultiple: 1.5,
       slot: `phases.${i}.description`,
     });
@@ -878,9 +932,9 @@ async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance[
   });
   const bodyY = 455 + headingH + 40;
   addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, headingW - 60, 260), {
-    fontFace: FONT_DISPLAY,
+    fontFace: FONT_DISPLAY(),
     size: 32,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
     slot: 'body',
   });
@@ -889,11 +943,11 @@ async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance[
   if (content.imageUrl) {
     addImageCover(slide, content.imageUrl, imgBox);
   } else {
-    addRect(slide, imgBox, NEUTRAL_100);
+    addRect(slide, imgBox, NEUTRAL_100());
     addText(slide, 'IMAGE ASSET PLACEHOLDER', imgBox, {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       size: 20,
-      color: NEUTRAL_400,
+      color: NEUTRAL_400(),
       align: 'center',
       valign: 'middle',
       letterSpacingEm: 0.12,
@@ -921,17 +975,17 @@ function buildProcessArchitecture(slide: pptxgen.Slide, content: SlideInstance['
     const yOffset = i * 40;
     const top = 495 + yOffset;
     const h = 420 - yOffset;
-    addRect(slide, box(x, top, colW, h), undefined, { color: i === 1 ? EMERALD_500 : NEUTRAL_200, widthPx: 1 });
+    addRect(slide, box(x, top, colW, h), undefined, { color: i === 1 ? EMERALD_500() : NEUTRAL_200(), widthPx: 1 });
     addText(slide, String(i + 1).padStart(2, '0'), box(x + 40, top + 30, colW - 80, 70), {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       size: 48,
-      color: EMERALD_500,
+      color: EMERALD_500(),
     });
     addText(slide, s.title, box(x + 40, top + 110, colW - 80, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05, slot: `steps.${i}.title` });
     addText(slide, s.description || PLACEHOLDER, box(x + 40, top + 170, colW - 80, h - 200), {
-      fontFace: FONT_DISPLAY,
+      fontFace: FONT_DISPLAY(),
       size: 18,
-      color: NEUTRAL_500,
+      color: NEUTRAL_500(),
       lineSpacingMultiple: 1.5,
       slot: `steps.${i}.description`,
     });
@@ -962,13 +1016,13 @@ async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['cont
     const mapBox = box(140, 305, leftW, 645);
     if (content.imageUrl) {
       addImageCover(slide, content.imageUrl, mapBox);
-      addRect(slide, mapBox, undefined, { color: NEUTRAL_200, widthPx: 1 });
+      addRect(slide, mapBox, undefined, { color: NEUTRAL_200(), widthPx: 1 });
     } else {
-      addRect(slide, mapBox, NEUTRAL_50, { color: NEUTRAL_200, widthPx: 1 });
+      addRect(slide, mapBox, NEUTRAL_50(), { color: NEUTRAL_200(), widthPx: 1 });
       addText(slide, 'GEOGRAPHIC VISUALISATION PLACEHOLDER', mapBox, {
-        fontFace: FONT_MONO,
+        fontFace: FONT_MONO(),
         size: 20,
-        color: NEUTRAL_400,
+        color: NEUTRAL_400(),
         align: 'center',
         valign: 'middle',
         letterSpacingEm: 0.12,
@@ -981,7 +1035,7 @@ async function buildGlobalMap(slide: pptxgen.Slide, content: SlideInstance['cont
   const startY = 160 + Math.max(0, (860 - totalH) / 2);
   sectors.forEach((s, i) => {
     const y = startY + i * blockH;
-    addLine(slide, rightX, y, rightX + rightW, y, NEUTRAL_200, 1);
+    addLine(slide, rightX, y, rightX + rightW, y, NEUTRAL_200(), 1);
     addEditorialLabel(slide, s.label, rightX, y + 30, { size: 10, slot: `sectors.${i}.label` });
     addText(slide, s.value, box(rightX, y + 68, rightW, 90), { size: 72, bold: true, slot: `sectors.${i}.value` });
   });
@@ -996,7 +1050,7 @@ async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['
   addText(slide, '“', box(195, 160, 300, 160), {
     size: 300,
     bold: true,
-    color: EMERALD_500,
+    color: EMERALD_500(),
     lineSpacingMultiple: 0.5,
   });
 
@@ -1024,13 +1078,13 @@ async function buildFeaturedQuote(slide: pptxgen.Slide, content: SlideInstance['
       rounding: true,
     });
   } else {
-    addCircle(slide, box(195, avatarY, 84, 84), NEUTRAL_200);
+    addCircle(slide, box(195, avatarY, 84, 84), NEUTRAL_200());
   }
   addText(slide, content.author ?? 'Author Name', box(304, avatarY + 6, 700, 50), { size: 27, bold: true, slot: 'author' });
   addText(slide, content.role ?? 'Author Title Placeholder', box(304, avatarY + 50, 700, 40), {
-    fontFace: FONT_MONO,
+    fontFace: FONT_MONO(),
     size: 18,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     slot: 'role',
   });
 }
@@ -1039,12 +1093,12 @@ const DEFAULT_CONTACTS = ['email@placeholder.com', '@social_handle', 'www.domain
 
 async function buildExit(slide: pptxgen.Slide, content: SlideInstance['content'], logoUrl?: string, logoScale = 1) {
   await addLogo(slide, logoUrl, 80, 60, true, logoScale);
-  addEditorialLabel(slide, content.eyebrow ?? 'Conclusion', 140, 360, { color: EMERALD_400, slot: 'eyebrow' });
-  addText(slide, content.heading ?? 'Thank You.', box(140, 415, 1600, 280), { size: 180, bold: true, color: WHITE, slot: 'heading' });
+  addEditorialLabel(slide, content.eyebrow ?? 'Conclusion', 140, 360, { color: EMERALD_400(), slot: 'eyebrow' });
+  addText(slide, content.heading ?? 'Thank You.', box(140, 415, 1600, 280), { size: 180, bold: true, color: WHITE(), slot: 'heading' });
   addText(slide, content.body ?? PLACEHOLDER, box(140, 700, 800, 200), {
-    fontFace: FONT_DISPLAY,
+    fontFace: FONT_DISPLAY(),
     size: 32,
-    color: 'CCCCCC',
+    color: INK_DIM_ON_DARK(),
     transparency: 50,
     lineSpacingMultiple: 1.5,
     slot: 'body',
@@ -1054,7 +1108,7 @@ async function buildExit(slide: pptxgen.Slide, content: SlideInstance['content']
   const runs: pptxgen.TextProps[] = contacts.flatMap((c, i) => [
     { text: c + (i < contacts.length - 1 ? '   ' : ''), options: { ...runOpts(`contacts.${i}`) } },
   ]);
-  addText(slide, runs, box(140, 920, 1600, 40), { fontFace: FONT_MONO, size: 16, color: EMERALD_400 });
+  addText(slide, runs, box(140, 920, 1600, 40), { fontFace: FONT_MONO(), size: 16, color: EMERALD_400() });
 }
 
 async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'], num: string) {
@@ -1064,23 +1118,23 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
     if (content.imageUrl) {
       addImageCover(slide, content.imageUrl, box(0, 0, 1920, 1080));
     } else {
-      addRect(slide, box(0, 0, 1920, 1080), NEUTRAL_100);
+      addRect(slide, box(0, 0, 1920, 1080), NEUTRAL_100());
     }
-    addRect(slide, box(0, 540, 1920, 540), BLACK, undefined, 30);
+    addRect(slide, box(0, 540, 1920, 540), BLACK(), undefined, 30);
     addText(slide, (content.hudLabel ?? 'Custom Slide').toUpperCase(), box(80, 55, 800, 30), {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       size: 12,
-      color: WHITE,
+      color: WHITE(),
       letterSpacingEm: 0.12,
       slot: 'hudLabel',
     });
-    addText(slide, num, box(1040, 55, 800, 30), { fontFace: FONT_MONO, size: 12, color: WHITE, align: 'right' });
-    addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 780, { color: EMERALD_400, slot: 'eyebrow' });
-    addText(slide, content.heading ?? 'Blank Slide.', box(140, 835, 1600, 110), { size: 72, bold: true, color: WHITE, slot: 'heading' });
+    addText(slide, num, box(1040, 55, 800, 30), { fontFace: FONT_MONO(), size: 12, color: WHITE(), align: 'right' });
+    addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 780, { color: EMERALD_400(), slot: 'eyebrow' });
+    addText(slide, content.heading ?? 'Blank Slide.', box(140, 835, 1600, 110), { size: 72, bold: true, color: WHITE(), slot: 'heading' });
     addText(slide, content.body ?? 'Click to add your content…', box(140, 955, 1200, 100), {
-      fontFace: FONT_DISPLAY,
+      fontFace: FONT_DISPLAY(),
       size: 28,
-      color: 'DDDDDD',
+      color: INK_HEADING_ON_DARK(),
       lineSpacingMultiple: 1.5,
       slot: 'body',
     });
@@ -1092,9 +1146,9 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
     addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200, { slot: 'eyebrow' });
     addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 780, 180), { size: 64, bold: true, lineSpacingMultiple: 0.95, slot: 'heading' });
     addText(slide, content.body ?? 'Click to add your content…', box(140, 460, 780, 400), {
-      fontFace: FONT_DISPLAY,
+      fontFace: FONT_DISPLAY(),
       size: 28,
-      color: NEUTRAL_500,
+      color: NEUTRAL_500(),
       lineSpacingMultiple: 1.5,
       slot: 'body',
     });
@@ -1109,17 +1163,17 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
   addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200, { slot: 'eyebrow' });
   addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 1640, 130), { size: 88, bold: true, slot: 'heading' });
   addText(slide, content.body ?? 'Click to add your content…', box(140, 400, 1200, 200), {
-    fontFace: FONT_DISPLAY,
+    fontFace: FONT_DISPLAY(),
     size: 28,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
     slot: 'body',
   });
   addText(slide, content.secondHeading ?? 'Second Section.', box(140, 620, 1640, 80), { size: 40, bold: true, slot: 'secondHeading' });
   addText(slide, content.secondBody ?? 'Click to add more content…', box(140, 710, 1200, 200), {
-    fontFace: FONT_DISPLAY,
+    fontFace: FONT_DISPLAY(),
     size: 28,
-    color: NEUTRAL_500,
+    color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
     slot: 'secondBody',
   });
@@ -1148,12 +1202,12 @@ async function buildImported(slide: pptxgen.Slide, content: SlideInstance['conte
         text: (cell.paragraphs ?? []).flatMap((p) => p.runs.map((r) => r.text)).join(' '),
         options: {
           fill: cell.fill ? { color: cell.fill } : undefined,
-          fontFace: cell.paragraphs?.[0]?.runs[0]?.font ?? FONT_DISPLAY,
+          fontFace: cell.paragraphs?.[0]?.runs[0]?.font ?? FONT_DISPLAY(),
           fontSize: pt(cell.paragraphs?.[0]?.runs[0]?.sizePx ?? 16),
           bold: cell.paragraphs?.[0]?.runs[0]?.bold,
-          color: cell.paragraphs?.[0]?.runs[0]?.color ?? NEUTRAL_900,
+          color: cell.paragraphs?.[0]?.runs[0]?.color ?? NEUTRAL_900(),
           align: cell.paragraphs?.[0]?.align ?? 'left',
-          border: { type: 'solid', color: 'D9D9D9', pt: 0.75 },
+          border: { type: 'solid', color: RULE_TABLE(), pt: 0.75 },
         },
       })));
       slide.addTable(rows, { ...b, colW: colW.length ? colW : undefined, autoPage: false });
@@ -1163,7 +1217,7 @@ async function buildImported(slide: pptxgen.Slide, content: SlideInstance['conte
     if (sh.fill || sh.line) {
       const line = sh.line ? { color: sh.line.color, widthPx: sh.line.widthPx } : undefined;
       if (sh.kind === 'ellipse') {
-        addCircle(slide, b, sh.fill ?? WHITE, line);
+        addCircle(slide, b, sh.fill ?? WHITE(), line);
       } else {
         addRect(slide, b, sh.fill, line);
       }
@@ -1183,12 +1237,12 @@ async function buildImported(slide: pptxgen.Slide, content: SlideInstance['conte
           text: run.text,
           options: {
             ...(pi > 0 && ri === 0 ? { breakLine: true } : {}),
-            fontFace: run.font ?? FONT_DISPLAY,
+            fontFace: run.font ?? FONT_DISPLAY(),
             fontSize: pt(run.sizePx ?? 18),
             bold: run.bold,
             italic: run.italic,
             underline: run.underline ? { style: 'sng' } : undefined,
-            color: run.color ?? NEUTRAL_900,
+            color: run.color ?? NEUTRAL_900(),
             align: para.align ?? 'left',
           },
         });
@@ -1244,7 +1298,7 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
         bold: s.style?.bold,
         italic: s.style?.italic,
         underline: s.style?.underline,
-        color: s.style?.color ?? NEUTRAL_900,
+        color: s.style?.color ?? NEUTRAL_900(),
         align: s.style?.align ?? 'left',
         valign: s.vAlign ?? 'top',
         lineSpacingMultiple: 1.3,
@@ -1258,14 +1312,14 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
         text: cell.text ?? '',
         options: {
           fill: cell.fill ? { color: cell.fill } : undefined,
-          fontFace: cell.style?.fontFamily ?? FONT_DISPLAY,
+          fontFace: cell.style?.fontFamily ?? FONT_DISPLAY(),
           fontSize: pt(cell.style?.sizePx ?? 16),
           bold: cell.style?.bold,
           italic: cell.style?.italic,
           underline: cell.style?.underline ? { style: 'sng' } : undefined,
-          color: cell.style?.color ?? NEUTRAL_900,
+          color: cell.style?.color ?? NEUTRAL_900(),
           align: cell.style?.align ?? 'left',
-          border: { type: 'solid', color: 'D9D9D9', pt: 0.75 },
+          border: { type: 'solid', color: RULE_TABLE(), pt: 0.75 },
         },
       })));
       slide.addTable(rows, { ...b, colW: colW.length ? colW : undefined, autoPage: false });
@@ -1343,7 +1397,7 @@ async function buildSlideBody(
   if (instance.notes?.trim()) slide.addNotes(instance.notes);
 
   if (instance.templateId === 'imported') {
-    const base = (c.importedBase ?? 'FFFFFF').replace('#', '').toUpperCase();
+    const base = (c.importedBase ?? WHITE()).replace('#', '').toUpperCase();
     const lum = (0.2126 * parseInt(base.slice(0, 2), 16)
       + 0.7152 * parseInt(base.slice(2, 4), 16)
       + 0.0722 * parseInt(base.slice(4, 6), 16)) / 255;
@@ -1355,9 +1409,9 @@ async function buildSlideBody(
     });
   } else if (instance.templateId === 'blank') {
     const layout = c.blankLayout ?? 'standard';
-    applyBackground(slide, layout === 'full-bleed' ? { base: WHITE } : { base: WHITE, grid: true });
+    applyBackground(slide, layout === 'full-bleed' ? { base: WHITE() } : { base: WHITE(), grid: true });
   } else {
-    applyBackground(slide, DECOR[instance.templateId] ?? { base: WHITE });
+    applyBackground(slide, decorFor(instance.templateId));
   }
 
   // Behind-shapes first, so the template's own content paints over them.
@@ -1421,15 +1475,15 @@ async function buildSlideBody(
 
   if (pageLabel && !c.hideFooter) {
     addText(slide, instance.title, box(64, 1032, 700, 24), {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       size: 16,
-      color: NEUTRAL_400,
+      color: NEUTRAL_400(),
       letterSpacingEm: 0.04,
     });
     addText(slide, pageLabel, box(1156, 1032, 700, 24), {
-      fontFace: FONT_MONO,
+      fontFace: FONT_MONO(),
       size: 16,
-      color: NEUTRAL_400,
+      color: NEUTRAL_400(),
       align: 'right',
       letterSpacingEm: 0.04,
     });

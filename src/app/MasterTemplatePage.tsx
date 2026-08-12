@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { GeneratorSidebar } from '../features/generator/GeneratorSidebar';
 import { PresentationCanvas, slideIsDark } from '../features/generator/PresentationCanvas';
 import { fontLabel, slotLabel } from '../features/formatting/labels';
 import { patchOffset, patchStyles, shiftOffsets } from '../features/formatting/resolve';
 import { sameSelection, shapeIdsOf, slotsOf, toggleShape, toggleSlot, type Selection } from '../features/formatting/selection';
 import { alignDelta, measureGroup, type GroupAlign } from '../features/formatting/group';
-import { ReviewModal } from '../features/generator/ReviewModal';
+import { ExportSheet } from '../features/generator/ExportSheet';
+import { SlideSorter } from '../features/generator/SlideSorter';
 import { PresentMode } from '../features/generator/PresentMode';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
 import { StudioHeader } from '../features/generator/StudioHeader';
@@ -18,6 +19,16 @@ import { EditToolbar } from '../features/formatting/EditToolbar';
 import { StageRail } from '../features/formatting/StageRail';
 import { NotesPanel } from '../features/formatting/NotesPanel';
 import { ChartDataEditor } from '../features/formatting/ChartDataEditor';
+import { themeById } from '../features/theme/deckTheme';
+import { BrandKitModal } from '../features/theme/BrandKitModal';
+import {
+  brandKitThemes,
+  createBrandKit,
+  deleteBrandKit,
+  listBrandKits,
+  updateBrandKit,
+  type BrandKit,
+} from '../features/theme/brandKitStore';
 import {
   createOverlayShape,
   moveLayer,
@@ -223,6 +234,17 @@ export function MasterTemplatePage() {
 
   // Review & Present overlays.
   const [reviewOpen, setReviewOpen] = useState(false);
+  /** The slide sorter - the whole deck at once, for reordering and bulk edits. */
+  const [sorterOpen, setSorterOpen] = useState(false);
+  const [brandKitOpen, setBrandKitOpen] = useState(false);
+  /** Saved client brand kits, mirrored in React state so the canvas repaints the
+   *  moment one is edited rather than on the next reload. */
+  const [brandKits, setBrandKits] = useState<BrandKit[]>(() => listBrandKits());
+  /** The deck's name. The one place it is resolved: the header shows it, the
+   *  export sheet titles itself with it, and it is the export filename - which
+   *  used to be derived from the first slide's heading, so every untouched deck
+   *  downloaded as `cover.pptx`. */
+  const projectName = projects.find((p) => p.id === activeId)?.name ?? 'Untitled deck';
   const [presentOpen, setPresentOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
@@ -1034,7 +1056,7 @@ export function MasterTemplatePage() {
       setSwitchTargetId(null);
       // The old selection may point at a slot the new template doesn't render.
       setSelection(null);
-      showToast('Layout changed. Nothing was deleted — parked content returns if you switch back.', 'success');
+      showToast('Layout changed. Nothing was deleted: parked content returns if you switch back.', 'success');
     },
     [switchTargetId, mutateDeck, showToast]
   );
@@ -1168,18 +1190,71 @@ export function MasterTemplatePage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [timeTravel]);
 
-  // "?" opens the keyboard shortcuts overlay, unless the user is typing somewhere.
+  // "?" opens the keyboard shortcuts overlay and "G" the slide sorter, unless
+  // the user is typing somewhere. Both are guarded on the same "is this a text
+  // field" check, since a bare letter key is only a shortcut outside one.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '?') return;
+      if (e.key !== '?' && e.key.toLowerCase() !== 'g') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       if (el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
       e.preventDefault();
-      setShortcutsOpen((v) => !v);
+      if (e.key === '?') setShortcutsOpen((v) => !v);
+      // Present mode owns 'G' for its own jump-to-slide grid while it is up.
+      else if (!presentOpen) setSorterOpen((v) => !v);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, [presentOpen]);
+
+  // ── Brand kits ──────────────────────────────────────────────────────────
+  /**
+   * The deck's theme, resolved in exactly one place and handed down.
+   *
+   * Every renderer used to look this up itself from `deck.themeId`, which was
+   * fine while the only themes were the built-in ones. Client kits are user data
+   * living in this component's state, so a lookup further down the tree could not
+   * see them - and a stale kit in a thumbnail is precisely the canvas/export
+   * disagreement the theme work exists to prevent.
+   */
+  const deckTheme = useMemo(
+    () => themeById(displayDeck.themeId, brandKitThemes(brandKits)),
+    [displayDeck.themeId, brandKits]
+  );
+
+  /** Put the deck on a theme. `undefined` means the house look, which is also
+   *  what an absent `themeId` has always meant, so this clears rather than
+   *  storing a redundant 'wozku'. */
+  const handleApplyTheme = useCallback(
+    (themeId: string | undefined) => {
+      mutateDeck((prev) => (prev.themeId === themeId ? prev : { ...prev, themeId }));
+    },
+    [mutateDeck]
+  );
+
+  const handleCreateKit = useCallback((name: string, accent: string) => {
+    const kit = createBrandKit(name, accent);
+    setBrandKits(listBrandKits());
+    // Adopt it immediately: creating a kit inside a deck is how you say "this
+    // deck is for this client", and making them then pick it from the list would
+    // be asking the same question twice.
+    mutateDeck((prev) => ({ ...prev, themeId: kit.id }));
+  }, [mutateDeck]);
+
+  const handleUpdateKit = useCallback((id: string, patch: { name?: string; accent?: string }) => {
+    updateBrandKit(id, patch);
+    setBrandKits(listBrandKits());
   }, []);
+
+  const handleDeleteKit = useCallback((id: string) => {
+    deleteBrandKit(id);
+    setBrandKits(listBrandKits());
+    // A deck pointing at the deleted kit is dropped back to the house look here
+    // rather than left holding a dangling id. `themeById` already falls back, so
+    // this is about the stored deck being honest, not about the render.
+    mutateDeck((prev) => (prev.themeId === id ? { ...prev, themeId: undefined } : prev));
+  }, [mutateDeck]);
 
   /** Add a blank slide at `index` (default: the end of the deck). The rail picks
    *  the index from its scroll position, so the new slide appears where the user
@@ -1294,13 +1369,15 @@ export function MasterTemplatePage() {
         onInsertAfter={handleInsertAfter}
         currentId={currentSlideId}
         onNavigate={setCurrentSlideId}
+        theme={deckTheme}
+        onOpenBrandKit={() => setBrandKitOpen(true)}
       />
 
       {/* One floating frosted header carries identity, mode and actions.
           This replaced an Edit/Reset/Undo cluster measured onto the slide's
           left edge plus a detached Present button in the opposite corner. */}
       <StudioHeader
-        projectName={projects.find((p) => p.id === activeId)?.name ?? 'Untitled deck'}
+        projectName={projectName}
         onRenameProject={(name) => handleRenameDeck(activeId, name)}
         mode={editing ? 'edit' : 'view'}
         presenting={presentOpen}
@@ -1330,6 +1407,7 @@ export function MasterTemplatePage() {
       <PresentationCanvas
         ast={ast}
         deck={displayDeck}
+        theme={deckTheme}
         editing={editing}
         onEditSlide={handleEditSlide}
         onLogoChange={(v) => mutateDeck((d) => ({ ...d, logoUrl: v }))}
@@ -1452,28 +1530,52 @@ export function MasterTemplatePage() {
         onConfirm={handleConfirmSwitch}
         ast={ast}
         logoUrl={displayDeck.logoUrl}
+        theme={deckTheme}
       />
 
-      <ReviewModal
+      {/* Export and deck organization used to be one modal doing both jobs
+          (plus source QA, plus a share link that shared nothing). Two screens,
+          one job each. */}
+      <ExportSheet
         open={reviewOpen}
         onClose={() => setReviewOpen(false)}
         deck={displayDeck}
         ast={ast}
-        onPresent={() => { setReviewOpen(false); setPresentOpen(true); }}
+        projectName={projectName}
+        onOpenSorter={() => setSorterOpen(true)}
+        theme={deckTheme}
+      />
+      <SlideSorter
+        open={sorterOpen}
+        onClose={() => setSorterOpen(false)}
+        deck={displayDeck}
+        ast={ast}
+        projectName={projectName}
         onReorder={handleReorder}
-        onToggleHidden={handleToggleHidden}
         onBulkSetHidden={handleBulkSetHidden}
         onBulkDelete={handleBulkDelete}
-        onJumpTo={(instanceId) => {
-          setReviewOpen(false);
-          setCurrentSlideId(instanceId);
-        }}
+        onDuplicate={handleDuplicate}
+        onJumpTo={setCurrentSlideId}
+        theme={deckTheme}
       />
       <PresentMode
         open={presentOpen}
         onClose={() => setPresentOpen(false)}
         deck={displayDeck}
         ast={ast}
+        theme={deckTheme}
+      />
+      <BrandKitModal
+        open={brandKitOpen}
+        onClose={() => setBrandKitOpen(false)}
+        deck={displayDeck}
+        ast={ast}
+        kits={brandKits}
+        activeThemeId={displayDeck.themeId}
+        onApply={handleApplyTheme}
+        onCreateKit={handleCreateKit}
+        onUpdateKit={handleUpdateKit}
+        onDeleteKit={handleDeleteKit}
       />
       <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>

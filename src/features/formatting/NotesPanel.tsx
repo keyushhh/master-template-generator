@@ -104,7 +104,7 @@ export function NotesPanel({ slideTitle, notes, onChange, onClose }: NotesPanelP
           // Esc closes; the panel is not a dialog and Enter must stay a newline.
           if (e.key === 'Escape') { e.preventDefault(); commit(); onClose(); }
         }}
-        placeholder="What you'll say on this slide. Goes to PowerPoint's notes pane and Present mode — never onto the slide itself."
+        placeholder="What you'll say on this slide. Goes to PowerPoint's notes pane and Present mode, never onto the slide itself."
         rows={7}
         style={{
           width: '100%', resize: 'vertical', padding: 12,

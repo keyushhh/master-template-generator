@@ -4,6 +4,7 @@ import type { SlideInstance } from '../deck/types';
 import type { DocumentNode } from '../business-record/parser/ast';
 import { SlideStage } from './PresentationCanvas';
 import { CopyIcon, CreateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, GripIcon, LayersIcon, TrashIcon } from '../ui/icons';
+import type { DeckTheme } from '../theme/deckTheme';
 
 interface SlideNavListProps {
   slides: SlideInstance[];
@@ -12,6 +13,8 @@ interface SlideNavListProps {
   ast: DocumentNode | null;
   /** Deck-level client logo, for the same reason. */
   logoUrl?: string;
+  /** The deck's theme, so a rail thumbnail matches the stage. */
+  theme?: DeckTheme;
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
   /** Open the layout switcher for this slide. */
@@ -44,11 +47,13 @@ const SlideThumb = memo(function SlideThumb({
   ast,
   num,
   logoUrl,
+  theme,
 }: {
   slide: SlideInstance;
   ast: DocumentNode | null;
   num: string;
   logoUrl?: string;
+  theme?: DeckTheme;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Seeded near the real value so the first paint is already about right and
@@ -70,7 +75,7 @@ const SlideThumb = memo(function SlideThumb({
 
   return (
     <div ref={ref} className="w-full h-full">
-      <SlideStage slide={slide} ast={ast} num={num} scale={scale} logoUrl={logoUrl} />
+      <SlideStage slide={slide} ast={ast} num={num} scale={scale} logoUrl={logoUrl} theme={theme} />
     </div>
   );
 });
@@ -105,7 +110,7 @@ function MenuRow({ label, icon, onClick, danger }: { label: string; icon: React.
 }
 
 /**
- * Instant custom tooltip — replaces the native `title` attr which has a
+ * Instant custom tooltip, replacing the native `title` attr which has a
  * ~500ms OS delay. Black sharp box, white mono text, appears above the target.
  */
 /**
@@ -200,7 +205,7 @@ function CardAction({
   );
 }
 
-export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate, onChangeLayout, onDelete, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
+export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDuplicate, onChangeLayout, onDelete, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
   // Double-click-to-rename state: which row is being renamed + its draft text.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -358,6 +363,7 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
                             ast={ast}
                             num={numbering.get(slide.instanceId) ?? '--'}
                             logoUrl={logoUrl}
+                            theme={theme}
                           />
                         </div>
 

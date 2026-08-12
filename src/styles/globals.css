@@ -68,3 +68,51 @@
    stage; the scrollbar itself would be chrome-on-chrome noise. */
 .wg-doc [data-edit-toolbar]::-webkit-scrollbar { height: 0; }
 .wg-doc [data-edit-toolbar] { scrollbar-width: none; }
+
+/* ---------------------------------------------------------------------------
+   Deck library
+   ---------------------------------------------------------------------------
+   The library carries the cover template's ambient accent glow, and nothing else.
+
+   It also had the slides' 120px hairline grid, on the theory that the chrome
+   should be made of the same material as the work. In practice the grid competed
+   with the thing it was framing: every deck cover on the page is itself a white
+   rectangle full of hairlines, so the page read as ruled paper with more ruled
+   paper on top, and the covers stopped reading as objects. The glow does the same
+   job (this is part of the deck system) without arguing with the content. */
+.wg-library {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--stage-bg);
+  overflow: hidden;
+}
+
+.wg-library::after {
+  content: "";
+  position: absolute;
+  top: -340px;
+  right: -260px;
+  width: 1100px;
+  height: 1100px;
+  z-index: -1;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.14) 0%, transparent 68%);
+  pointer-events: none;
+}
+
+/* The hero's cover sits on a real drop shadow rather than a hairline: at this
+   size the deck should read as an object on a desk. */
+.wg-hero-cover {
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 20, 0.10),
+    0 2px 6px rgba(15, 23, 20, 0.05),
+    0 24px 60px -18px rgba(15, 23, 20, 0.30);
+  transition: box-shadow 0.25s cubic-bezier(0.2, 0.8, 0.25, 1), transform 0.25s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+.wg-hero-cover:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 20, 0.14),
+    0 2px 8px rgba(15, 23, 20, 0.06),
+    0 32px 74px -18px rgba(15, 23, 20, 0.36);
+}
+

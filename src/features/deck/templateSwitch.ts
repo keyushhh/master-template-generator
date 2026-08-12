@@ -181,7 +181,7 @@ export function planSwitch(slide: SlideInstance, to: SlideTemplateId): SwitchPla
     converts.push(`${counted(n, fromList)} → ${counted(shown, toList)}`);
     if (cap && n > cap) {
       const label = templateTitle(to) ?? to;
-      cappedNote = `${label} shows only ${cap} items — the remaining ${n - cap} stay stored and reappear if you switch back.`;
+      cappedNote = `${label} shows only ${cap} items. The remaining ${n - cap} stay stored and reappear if you switch back.`;
     }
   } else if (toList && has(c, toList)) {
     carries.push(name(toList));

@@ -2,9 +2,10 @@ import html2canvas from 'html2canvas';
 import pptxgen from 'pptxgenjs';
 import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
-import { addNativeSlide } from './pptxNative';
+import { addNativeSlide, clearExportTheme, setExportTheme } from './pptxNative';
 import { embedPptxFonts } from './pptxFontEmbed';
 import type { SlideInstance } from '../deck/types';
+import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 
 /**
  * html2canvas's CSS parser doesn't understand `color-mix()` (or the `color()`
@@ -159,7 +160,10 @@ export async function exportToPPTX(
   logoUrl: string | undefined,
   onProgress?: (current: number, total: number) => void,
   /** Deck-level logo size multiplier, so a resized logo exports resized. */
-  logoScale = 1
+  logoScale = 1,
+  /** The deck's resolved theme. Absent means Wozku's own, which is what every
+   *  deck saved before themes existed resolves to. */
+  theme: DeckTheme = WOZKU_THEME
 ) {
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
@@ -167,11 +171,20 @@ export async function exportToPPTX(
   const total = slides.length;
   if (total === 0) return;
 
-  for (let i = 0; i < total; i++) {
-    onProgress?.(i, total);
-    const num = String(i + 1).padStart(2, '0');
-    const slide = pptx.addSlide();
-    await addNativeSlide(slide, slides[i], num, logoUrl, `${i + 1} / ${total}`, logoScale);
+  // The exporter reads its palette from module state (see pptxNative's note on
+  // why), so the deck's theme is installed for the duration of this export and
+  // released in `finally` - otherwise a throw part-way through would leave one
+  // client's colours applied to whatever gets exported next.
+  setExportTheme(theme);
+  try {
+    for (let i = 0; i < total; i++) {
+      onProgress?.(i, total);
+      const num = String(i + 1).padStart(2, '0');
+      const slide = pptx.addSlide();
+      await addNativeSlide(slide, slides[i], num, logoUrl, `${i + 1} / ${total}`, logoScale);
+    }
+  } finally {
+    clearExportTheme();
   }
 
   onProgress?.(total, total);

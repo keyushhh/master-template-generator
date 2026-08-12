@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:pptx": "node scripts/pptx-theme-check.mjs",
+    "snapshot:pptx": "node scripts/pptx-snapshot.mjs",
+    "test:brand": "node scripts/brand-kit-check.mjs",
+    "test": "node scripts/pptx-theme-check.mjs && node scripts/brand-kit-check.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

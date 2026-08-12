@@ -8,6 +8,7 @@ import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
 import { ShapeOverlay } from '../formatting/ShapeOverlay';
 import { createOverlayShape, overlayOf, withOverlay } from '../formatting/overlayModel';
 import { TrashIcon } from '../ui/icons';
+import { css as themeCss, themeCssVars, WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 
 /** Overlay shapes actually shown for this slide right now - everything, minus
  *  any shape pinned to a different 'blank' layout than the one in effect
@@ -21,6 +22,9 @@ function visibleOverlay(content: SlideContent): OverlayShape[] {
 interface PresentationCanvasProps {
   ast: DocumentNode | null;
   deck: Deck;
+  /** The deck's resolved theme. Resolved by the page rather than looked up here,
+   *  because client brand kits are user data the page owns. */
+  theme?: DeckTheme;
   /** Edit mode: text slots become contentEditable and commit via onEditSlide. */
   editing: boolean;
   onEditSlide: (instanceId: string, updater: (content: SlideContent) => SlideContent) => void;
@@ -1017,7 +1021,7 @@ function ScaleHandle({
   );
 }
 
-/** Client logo slot — deck-level `logoUrl` (seeded from the Business Record's
+/** Client logo slot. Deck-level `logoUrl` (seeded from the Business Record's
  *  optional `logo` frontmatter). In edit mode the slot becomes click-to-upload
  *  with a remove control, so users can set the brand logo without a URL. */
 function Logo({
@@ -3487,12 +3491,16 @@ export function SlideStage({
   num,
   scale,
   logoUrl,
+  /** The deck's theme. Defaults to Wozku's, so a caller that has no deck in
+   *  scope still renders the house look rather than an unstyled slide. */
+  theme = WOZKU_THEME,
 }: {
   slide: SlideInstance;
   ast: DocumentNode | null;
   num: string;
   scale: number;
   logoUrl?: string;
+  theme?: DeckTheme;
 }) {
   const Renderer = SLIDE_RENDERERS[slide.templateId];
   const isDark = slideIsDark(slide);
@@ -3501,6 +3509,11 @@ export function SlideStage({
       <div
         className="wg-doc"
         style={{
+          // The theme's custom properties are scoped to the slide's own root, so
+          // the ~150 var(--emerald-500) / var(--neutral-200) references inside the
+          // template renderers resolve from the deck's theme while the studio
+          // chrome around the slide keeps its own tone.
+          ...themeCssVars(theme),
           width: 1920,
           height: 1080,
           transform: `scale(${scale})`,
@@ -3508,8 +3521,8 @@ export function SlideStage({
           position: 'relative',
           overflow: 'hidden',
           padding: 0,
-          background: isDark ? '#000000' : 'var(--pure-white)',
-          color: isDark ? '#ffffff' : 'var(--neutral-900)',
+          background: isDark ? themeCss(theme.surface.dark) : themeCss(theme.surface.light),
+          color: isDark ? themeCss(theme.ink.onDark) : themeCss(theme.ink.onLight),
         }}
       >
         {Renderer && <Renderer ast={ast} content={slide.content} num={num} editing={false} onEdit={() => { }} logoUrl={logoUrl} />}
@@ -3538,7 +3551,7 @@ export function SlideStage({
 export function PresentationCanvas({
   ast, deck, editing, onEditSlide, onLogoChange, onLogoScaleChange, onRequestEdit,
   selection, onSelect, onDeselect, onActiveSlideChange, onRenameSlide, revision,
-  currentId, onNavigate,
+  currentId, onNavigate, theme = WOZKU_THEME,
 }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(0.5);
@@ -3653,6 +3666,8 @@ export function PresentationCanvas({
             className="page"
             onPointerDown={() => { if (editing) onActiveSlideChange?.(slide.instanceId); }}
             style={{
+              // Same scoping as SlideStage: the deck's theme, on the slide root.
+              ...themeCssVars(theme),
               width: SLIDE_W,
               height: 1080,
               position: 'absolute',
@@ -3665,8 +3680,8 @@ export function PresentationCanvas({
               transform: `translate(-50%, -50%) scale(${scale})`,
               transformOrigin: 'center center',
               overflow: 'hidden',
-              background: isDark ? '#000000' : 'var(--pure-white)',
-              color: isDark ? '#ffffff' : 'var(--neutral-900)',
+              background: isDark ? themeCss(theme.surface.dark) : themeCss(theme.surface.light),
+              color: isDark ? themeCss(theme.ink.onDark) : themeCss(theme.ink.onLight),
               boxShadow: isDark
                 ? 'var(--shadow-stage)'
                 : 'var(--shadow-stage), inset 0 0 0 1px rgba(0,0,0,0.06)',

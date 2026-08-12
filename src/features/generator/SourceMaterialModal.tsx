@@ -271,7 +271,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
           {tab === 'samples' && (
             <div className="flex flex-col gap-3">
               <p className="text-[12.5px] text-neutral-600 leading-relaxed">
-                Start from a ready-made deck instead of a blank page. Loading one builds the deck immediately — then edit anything.
+                Start from a ready-made deck instead of a blank page. Loading one builds the deck immediately, then edit anything.
               </p>
               <div className="flex flex-col gap-2.5">
                 {SAMPLE_DECKS.map((s) => (

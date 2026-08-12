@@ -388,3 +388,68 @@ export function EyedropIcon({ size = 14 }: IconProps) {
     </Ion>
   );
 }
+
+/** ionicons: help-circle-outline */
+export function HelpIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M256 80a176 176 0 1 0 176 176A176 176 0 0 0 256 80Z" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <path d="M200 202.29s.84-17.5 19.57-32.57C230.68 160.77 244 158.18 256 158c10.93-.14 20.69 1.67 26.53 4.45 10 4.76 29.47 16.38 29.47 41.09 0 26-17 37.81-36.37 50.8S251 281.43 251 296" fill="none" stroke="currentColor" strokeLinecap="round" strokeMiterlimit="10" strokeWidth="28px"/>
+      <circle cx="250" cy="348" r="20" fill="currentColor"/>
+    </Ion>
+  );
+}
+
+/** ionicons: search-outline */
+export function SearchIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M221.09 64a157.09 157.09 0 1 0 157.09 157.09A157.1 157.1 0 0 0 221.09 64Z" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <path d="M338.29 338.29 448 448" fill="none" stroke="currentColor" strokeLinecap="round" strokeMiterlimit="10" strokeWidth="32px"/>
+    </Ion>
+  );
+}
+
+/** ionicons: sparkles-outline */
+export function SparklesIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M259.92 262.91 216.4 149.77a9 9 0 0 0-16.8 0l-43.52 113.14a9 9 0 0 1-5.17 5.17L37.77 311.6a9 9 0 0 0 0 16.8l113.14 43.52a9 9 0 0 1 5.17 5.17L199.6 490.23a9 9 0 0 0 16.8 0l43.52-113.14a9 9 0 0 1 5.17-5.17l113.14-43.52a9 9 0 0 0 0-16.8l-113.14-43.52a9 9 0 0 1-5.17-5.17ZM108 68.4 88.85 61.05a2.72 2.72 0 0 1-1.55-1.55L79.95 40.35a2.7 2.7 0 0 0-5.04 0L67.55 59.5A2.72 2.72 0 0 1 66 61.05L46.85 68.4a2.7 2.7 0 0 0 0 5.04L66 80.79a2.72 2.72 0 0 1 1.55 1.55l7.36 19.15a2.7 2.7 0 0 0 5.04 0l7.35-19.15a2.72 2.72 0 0 1 1.55-1.55l19.15-7.35a2.7 2.7 0 0 0 0-5.04ZM399.36 152.55 372.28 142.15a3.85 3.85 0 0 1-2.19-2.19l-10.4-27.08a3.82 3.82 0 0 0-7.13 0l-10.4 27.08a3.85 3.85 0 0 1-2.19 2.19l-27.08 10.4a3.82 3.82 0 0 0 0 7.13l27.08 10.4a3.85 3.85 0 0 1 2.19 2.19l10.4 27.08a3.82 3.82 0 0 0 7.13 0l10.4-27.08a3.85 3.85 0 0 1 2.19-2.19l27.08-10.4a3.82 3.82 0 0 0 0-7.13Z" fill="currentColor"/>
+    </Ion>
+  );
+}
+
+/** ionicons: keypad-outline, used as the keyboard-shortcut mark */
+export function KeyboardIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <circle cx="256" cy="256" r="26" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <circle cx="256" cy="152" r="26" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <circle cx="256" cy="360" r="26" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <circle cx="152" cy="256" r="26" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <circle cx="152" cy="152" r="26" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <circle cx="152" cy="360" r="26" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <circle cx="360" cy="256" r="26" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <circle cx="360" cy="152" r="26" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+      <circle cx="360" cy="360" r="26" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px"/>
+    </Ion>
+  );
+}
+
+/** ionicons: arrow-up-outline */
+export function ArrowUpIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M112 244l144-144 144 144M256 120v292" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="48px"/>
+    </Ion>
+  );
+}
+
+/** ionicons: swap-vertical-outline, used as the unsorted-column mark */
+export function SortIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M464 208 352 96 240 208M368 96v320M48 304l112 112 112-112M160 416V96" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
+    </Ion>
+  );
+}

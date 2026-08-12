@@ -119,6 +119,61 @@ export function createProject(name: string, session: StoredSession): ProjectMeta
   return meta;
 }
 
+/**
+ * Copy a deck, slides and all, as a new project.
+ *
+ * The copy deliberately drops the source's undo history and its unsaved draft,
+ * keeping only the committed deck: inheriting another deck's history would let
+ * Undo in the copy walk back through edits that were never made to it.
+ */
+export function duplicateProject(id: string, name?: string): ProjectMeta | null {
+  const session = loadProjectSession(id);
+  if (!session) return null;
+  const source = readIndex().projects.find((p) => p.id === id);
+  return createProject(name ?? `${source?.name ?? 'Untitled deck'} copy`, {
+    ast: session.ast,
+    deck: session.deck,
+    baselineDeck: session.baselineDeck ?? session.deck,
+  });
+}
+
+/**
+ * Force a deck's "last edited" stamp.
+ *
+ * Normally `updatedAt` is owned by `saveProjectSession` and should stay that way.
+ * This exists for callers that are reconstructing history rather than making it:
+ * the dev library seeder, and any future import that needs to preserve a deck's
+ * original date instead of stamping everything with the moment of the import.
+ */
+export function setProjectUpdatedAt(id: string, ts: number): void {
+  const index = readIndex();
+  writeIndex({
+    ...index,
+    projects: index.projects.map((p) => (p.id === id ? { ...p, updatedAt: ts } : p)),
+  });
+}
+
+/** Meta plus enough of the deck to draw a gallery card. */
+export interface ProjectSummary extends ProjectMeta {
+  /** The first slide that would actually be shown, for the cover thumbnail.
+   *  Null for a deck whose slides failed to load. */
+  deck: StoredSession['deck'] | null;
+}
+
+/**
+ * Every deck with its content, newest first, for the home gallery.
+ *
+ * Reads each project's full session rather than just the index, because a
+ * gallery of names is not a gallery - you recognise last quarter's deck by its
+ * cover, not by remembering what you called it.
+ */
+export function listProjectSummaries(): ProjectSummary[] {
+  return listProjects().map((meta) => ({
+    ...meta,
+    deck: loadProjectSession(meta.id)?.deck ?? null,
+  }));
+}
+
 export function renameProject(id: string, name: string): void {
   const clean = name.trim();
   if (!clean) return;

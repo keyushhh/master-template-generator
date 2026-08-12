@@ -579,7 +579,7 @@ export function EditToolbar({
           shortcuts are advertised now that those buttons live in the header
           rather than beside the canvas. */}
       <span
-        title="Edit mode — Undo ⌘Z · Redo ⌘⇧Z · Esc drops the selection"
+        title="Edit mode · Undo ⌘Z · Redo ⌘⇧Z · Esc drops the selection"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           ...mono, fontSize: 9.5, fontWeight: 700,
@@ -611,7 +611,7 @@ export function EditToolbar({
             </span>
           ) : (
             <Menu
-              title={`Typeface — ${fieldLabel}`}
+              title={`Typeface: ${fieldLabel}`}
               label=""
               width={200}
               active={!!textStyle?.fontFamily}
@@ -748,11 +748,11 @@ export function EditToolbar({
         <>
           {isFillable && (
             <>
-              <button title="Outlined — for context and process" aria-label="Outline fill"
+              <button title="Outlined, for context and process" aria-label="Outline fill"
                 onClick={() => onSetFill(undefined)} style={{ ...ctl, padding: '0 7px' }}>
                 <span style={{ width: 14, height: 14, border: '1.5px solid var(--neutral-400)' }} />
               </button>
-              <button title="Emerald tint — for the payoff, one per slide" aria-label="Emerald tint fill"
+              <button title="Emerald tint, for the payoff (one per slide)" aria-label="Emerald tint fill"
                 onClick={() => onSetFill('ECFDF5')} style={{ ...ctl, padding: '0 7px' }}>
                 <span style={{ width: 14, height: 14, background: '#ECFDF5', border: '1.5px solid #10B981' }} />
               </button>

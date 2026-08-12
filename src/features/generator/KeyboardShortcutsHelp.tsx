@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import { CloseIcon } from '../ui/icons';
+import { MOD_KEY } from '../help/platform';
 
 interface Shortcut {
   keys: string[];
@@ -8,10 +10,12 @@ interface Shortcut {
 }
 
 const GLOBAL_SHORTCUTS: Shortcut[] = [
-  { keys: ['Cmd/Ctrl', 'Z'], description: 'Undo last committed change' },
-  { keys: ['Cmd/Ctrl', 'Shift', 'Z'], description: 'Redo' },
+  { keys: [MOD_KEY, 'Z'], description: 'Undo last committed change' },
+  { keys: [MOD_KEY, 'Shift', 'Z'], description: 'Redo' },
+  { keys: [MOD_KEY, 'K'], description: 'Search the deck library' },
   { keys: ['Esc'], description: 'Close the open dialog' },
   { keys: ['?'], description: 'Show this shortcuts overlay' },
+  { keys: ['G'], description: 'Organize the whole deck at once' },
   { keys: ['←', '→'], description: 'Previous / next slide on the stage' },
 ];
 
@@ -29,8 +33,13 @@ const EDIT_SHORTCUTS: Shortcut[] = [
 ];
 
 const PRESENT_SHORTCUTS: Shortcut[] = [
-  { keys: ['→', 'Space'], description: 'Next slide' },
+  { keys: ['→', 'Space'], description: 'Next slide (or click the slide)' },
   { keys: ['←'], description: 'Previous slide' },
+  { keys: ['Home', 'End'], description: 'First / last slide' },
+  { keys: ['P'], description: 'Presenter view: next slide, notes, timer' },
+  { keys: ['G'], description: 'Jump to any slide' },
+  { keys: ['B'], description: 'Blank the screen' },
+  { keys: ['T'], description: 'Start / pause the timer' },
   { keys: ['Esc'], description: 'Exit presentation' },
 ];
 
@@ -71,14 +80,17 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
 
   if (!open) return null;
 
-  return (
-    <div className="wg-overlay fixed inset-0 z-[200] flex items-center justify-center p-6" onClick={onClose}>
+  return createPortal(
+    <div
+      className="wg-overlay fixed inset-0 z-[310] flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+      onClick={onClose}
+    >
       <div
         ref={panelRef}
-        className="wg-modal w-full max-w-sm overflow-hidden"
+        className="wg-modal w-full max-w-[420px] max-h-[82vh] flex flex-col overflow-hidden my-auto bg-white"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-neutral-150">
+        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-neutral-150 shrink-0">
           <h2 className="text-[15px] font-bold text-neutral-900">Keyboard shortcuts</h2>
           <button
             onClick={onClose}
@@ -88,12 +100,13 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
             <CloseIcon size={14} />
           </button>
         </div>
+        <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="px-5 py-3 divide-y divide-neutral-100">
           {GLOBAL_SHORTCUTS.map((s, i) => (
             <ShortcutRow key={i} shortcut={s} />
           ))}
         </div>
-        <div className="px-5 pt-1 pb-2 text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-400">
+        <div className="sticky top-0 px-5 pt-2 pb-2 bg-white text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-400">
           While editing
         </div>
         <div className="px-5 divide-y divide-neutral-100">
@@ -101,7 +114,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
             <ShortcutRow key={i} shortcut={s} />
           ))}
         </div>
-        <div className="px-5 pt-3 pb-2 text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-400">
+        <div className="sticky top-0 px-5 pt-3 pb-2 bg-white text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-400">
           While presenting
         </div>
         <div className="px-5 pb-4 divide-y divide-neutral-100">
@@ -109,7 +122,9 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
             <ShortcutRow key={i} shortcut={s} />
           ))}
         </div>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

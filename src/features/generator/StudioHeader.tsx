@@ -22,6 +22,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { ProjectMeta } from '../deck/deckStore';
 import { DeckSwitcher } from './DeckSwitcher';
 import logoBlack from '../../assets/Logo_Black_Transparent.png';
@@ -52,8 +53,8 @@ interface StudioHeaderProps {
   canReset: boolean;
   resetArmed: boolean;
   onResetClick: () => void;
-  /** Opens the Review & Export screen. Lives here rather than in the sidebar:
-   *  it is an output action, and Present - the other one - is already here. */
+  /** Opens the Export sheet. Lives here rather than in the sidebar: it is an
+   *  output action, and Present - the other one - is already here. */
   onOpenReview: () => void;
   canExport: boolean;
   /** Deck management, moved here from under the sidebar logo so the deck you
@@ -218,12 +219,19 @@ export function StudioHeader({
     >
       {/* ── Brand + identity ──────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flexShrink: 1 }}>
-        <img
-          src={logoBlack}
-          alt="Wozku"
-          style={{ width: 84, height: 'auto', flexShrink: 0, userSelect: 'none' }}
-          draggable={false}
-        />
+        <Link
+          to="/"
+          title="All decks"
+          aria-label="All decks"
+          style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
+        >
+          <img
+            src={logoBlack}
+            alt="Wozku"
+            style={{ width: 84, height: 'auto', flexShrink: 0, userSelect: 'none' }}
+            draggable={false}
+          />
+        </Link>
         <span style={{ width: 1, height: 26, background: 'var(--neutral-200)', flexShrink: 0 }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
         {renaming ? (
@@ -398,8 +406,6 @@ export function StudioHeader({
         <IconBtn onClick={onRedo} disabled={!canRedo} title="Redo (⌘⇧Z)" label="Redo">
           <RedoIcon size={16} />
         </IconBtn>
-
-        <span style={{ width: 1, height: 22, background: 'var(--neutral-200)', margin: '0 4px' }} />
 
         <button
           onClick={onResetClick}

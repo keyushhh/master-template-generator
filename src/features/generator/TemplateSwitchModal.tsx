@@ -13,6 +13,7 @@ import type { DocumentNode } from '../business-record/parser/ast';
 import type { SlideInstance, SlideTemplateId } from '../deck/types';
 import { SWITCHABLE, applySwitch, planSwitch } from '../deck/templateSwitch';
 import { SlideStage } from './PresentationCanvas';
+import type { DeckTheme } from '../theme/deckTheme';
 
 interface TemplateSwitchModalProps {
   open: boolean;
@@ -23,6 +24,9 @@ interface TemplateSwitchModalProps {
    *  logo the canvas does. */
   ast?: DocumentNode | null;
   logoUrl?: string;
+  /** The deck's theme, so a layout preview is drawn in the same palette the
+   *  slide will actually land in. */
+  theme?: DeckTheme;
 }
 
 /**
@@ -46,6 +50,7 @@ const TemplateCard = memo(function TemplateCard({
   active,
   ast,
   logoUrl,
+  theme,
   onPick,
 }: {
   slide: SlideInstance;
@@ -55,6 +60,7 @@ const TemplateCard = memo(function TemplateCard({
   active: boolean;
   ast?: DocumentNode | null;
   logoUrl?: string;
+  theme?: DeckTheme;
   onPick: () => void;
 }) {
   // The switched slide is derived, never committed - nothing here touches the
@@ -89,7 +95,7 @@ const TemplateCard = memo(function TemplateCard({
         {/* 232px is the card's rendered width; the stage scales the 1920px
             slide down by that ratio. A fixed number rather than a measured
             one keeps 14 previews from each running a ResizeObserver. */}
-        <SlideStage slide={preview} ast={ast ?? null} num="00" scale={232 / 1920} logoUrl={logoUrl} />
+        <SlideStage slide={preview} ast={ast ?? null} num="00" scale={232 / 1920} logoUrl={logoUrl} theme={theme} />
       </div>
       <div
         style={{
@@ -110,7 +116,7 @@ const TemplateCard = memo(function TemplateCard({
   );
 });
 
-export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logoUrl }: TemplateSwitchModalProps) {
+export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logoUrl, theme }: TemplateSwitchModalProps) {
   const [target, setTarget] = useState<SlideTemplateId | null>(null);
   /** Category filter. null means "All", which is the honest default - a user
    *  who doesn't know the categories yet shouldn't have to pick one to see
@@ -158,7 +164,7 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logo
               Change layout
             </h2>
             <p style={{ marginTop: 6, fontSize: 13, color: 'var(--neutral-500)' }}>
-              “{slide.title}” — your words never change. Only the layout does.
+              “{slide.title}”. Your words never change, only the layout does.
             </p>
           </div>
           <button
@@ -192,7 +198,7 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logo
           <>
             <div style={{ marginTop: 22 }}>
               <div style={{ ...sectionLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <span>Choose a layout — each card is your own slide in that layout</span>
+                <span>Choose a layout. Each card is your own slide in that layout</span>
               </div>
 
               {/* Category filters. 14 previews is a lot to scan at once; these
@@ -240,6 +246,7 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logo
                     active={t.id === target}
                     ast={ast}
                     logoUrl={logoUrl}
+                    theme={theme}
                     onPick={() => setTarget(t.id)}
                   />
                 ))}
@@ -287,7 +294,7 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logo
 
                 {plan.newTitle && (
                   <div style={{ marginTop: 10, fontSize: 12, color: 'var(--neutral-500)' }}>
-                    This slide will be renamed to “{plan.newTitle}” — it still has its default name.
+                    This slide will be renamed to “{plan.newTitle}”, since it still has its default name.
                     Rename it yourself and future switches will keep your name.
                   </div>
                 )}

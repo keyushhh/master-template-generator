@@ -374,4 +374,11 @@ export interface Deck {
    *  rather than per-slide so one client's mark stays a consistent size across
    *  the cover, dividers and the closing slide. */
   logoScale?: number;
+  /** Which theme (palette + type stack) this deck is drawn in, keyed by
+   *  `DeckTheme.id`. Absent means Wozku's own, which is what every existing
+   *  deck gets - so adding this field changes nothing about a saved deck.
+   *  One field rather than an embedded copy of the palette: a theme is a shared
+   *  thing, and a deck that inlined its colours would not follow an edit to the
+   *  brand kit it came from. */
+  themeId?: string;
 }
