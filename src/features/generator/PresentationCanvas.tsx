@@ -1702,10 +1702,10 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
         <div
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 420,
+            fontSize: 240,
             fontWeight: 700,
-            lineHeight: 0.8,
-            letterSpacing: '-0.07em',
+            lineHeight: 0.9,
+            letterSpacing: '-0.06em',
             display: 'flex',
             alignItems: 'baseline',
             color: 'var(--neutral-900)',
@@ -1716,7 +1716,7 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
             editing={editing}
             onCommit={(v) => onEdit((c) => ({ ...c, value: v || undefined }))}
           />
-          <span style={{ color: 'var(--emerald-500)', fontSize: '0.3em', marginLeft: 10 }}>
+          <span style={{ color: 'var(--emerald-500)', fontSize: '0.35em', marginLeft: 16 }}>
             <E slot="unit"
               value={content.unit ?? 'M'}
               editing={editing}
@@ -1727,9 +1727,9 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
         <h3
           style={{
             ...DISPLAY_HEADING_BASE,
-            fontSize: 64,
+            fontSize: 56,
             fontWeight: 600,
-            marginTop: -20,
+            marginTop: 16,
             color: 'var(--neutral-900)',
           }}
         >
@@ -1739,7 +1739,7 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
         </h3>
-        <p style={{ marginTop: 60, maxWidth: 800, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
+        <p style={{ marginTop: 24, maxWidth: 800, fontSize: 24, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
           <E slot="body"
             value={content.body ?? PLACEHOLDER}
             editing={editing}

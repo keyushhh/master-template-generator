@@ -120,26 +120,68 @@ function BarButton({
  *    cursor or hint saying so, so a click meant to advance silently rewound the
  *    deck. Back is the arrow keys and the on-screen arrow, per Keynote.
  */
-export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = WOZKU_THEME }: PresentModeProps) {
+export function PresentMode({
+  open,
+  onClose,
+  deck,
+  ast,
+  startIndex = 0,
+  theme = WOZKU_THEME,
+}: PresentModeProps) {
   const visible = useMemo(() => deck.slides.filter((s) => !s.hidden), [deck.slides]);
-  const total = visible.length;
-
   const [index, setIndex] = useState(startIndex);
-  const [scale, setScale] = useState(0.5);
-  /** Presenter layout: current + next + notes + timer, for the presenter's own
-   *  screen. Audience layout (the default) is the slide and nothing else. */
   const [presenter, setPresenter] = useState(false);
-  /** Blackout, the `B` key. Standard in every presenter tool: kill the screen so
-   *  the room looks at you instead of the slide. */
   const [blank, setBlank] = useState(false);
-  /** The jump-to-slide grid. */
-  const [picker, setPicker] = useState(false);
-  /** Chrome visibility, driven by pointer idleness. */
-  const [idle, setIdle] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(false);
 
   const [elapsed, setElapsed] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
-  const [autoPlay, setAutoPlay] = useState(false);
+
+  const [toolMode, setToolMode] = useState<'pointer' | 'laser' | 'pen'>('pointer');
+  const [laserPos, setLaserPos] = useState<{ x: number; y: number } | null>(null);
+  const [penStrokes, setPenStrokes] = useState<Record<string, Array<{ points: Array<{ x: number; y: number }> }>>>({});
+  const [currentStroke, setCurrentStroke] = useState<Array<{ x: number; y: number }> | null>(null);
+
+  const [teleprompterSpeed, setTeleprompterSpeed] = useState<number>(1);
+  const [teleprompterAutoScroll, setTeleprompterAutoScroll] = useState<boolean>(false);
+  const [teleprompterFontSize, setTeleprompterFontSize] = useState<number>(16);
+  const notesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const channel = new BroadcastChannel('wozku_presenter_channel');
+    channel.onmessage = (e) => {
+      if (e.data?.type === 'INDEX' && typeof e.data.index === 'number') setIndex(e.data.index);
+      else if (e.data?.type === 'PLAY' && typeof e.data.autoPlay === 'boolean') setAutoPlay(e.data.autoPlay);
+      else if (e.data?.type === 'BLANK' && typeof e.data.blank === 'boolean') setBlank(e.data.blank);
+    };
+    return () => channel.close();
+  }, [open]);
+
+  const broadcast = (data: any) => {
+    try {
+      const channel = new BroadcastChannel('wozku_presenter_channel');
+      channel.postMessage(data);
+      channel.close();
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!teleprompterAutoScroll || !notesRef.current) return;
+    let animId: number;
+    const step = () => {
+      if (notesRef.current) notesRef.current.scrollTop += teleprompterSpeed * 0.4;
+      animId = requestAnimationFrame(step);
+    };
+    animId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animId);
+  }, [teleprompterAutoScroll, teleprompterSpeed]);
+
+  const total = visible.length;
+  const [scale, setScale] = useState(0.5);
+  const [picker, setPicker] = useState(false);
+  const [idle, setIdle] = useState(false);
 
   const [sidebarHover, setSidebarHover] = useState(false);
   const showSidebar = picker || sidebarHover;
@@ -620,19 +662,57 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7, flex: 1, minHeight: 0 }}>
-                <span
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10,
-                    fontWeight: 600,
-                    letterSpacing: '0.16em',
-                    textTransform: 'uppercase',
-                    color: 'rgba(255,255,255,0.34)',
-                  }}
-                >
-                  Notes
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: '0.16em',
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.34)',
+                    }}
+                  >
+                    Notes & Teleprompter
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => setTeleprompterAutoScroll((v) => !v)}
+                      style={{
+                        background: teleprompterAutoScroll ? 'var(--emerald-500)' : 'rgba(255,255,255,0.1)',
+                        color: '#fff', border: 'none', borderRadius: 3, padding: '2px 6px',
+                        fontSize: 10, fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                      }}
+                    >
+                      {teleprompterAutoScroll ? 'Scroll: ON' : 'Scroll: OFF'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTeleprompterSpeed((s) => (s >= 2 ? 1 : s + 0.5))}
+                      style={{
+                        background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.8)',
+                        border: 'none', borderRadius: 3, padding: '2px 6px',
+                        fontSize: 10, fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                      }}
+                    >
+                      {teleprompterSpeed}x
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTeleprompterFontSize((fs) => (fs >= 24 ? 14 : fs + 2))}
+                      style={{
+                        background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.8)',
+                        border: 'none', borderRadius: 3, padding: '2px 6px',
+                        fontSize: 10, fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                      }}
+                    >
+                      {teleprompterFontSize}px
+                    </button>
+                  </div>
+                </div>
                 <div
+                  ref={notesRef}
                   style={{
                     flex: 1,
                     minHeight: 90,
@@ -642,7 +722,7 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
                     border: CHROME_BORDER,
                     color: 'rgba(255,255,255,0.88)',
                     fontFamily: 'var(--font-sans)',
-                    fontSize: 15,
+                    fontSize: teleprompterFontSize,
                     lineHeight: 1.62,
                     whiteSpace: 'pre-wrap',
                   }}
@@ -796,7 +876,27 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
               </>
             )}
 
-            <BarButton label="Blank the screen (B)" onClick={() => setBlank(true)}>
+            <BarButton
+              label="Laser Pointer"
+              onClick={() => setToolMode((m) => (m === 'laser' ? 'pointer' : 'laser'))}
+              active={toolMode === 'laser'}
+            >
+              <span style={{ fontSize: 13, fontWeight: 700, color: toolMode === 'laser' ? '#ef4444' : 'inherit' }}>🔴</span>
+            </BarButton>
+            <BarButton
+              label="Annotation Pen"
+              onClick={() => setToolMode((m) => (m === 'pen' ? 'pointer' : 'pen'))}
+              active={toolMode === 'pen'}
+            >
+              <span style={{ fontSize: 13, fontWeight: 700, color: toolMode === 'pen' ? 'var(--emerald-400)' : 'inherit' }}>✏️</span>
+            </BarButton>
+            {penStrokes[slide.instanceId]?.length ? (
+              <BarButton label="Clear annotations" onClick={() => setPenStrokes((s) => ({ ...s, [slide.instanceId]: [] }))}>
+                <span style={{ fontSize: 11, fontWeight: 600 }}>Clear Ink</span>
+              </BarButton>
+            ) : null}
+
+            <BarButton label="Blank the screen (B)" onClick={() => { setBlank(true); broadcast({ type: 'BLANK', blank: true }); }}>
               <EyeOffIcon size={16} />
             </BarButton>
             <BarButton

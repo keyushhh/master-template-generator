@@ -272,6 +272,176 @@ export async function exportSlidesAsPngZip(
 }
 
 /**
+ * Build a standalone interactive HTML presentation by capturing each slide as
+ * a high-resolution image (same as PDF/PNG export) and embedding them as base64
+ * data URLs. This guarantees the output looks identical to the live editor -
+ * every asset, placeholder, overlay, and layout quirk is captured pixel-for-pixel.
+ */
+export async function exportToHTML(
+  slideIds: string[],
+  title: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<void> {
+  const total = slideIds.length;
+  if (total === 0) return;
+
+  const images: string[] = [];
+  for (let i = 0; i < total; i++) {
+    onProgress?.(i, total);
+    const canvas = await captureSlide(slideIds[i]);
+    if (canvas) {
+      images.push(canvas.toDataURL('image/jpeg', 0.92));
+    }
+  }
+  onProgress?.(total, total);
+
+  if (images.length === 0) return;
+
+  const totalPad = String(images.length).padStart(2, '0');
+  const safeTitle = title.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const htmlStr = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${safeTitle} - Wozku Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #090a0f; }
+    body { display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; }
+    #slide-img {
+      max-width: 100vw;
+      max-height: 100vh;
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      display: block;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    .footer-bar {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 30px;
+      padding: 8px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      z-index: 100;
+      transition: opacity 0.3s;
+    }
+    .footer-bar.hidden { opacity: 0; pointer-events: none; }
+    .btn {
+      background: transparent;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: rgba(255,255,255,0.15); }
+    .counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      min-width: 60px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <img id="slide-img" alt="Slide" />
+
+  <div class="footer-bar" id="footer">
+    <button class="btn" id="prev-btn" title="Previous (←)">&#10094;</button>
+    <span class="counter" id="counter-text">01 / ${totalPad}</span>
+    <button class="btn" id="next-btn" title="Next (→)">&#10095;</button>
+    <button class="btn" id="full-btn" title="Fullscreen (F)">&#x26F6;</button>
+  </div>
+
+  <script>
+    var images = ${JSON.stringify(images)};
+    var currentIdx = 0;
+    var total = images.length;
+    var img = document.getElementById('slide-img');
+    var counter = document.getElementById('counter-text');
+    var footer = document.getElementById('footer');
+    var idleTimer;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function show() {
+      img.src = images[currentIdx];
+      counter.textContent = pad(currentIdx + 1) + ' / ' + pad(total);
+    }
+
+    function go(delta) {
+      currentIdx = Math.max(0, Math.min(total - 1, currentIdx + delta));
+      show();
+    }
+
+    function resetIdle() {
+      footer.classList.remove('hidden');
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(function() { footer.classList.add('hidden'); }, 3000);
+    }
+
+    show();
+    resetIdle();
+
+    document.getElementById('prev-btn').onclick = function() { go(-1); resetIdle(); };
+    document.getElementById('next-btn').onclick = function() { go(1); resetIdle(); };
+    document.getElementById('full-btn').onclick = function() {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    };
+
+    document.addEventListener('mousemove', resetIdle);
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowRight' || e.key === ' ') { go(1); resetIdle(); }
+      if (e.key === 'ArrowLeft') { go(-1); resetIdle(); }
+      if (e.key === 'f' || e.key === 'F') document.getElementById('full-btn').click();
+      if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen();
+    });
+
+    // Click left/right halves of the image to navigate
+    img.addEventListener('click', function(e) {
+      var rect = img.getBoundingClientRect();
+      if (e.clientX < rect.left + rect.width / 2) go(-1);
+      else go(1);
+      resetIdle();
+    });
+  </script>
+</body>
+</html>`;
+
+  const blob = new Blob([htmlStr], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${sanitize(title)}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
  * Copy the current URL to clipboard.
  */
 export async function copyShareLink(): Promise<boolean> {

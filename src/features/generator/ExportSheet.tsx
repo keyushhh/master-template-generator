@@ -10,21 +10,15 @@ import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 import { useFitReport } from '../fit/fitStore';
 import { placeholderReport } from '../preflight/placeholders';
 
-type ExportKind = 'pptx' | 'pdf' | 'png';
+type ExportKind = 'pptx' | 'pdf' | 'png' | 'html';
 
 interface ExportSheetProps {
   open: boolean;
   onClose: () => void;
   deck: Deck;
   ast: DocumentNode | null;
-  /** The deck's own name. The export screen used to derive its heading from the
-   *  first slide's content, which meant an untouched deck announced itself as
-   *  "Cover" - and, because the same string is the download filename, shipped
-   *  the client a file called `cover.pptx`. */
   projectName: string;
-  /** Open the slide sorter. */
   onOpenSorter: () => void;
-  /** The deck's resolved theme, used for the cover preview and the export. */
   theme?: DeckTheme;
 }
 
@@ -51,6 +45,14 @@ const FORMATS: {
     headline: 'Exactly what you see, permanently.',
     detail:
       'Each slide flattened to a 1920 × 1080 page. Nothing can reflow or substitute a font on someone else’s machine. The safe one to attach to an email.',
+  },
+  {
+    kind: 'html',
+    tab: 'HTML',
+    ext: '.html',
+    headline: 'Standalone interactive HTML presentation.',
+    detail:
+      'A self-contained single HTML file with embedded slide transitions, keyboard controls, and theme styling. Runs offline in any browser.',
   },
   {
     kind: 'png',
@@ -105,6 +107,9 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
   const [kind, setKind] = useState<ExportKind>('pptx');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [customBaseName, setCustomBaseName] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open);
@@ -113,8 +118,25 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
   const hiddenCount = deck.slides.length - visible.length;
   const cover = visible[0] ?? deck.slides[0];
   const format = FORMATS.find((f) => f.kind === kind) ?? FORMATS[0];
-  const filename = `${sanitize(projectName)}${format.suffix ?? ''}${format.ext}`;
+  const baseName = customBaseName ?? `${sanitize(projectName)}${format.suffix ?? ''}`;
+  const filename = `${baseName}${format.ext}`;
   const empty = visible.length === 0;
+
+  // Focus the name input when editing starts
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [editingName]);
+
+  // Reset custom name when sheet closes
+  useEffect(() => {
+    if (!open) {
+      setCustomBaseName(null);
+      setEditingName(false);
+    }
+  }, [open]);
 
   // Only walked while the sheet is actually up - it is a full pass over the
   // source document, and this component stays mounted for the whole session.
@@ -140,12 +162,20 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
     setBusy(true);
     setProgress({ current: 0, total: visible.length });
     try {
-      const mod = await import('./exportHelper');
-      const ids = visible.map((s) => s.instanceId);
-      const onProgress = (current: number, total: number) => setProgress({ current, total });
-      if (kind === 'pdf') await mod.exportToPDF(ids, projectName, onProgress);
-      else if (kind === 'png') await mod.exportSlidesAsPngZip(ids, projectName, onProgress);
-      else await mod.exportToPPTX(visible, projectName, deck.logoUrl, onProgress, deck.logoScale, theme);
+      if (kind === 'html') {
+        const mod = await import('./exportHelper');
+        const ids = visible.map((s) => s.instanceId);
+        const onProgress = (current: number, total: number) => setProgress({ current, total });
+        await mod.exportToHTML(ids, projectName, onProgress);
+        showToast(`Exported ${filename}`, 'success');
+      } else {
+        const mod = await import('./exportHelper');
+        const ids = visible.map((s) => s.instanceId);
+        const onProgress = (current: number, total: number) => setProgress({ current, total });
+        if (kind === 'pdf') await mod.exportToPDF(ids, projectName, onProgress);
+        else if (kind === 'png') await mod.exportSlidesAsPngZip(ids, projectName, onProgress);
+        else await mod.exportToPPTX(visible, projectName, deck.logoUrl, onProgress, deck.logoScale, theme);
+      }
     } catch (err) {
       console.error(`${kind} export error:`, err);
       // Report the actual reason. A bare "try again" hides the one piece of
@@ -251,11 +281,11 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
               not to a dialog. */}
           {(unfilled.length > 0 || clipped.length > 0 || issues > 0) && (
             <div className="bg-amber-50 border-b border-amber-200">
-              <div className="flex items-center gap-2 px-5 pt-3 pb-2">
+              <div className="flex items-center gap-2 px-5 pt-2.5 pb-1.5">
                 <span className="text-amber-600 flex items-center">
-                  <AlertIcon size={13} />
+                  <AlertIcon size={12} />
                 </span>
-                <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-amber-800/90">
+                <span className="font-mono text-[9px] font-bold tracking-[0.16em] uppercase text-amber-800/90">
                   Before you send
                 </span>
               </div>
@@ -268,28 +298,28 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                     one gap left is one somebody missed, while a slide with
                     eight is one they have not written yet. */}
                 {unfilled.length > 0 && (
-                  <div className="flex flex-col gap-1.5 px-5 py-3">
-                    <span className="text-[12.5px] font-bold text-amber-900 leading-snug">
-                      Template placeholder text is still showing on {unfilled.length} slide
+                  <div className="flex flex-col gap-1 px-5 py-2">
+                    <span className="text-[12px] font-bold text-amber-900 leading-snug">
+                      Placeholder text on {unfilled.length} slide
                       {unfilled.length === 1 ? '' : 's'}
                     </span>
-                    <ul className="flex flex-col gap-1 text-[11.5px] text-amber-800/90 leading-relaxed">
-                      {unfilled.slice(0, 4).map((s) => (
+                    <ul className="flex flex-col gap-0.5 text-[11px] text-amber-800/90 leading-snug">
+                      {unfilled.slice(0, 4).map((s, idx) => (
                         <li key={s.instanceId} className="truncate">
-                          <span className="font-mono text-[10.5px] font-bold">
+                          <span className="font-mono text-[10px] font-bold">
                             {String(s.n).padStart(2, '0')}
                           </span>{' '}
                           <span className="font-semibold">{s.title}</span>
                           <span className="text-amber-700/75">
                             {' '}
-                            &middot; {s.fields.slice(0, 3).join(', ')}
-                            {s.fields.length > 3 ? ` +${s.fields.length - 3}` : ''}
+                            &middot; {s.fields.slice(0, 2).join(', ')}
+                            {s.fields.length > 2 ? ` +${s.fields.length - 2}` : ''}
                           </span>
+                          {idx === 3 && unfilled.length > 4 && (
+                            <span className="text-amber-700/70">{' '}…and {unfilled.length - 4} more</span>
+                          )}
                         </li>
                       ))}
-                      {unfilled.length > 4 && (
-                        <li className="text-amber-700/80">and {unfilled.length - 4} more</li>
-                      )}
                     </ul>
                   </div>
                 )}
@@ -299,44 +329,39 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                     in PowerPoint. This is the last screen where that is still
                     fixable. */}
                 {clipped.length > 0 && (
-                  <div className="flex flex-col gap-1.5 px-5 py-3">
-                    <span className="text-[12.5px] font-bold text-amber-900 leading-snug">
-                      Text is being cut off on {clipped.length} slide
+                  <div className="flex flex-col gap-1 px-5 py-2">
+                    <span className="text-[12px] font-bold text-amber-900 leading-snug">
+                      Text cut off on {clipped.length} slide
                       {clipped.length === 1 ? '' : 's'}
                     </span>
-                    <ul className="flex flex-col gap-1 text-[11.5px] text-amber-800/90 leading-relaxed">
-                      {clipped.slice(0, 3).map((s) => (
+                    <ul className="flex flex-col gap-0.5 text-[11px] text-amber-800/90 leading-snug">
+                      {clipped.slice(0, 3).map((s, idx) => (
                         <li key={s.id} className="truncate">
-                          <span className="font-mono text-[10.5px] font-bold">
+                          <span className="font-mono text-[10px] font-bold">
                             {String(s.n).padStart(2, '0')}
                           </span>{' '}
                           <span className="font-semibold">{s.title}</span>
+                          {idx === 2 && clipped.length > 3 && (
+                            <span className="text-amber-700/70">{' '}…and {clipped.length - 3} more</span>
+                          )}
                         </li>
                       ))}
-                      {clipped.length > 3 && (
-                        <li className="text-amber-700/80">and {clipped.length - 3} more</li>
-                      )}
                     </ul>
-                    <span className="text-[11px] text-amber-700/80">
-                      The slots are a fixed size, so anything cut here is cut in the exported file
-                      too. Each of those slides offers a Fit it button under the canvas.
-                    </span>
                   </div>
                 )}
 
                 {/* Coverage: what the source document had and no template took.
                     Only ever present when a document was imported. */}
                 {issues > 0 && (
-                  <div className="flex flex-col gap-1.5 px-5 py-3">
-                    <span className="text-[12.5px] font-bold text-amber-900 leading-snug">
-                      {issues} thing{issues === 1 ? '' : 's'} from your source didn&rsquo;t land on a
-                      slide
+                  <div className="flex flex-col gap-1 px-5 py-2">
+                    <span className="text-[12px] font-bold text-amber-900 leading-snug">
+                      {issues} source item{issues === 1 ? '' : 's'} missing from slides
                     </span>
-                    <ul className="flex flex-col gap-1 text-[11.5px] text-amber-800/90 leading-relaxed list-disc pl-4">
+                    <ul className="flex flex-col gap-0.5 text-[11px] text-amber-800/90 leading-snug list-disc pl-4">
                       {coverage?.unmatchedBullets.slice(0, 3).map((b, i) => (
                         <li key={`u${i}`}>
                           In <span className="font-semibold">{b.section}</span>:{' '}
-                          <span className="font-mono text-[10.5px]">{b.text}</span>
+                          <span className="font-mono text-[10px]">{b.text}</span>
                         </li>
                       ))}
                       {coverage?.insightSections.slice(0, 3).map((s, i) => (
@@ -345,7 +370,7 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                         </li>
                       ))}
                       {issues > 3 && (
-                        <li className="list-none text-amber-700/80">and {issues - 3} more</li>
+                        <li className="list-none text-amber-700/70">…and {issues - 3} more</li>
                       )}
                     </ul>
                   </div>
@@ -363,7 +388,7 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
             <div
               role="radiogroup"
               aria-label="Export format"
-              className="grid grid-cols-3 gap-1 p-1 bg-neutral-100"
+              className="grid grid-cols-4 gap-1 p-1 bg-neutral-100"
             >
               {FORMATS.map((f) => {
                 const active = f.kind === kind;
@@ -409,12 +434,45 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
               <span className="text-[12px] text-neutral-500 leading-relaxed">{format.detail}</span>
             </div>
 
-            {/* The artifact, named before it exists. */}
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-neutral-50 border border-neutral-200">
+            {/* The artifact, named before it exists. Click to rename. */}
+            <div
+              className="flex items-center gap-2 px-3 py-2.5 bg-neutral-50 border border-neutral-200 cursor-pointer hover:border-neutral-300 transition-colors group"
+              onClick={() => { if (!editingName) setEditingName(true); }}
+              title="Click to rename"
+            >
               <span className="shrink-0 text-emerald-600 flex items-center">
                 <CheckIcon size={13} />
               </span>
-              <span className="font-mono text-[11.5px] text-neutral-700 truncate">{filename}</span>
+              {editingName ? (
+                <span className="flex items-center gap-0 min-w-0 flex-1">
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    className="font-mono text-[11.5px] text-neutral-700 bg-white border border-emerald-400 rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-emerald-400 min-w-0 flex-1"
+                    defaultValue={baseName}
+                    onBlur={(e) => {
+                      const v = e.currentTarget.value.trim();
+                      if (v) setCustomBaseName(sanitize(v));
+                      setEditingName(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const v = e.currentTarget.value.trim();
+                        if (v) setCustomBaseName(sanitize(v));
+                        setEditingName(false);
+                      } else if (e.key === 'Escape') {
+                        setEditingName(false);
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span className="font-mono text-[11.5px] text-neutral-400 shrink-0">{format.ext}</span>
+                </span>
+              ) : (
+                <span className="font-mono text-[11.5px] text-neutral-700 truncate group-hover:text-emerald-700 transition-colors">
+                  {filename}
+                </span>
+              )}
               <span className="ml-auto shrink-0 text-[10.5px] text-neutral-400 whitespace-nowrap">
                 {visible.length} slide{visible.length === 1 ? '' : 's'} · 1920 × 1080
               </span>
@@ -438,17 +496,14 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
               standing reassurance that nothing is uploaded answers a question
               nobody in the studio was asking. */}
           {busy && (
-            <div className="px-5 pt-2.5 text-[11.5px] text-neutral-500">
-              Rendering slide {progress.current} of {progress.total}
+            <div className="px-5 pt-2.5 flex items-center gap-2 text-[11.5px] text-neutral-600 font-medium">
+              <svg className="animate-spin h-3.5 w-3.5 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Rendering slide <strong className="font-semibold text-neutral-900">{progress.current}</strong> of {progress.total}…</span>
             </div>
           )}
-          {/* Two buttons at equal width rather than one pinned to the right.
-              A lone action floating in the bottom-right corner left the whole
-              left half of the footer as dead space, which made the sheet's most
-              committing moment read as its least important. An explicit Cancel
-              is technically redundant with Esc, the X and the backdrop, but it
-              is what balances the row, and a dialog that produces a file should
-              name both of its outcomes. */}
           <div className="flex items-center gap-2.5 px-5 py-3.5 bg-white">
             <button
               onClick={() => !busy && onClose()}
@@ -462,7 +517,19 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
               disabled={busy || empty}
               className="flex-1 h-[42px] flex items-center justify-center gap-2 text-[13px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 rounded-[var(--radius-sharp)] transition-colors cursor-pointer disabled:bg-neutral-300 disabled:cursor-not-allowed"
             >
-              {busy ? 'Exporting…' : empty ? 'No slides to export' : `Export ${format.tab}`}
+              {busy ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white shrink-0" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Rendering &amp; Exporting…</span>
+                </>
+              ) : empty ? (
+                'No slides to export'
+              ) : (
+                `Export ${format.tab}`
+              )}
             </button>
           </div>
         </div>

@@ -27,6 +27,25 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.9.0',
+    date: '2026-08-12',
+    summary: 'Standalone Interactive HTML Export, Pre-Flight Quality Checklist, and Editable Export Filename.',
+    added: [
+      'Interactive HTML Export: Export decks as self-contained interactive HTML presentations (.html) with offline keyboard navigation, fullscreen mode, and pixel-perfect 2× retina slide rendering.',
+      'Pre-Flight "Before You Send" Checklist: Automatic scan in the Export Sheet checking for unedited template placeholder text, clipped text overflows, and missing source items.',
+      'Editable Export Filenames: Click the filename box inside the Export Sheet to customize the file name before saving, with automatic format extension handling.',
+      'Unified 4-Format Export Selector: Single-row selection grid for PowerPoint (.pptx), PDF (.pdf), Interactive HTML (.html), and Retina Images (.zip).',
+    ],
+    improved: [
+      'Refined Pre-Flight checklist formatting with compact inline counters and quick slide reference indicators.',
+      'Enhanced Export progress indicator with live rendering progress bar and animated status spinner.',
+    ],
+    fixed: [
+      'Fixed text overlap issue on Data Monument slide (s6) by adjusting metric font sizing and element margins.',
+      'Fixed HTML export presentation slide counter and restored initial slide total rendering.',
+    ],
+  },
+  {
     version: '0.8.0',
     date: '2026-08-12',
     summary: 'Infinite Pan & Zoom, macOS Dock slide drawer, and Auto-Play presentation controls.',
