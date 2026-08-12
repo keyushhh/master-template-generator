@@ -3569,21 +3569,86 @@ export function PresentationCanvas({
 }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(0.5);
-  /** 1 = fit to the stage. Multiplies the fitted scale. */
+  /** 1 = fit to stage. Multiplies the fitted scale. */
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [spacePressed, setSpacePressed] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
   const visibleSlides = deck.slides.filter((s) => !s.hidden);
   const index = Math.max(0, visibleSlides.findIndex((s) => s.instanceId === currentId));
   const current = visibleSlides[index];
 
-  // Fit the 1920x1080 slide into whatever the stage gives us, leaving room for
-  // the header above and the slide bar below.
+  // Wheel zoom (Pinch / Ctrl + Scroll)
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.08 : 0.92;
+        setZoom((z) => Math.max(0.1, Math.min(4, Math.round(z * factor * 100) / 100)));
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // Space key listener for canvas panning
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.isContentEditable || t?.closest('input, textarea')) return;
+      if (e.code === 'Space' && !e.repeat) {
+        setSpacePressed(true);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setSpacePressed(false);
+        setIsPanning(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  // Pointer panning handlers
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (spacePressed || e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      panStartRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isPanning && panStartRef.current) {
+      const dx = e.clientX - panStartRef.current.x;
+      const dy = e.clientY - panStartRef.current.y;
+      setPan({ x: panStartRef.current.panX + dx, y: panStartRef.current.panY + dy });
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isPanning) {
+      setIsPanning(false);
+      panStartRef.current = null;
+    }
+  };
+
+  // Fit slide canvas
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     const measure = () => {
       const w = el.clientWidth - 96;
-      // Header above (12 + 56) and the slide bar below, plus breathing room.
       const h = el.clientHeight - 200;
       if (w > 0 && h > 0) setFit(Math.min(w / SLIDE_W, h / 1080));
     };
@@ -3600,8 +3665,7 @@ export function PresentationCanvas({
     if (next) onNavigate?.(next.instanceId);
   }, [visibleSlides, index, onNavigate]);
 
-  // Deck navigation. Skipped whenever the user is typing or has something
-  // selected that owns the arrow keys for nudging.
+  // Keyboard deck navigation
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -3644,8 +3708,6 @@ export function PresentationCanvas({
     color: 'var(--chrome-text-dim)', cursor: 'pointer',
     borderRadius: 'var(--radius-sharp)',
   };
-  /** Both clusters sit on the same surface treatment so they read as one
-   *  control layer over the stage rather than loose text on the desk. */
   const cluster: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 2,
     pointerEvents: 'auto',
@@ -3659,11 +3721,17 @@ export function PresentationCanvas({
     <div
       ref={stageRef}
       className="book"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
       onClick={(e) => {
         if (!editing || !onDeselect) return;
         const target = e.target as HTMLElement;
         if (target.closest('[contenteditable], [data-overlay-shape], [data-selectable]')) return;
         onDeselect();
+      }}
+      style={{
+        cursor: spacePressed ? (isPanning ? 'grabbing' : 'grab') : undefined,
       }}
     >
       {visibleSlides.map((slide, i) => {
@@ -3680,18 +3748,13 @@ export function PresentationCanvas({
             className="page"
             onPointerDown={() => { if (editing) onActiveSlideChange?.(slide.instanceId); }}
             style={{
-              // Same scoping as SlideStage: the deck's theme, on the slide root.
               ...themeCssVars(theme),
               width: SLIDE_W,
               height: 1080,
               position: 'absolute',
-              // Centre the unscaled box, then scale about that centre, so the
-              // slide stays put as the zoom changes.
               left: '50%',
-              // Nudged down so the slide is centred in the space left under
-              // the floating header rather than in the raw viewport.
               top: 'calc(50% + 18px)',
-              transform: `translate(-50%, -50%) scale(${scale})`,
+              transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + 18px + ${pan.y}px)) scale(${scale})`,
               transformOrigin: 'center center',
               overflow: 'hidden',
               background: isDark ? themeCss(theme.surface.dark) : themeCss(theme.surface.light),
@@ -3882,12 +3945,12 @@ export function PresentationCanvas({
         </div>
 
         <div style={cluster}>
-          <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.15))} title="Zoom out" aria-label="Zoom out" style={btn}>
+          <button onClick={() => setZoom((z) => Math.max(0.1, Math.round((z - 0.15) * 100) / 100))} title="Zoom out" aria-label="Zoom out" style={btn}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M5 12h14" /></svg>
           </button>
           <button
-            onClick={() => setZoom(1)}
-            title="Fit to screen"
+            onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+            title="Reset view and fit to screen (100%)"
             style={{
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
               color: 'var(--chrome-text-dim)', background: 'transparent', border: 'none',
@@ -3896,7 +3959,7 @@ export function PresentationCanvas({
           >
             {Math.round(scale * 100)}%
           </button>
-          <button onClick={() => setZoom((z) => Math.min(3, z + 0.15))} title="Zoom in" aria-label="Zoom in" style={btn}>
+          <button onClick={() => setZoom((z) => Math.min(4, Math.round((z + 0.15) * 100) / 100))} title="Zoom in" aria-label="Zoom in" style={btn}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>
         </div>

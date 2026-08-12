@@ -11,7 +11,8 @@ import {
   DocumentTextIcon,
   EyeOffIcon,
   LayersIcon,
-  PlayIcon,
+  PauseCircleIcon,
+  PlayCircleIcon,
   RefreshIcon,
 } from '../ui/icons';
 
@@ -137,24 +138,51 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
   const [idle, setIdle] = useState(false);
 
   const [elapsed, setElapsed] = useState(0);
-  const [timerRunning, setTimerRunning] = useState(true);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(false);
+
+  const [sidebarHover, setSidebarHover] = useState(false);
+  const showSidebar = picker || sidebarHover;
 
   const next = useCallback(() => setIndex((i) => Math.min(i + 1, total - 1)), [total]);
   const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
 
-  // Reset to the requested slide, and restart the clock, each time we open.
+  const togglePlay = useCallback(() => {
+    setAutoPlay((v) => {
+      const nextState = !v;
+      setTimerRunning(nextState);
+      return nextState;
+    });
+  }, []);
+
+  // Reset state on open
   useEffect(() => {
     if (!open) return;
     setIndex(Math.min(startIndex, Math.max(0, total - 1)));
     setElapsed(0);
-    setTimerRunning(true);
+    setTimerRunning(false);
     setBlank(false);
     setPicker(false);
+    setSidebarHover(false);
+    setAutoPlay(false);
   }, [open, startIndex, total]);
 
-  // Fit the 1920x1080 slide to whatever room the layout leaves it. The presenter
-  // layout hands the slide a column rather than the window, so the two cases
-  // can't share one factor.
+  // Auto-play slideshow (5s interval)
+  useEffect(() => {
+    if (!open || !autoPlay) return;
+    const timer = window.setInterval(() => {
+      setIndex((i) => {
+        if (i >= total - 1) {
+          setAutoPlay(false);
+          return i;
+        }
+        return i + 1;
+      });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [open, autoPlay, total]);
+
+  // Fit slide canvas
   useEffect(() => {
     if (!open) return;
     const fit = () => {
@@ -167,16 +195,14 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
     return () => window.removeEventListener('resize', fit);
   }, [open, presenter]);
 
-  // Elapsed timer. Counts wall-clock seconds while running; pausing leaves the
-  // reading where it was rather than resetting it.
+  // Timer interval
   useEffect(() => {
     if (!open || !timerRunning) return;
     const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => window.clearInterval(id);
   }, [open, timerRunning]);
 
-  // Auto-hide the chrome. The bar is what makes the deck readable, so it comes
-  // back on the first hint of a pointer and only leaves once you've stopped.
+  // Auto-hide bottom chrome
   const idleTimer = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!open) return;
@@ -197,9 +223,7 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
     };
   }, [open]);
 
-  // Keyboard. Escape unwinds one layer at a time - picker, then blackout, then
-  // the whole overlay - so it can't drop you out of a presentation you only
-  // meant to close a panel in.
+  // Keyboard navigation
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -232,8 +256,11 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
           return;
       }
       switch (e.key.toLowerCase()) {
-        // 'P' for presenter view, 'B' for blackout, 'G' for the slide grid -
-        // the conventions Keynote and PowerPoint already taught everyone.
+        case 'a':
+        case 't':
+          e.preventDefault();
+          togglePlay();
+          return;
         case 'p':
           e.preventDefault();
           setPresenter((v) => !v);
@@ -245,10 +272,6 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
         case 'g':
           e.preventDefault();
           setPicker((v) => !v);
-          return;
-        case 't':
-          e.preventDefault();
-          setTimerRunning((v) => !v);
           return;
       }
     };
@@ -262,9 +285,7 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
   const upcoming: SlideInstance | null = index + 1 < total ? visible[index + 1] : null;
   const atStart = index === 0;
   const atEnd = index === total - 1;
-  // The picker is a surface of its own; hiding the bar under it would strand the
-  // user with no way back out but the keyboard.
-  const chromeVisible = !idle || picker;
+  const chromeVisible = !idle || picker || sidebarHover;
 
   const slideBox = (
     <div style={{ position: 'relative', boxShadow: '0 30px 80px rgba(0,0,0,0.55)', flexShrink: 0 }}>
@@ -276,7 +297,6 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
         logoUrl={deck.logoUrl}
         theme={theme}
       />
-      {/* Click-to-advance. One direction only - see the component note. */}
       <div
         onClick={next}
         style={{ position: 'absolute', inset: 0, cursor: atEnd ? 'default' : 'pointer' }}
@@ -297,7 +317,179 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
         overflow: 'hidden',
       }}
     >
-      {/* ── Stage ─────────────────────────────────────────────────────────── */}
+      {/* Edge hover trigger area for macOS dock style reveal */}
+      <div
+        onMouseEnter={() => setSidebarHover(true)}
+        style={{
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 16,
+          zIndex: 120,
+        }}
+      />
+
+      {/* Floating edge handle pill when drawer is hidden */}
+      {!showSidebar && (
+        <button
+          type="button"
+          onClick={() => setPicker(true)}
+          onMouseEnter={() => setSidebarHover(true)}
+          title="Jump to slide (G)"
+          style={{
+            position: 'fixed',
+            left: 0,
+            top: 24,
+            zIndex: 125,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '10px 10px 10px 8px',
+            border: CHROME_BORDER,
+            borderLeft: 'none',
+            borderRadius: '0 12px 12px 0',
+            background: CHROME_BG,
+            backdropFilter: 'blur(12px)',
+            color: 'rgba(255,255,255,0.85)',
+            cursor: 'pointer',
+            boxShadow: '4px 0 20px rgba(0,0,0,0.4)',
+            transition: 'opacity 0.2s',
+            opacity: chromeVisible ? 1 : 0.4,
+          }}
+        >
+          <LayersIcon size={16} />
+        </button>
+      )}
+
+      {/* Auto-Hiding Jump-to-Slide Floating Sidebar */}
+      <aside
+        onMouseEnter={() => setSidebarHover(true)}
+        onMouseLeave={() => setSidebarHover(false)}
+        style={{
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 300,
+          zIndex: 130,
+          background: 'rgba(12, 13, 16, 0.96)',
+          backdropFilter: 'blur(20px)',
+          borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+          boxShadow: '12px 0 32px rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          flexDirection: 'column',
+          transform: showSidebar ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '16px 18px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <LayersIcon size={16} />
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.85)',
+              }}
+            >
+              Slides ({total})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setPicker(false);
+              setSidebarHover(false);
+            }}
+            title="Close sidebar (Esc)"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: 'rgba(255,255,255,0.4)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 4,
+            }}
+          >
+            <CloseIcon size={14} />
+          </button>
+        </div>
+
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: 14,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          {visible.map((s, i) => (
+            <button
+              key={s.instanceId}
+              type="button"
+              onClick={() => setIndex(i)}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                padding: 6,
+                border: i === index ? '2px solid var(--emerald-500)' : '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 8,
+                background: i === index ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255,255,255,0.03)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'border-color 0.15s, background 0.15s',
+              }}
+            >
+              <div style={{ borderRadius: 4, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <FitStage slide={s} ast={ast} num={pad(i + 1)} logoUrl={deck.logoUrl} theme={theme} />
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '0 2px' }}>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: i === index ? 'var(--emerald-400)' : 'rgba(255,255,255,0.4)',
+                  }}
+                >
+                  {pad(i + 1)}
+                </span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: i === index ? '#fff' : 'rgba(255,255,255,0.7)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {s.title}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      {/* Stage Area */}
       <div
         style={{
           flex: 1,
@@ -330,8 +522,6 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
           </button>
         ) : presenter ? (
           <>
-            {/* Presenter: the slide the room sees, at the size the presenter
-                needs, with everything they need beside it. */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
               <span
                 style={{
@@ -359,7 +549,6 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
                 paddingBottom: 4,
               }}
             >
-              {/* Timer, big enough to read at a glance from a lectern. */}
               <div
                 style={{
                   display: 'flex',
@@ -385,19 +574,17 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
                 </span>
                 <span style={{ display: 'flex', gap: 2 }}>
                   <BarButton
-                    label={timerRunning ? 'Pause timer (T)' : 'Start timer (T)'}
-                    onClick={() => setTimerRunning((v) => !v)}
+                    label={autoPlay ? 'Pause timer & auto-play (A)' : 'Start timer & auto-play (A)'}
+                    onClick={togglePlay}
                   >
-                    {timerRunning ? <span style={{ fontSize: 13, fontWeight: 700 }}>❙❙</span> : <PlayIcon size={14} />}
+                    {autoPlay ? <PauseCircleIcon size={18} /> : <PlayCircleIcon size={18} />}
                   </BarButton>
-                  <BarButton label="Reset timer" onClick={() => { setElapsed(0); setTimerRunning(true); }}>
+                  <BarButton label="Reset timer" onClick={() => setElapsed(0)}>
                     <RefreshIcon size={14} />
                   </BarButton>
                 </span>
               </div>
 
-              {/* Next slide. The single most useful thing on a presenter screen
-                  and the thing the old drawer-only layout had no room for. */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 <span
                   style={{
@@ -432,8 +619,6 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
                 )}
               </div>
 
-              {/* Notes, always on in presenter view - it is the presenter's
-                  screen, so there is nothing to hide them from. */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7, flex: 1, minHeight: 0 }}>
                 <span
                   style={{
@@ -473,8 +658,6 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
           slideBox
         )}
 
-        {/* Audience-layout back/forward arrows, off the slide and only while the
-            chrome is awake. */}
         {!presenter && !blank && (
           <>
             <div
@@ -511,95 +694,7 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
         )}
       </div>
 
-      {/* ── Jump-to-slide grid ────────────────────────────────────────────── */}
-      {picker && (
-        <div
-          onClick={() => setPicker(false)}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 8,
-            background: 'rgba(6,6,8,0.94)',
-            overflowY: 'auto',
-            padding: '36px 36px 96px',
-          }}
-        >
-          <div
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              color: 'rgba(255,255,255,0.38)',
-              marginBottom: 18,
-            }}
-          >
-            Jump to slide · {total} slides
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gap: 18,
-              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            }}
-          >
-            {visible.map((s, i) => (
-              <button
-                key={s.instanceId}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIndex(i);
-                  setPicker(false);
-                }}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 7,
-                  padding: 0,
-                  border: 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                }}
-              >
-                <span
-                  style={{
-                    display: 'block',
-                    border: i === index ? '2px solid var(--emerald-500)' : '1px solid rgba(255,255,255,0.14)',
-                  }}
-                >
-                  <FitStage slide={s} ast={ast} num={pad(i + 1)} logoUrl={deck.logoUrl} theme={theme} />
-                </span>
-                <span
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    alignItems: 'baseline',
-                    fontSize: 11.5,
-                    color: i === index ? 'var(--emerald-400)' : 'rgba(255,255,255,0.55)',
-                  }}
-                >
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>{pad(i + 1)}</span>
-                  <span
-                    style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {s.title}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Presenter bar ─────────────────────────────────────────────────────
-          Outside the slide's box, on its own opaque ground. This is the fix for
-          the unreadable counter: contrast no longer depends on the deck. */}
+      {/* Presenter Bar */}
       <div
         style={{
           position: 'relative',
@@ -611,8 +706,6 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
           pointerEvents: chromeVisible ? 'auto' : 'none',
         }}
       >
-        {/* Progress. A deck-length scrubber, and the only chrome allowed to be
-            a hairline - it carries no text to be illegible. */}
         <div style={{ height: 2, background: 'rgba(255,255,255,0.10)' }}>
           <div
             style={{
@@ -637,11 +730,10 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
             borderTop: CHROME_BORDER,
           }}
         >
-          {/* Position + title. Opaque ground, tabular figures, real contrast. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <button
               onClick={() => setPicker((v) => !v)}
-              title="Jump to slide (G)"
+              title="Toggle slides sidebar (G)"
               style={{
                 display: 'flex',
                 alignItems: 'baseline',
@@ -677,35 +769,33 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
             </span>
           </div>
 
-          {/* Timer, mirrored into the audience-layout bar so it's reachable
-              without switching views. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {!presenter && (
               <>
-                <button
-                  onClick={() => setTimerRunning((v) => !v)}
-                  title={timerRunning ? 'Pause timer (T)' : 'Start timer (T)'}
+                <BarButton
+                  label={autoPlay ? 'Pause Auto-Play (A)' : 'Start Auto-Play (5s per slide) (A)'}
+                  onClick={togglePlay}
+                  active={autoPlay}
+                >
+                  {autoPlay ? <PauseCircleIcon size={18} /> : <PlayCircleIcon size={18} />}
+                </BarButton>
+                <span
                   style={{
                     padding: '4px 8px',
-                    border: 'none',
-                    background: 'transparent',
-                    color: timerRunning ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.4)',
+                    color: autoPlay ? '#fff' : 'rgba(255,255,255,0.4)',
                     fontFamily: 'var(--font-mono)',
                     fontSize: 12.5,
                     fontWeight: 600,
                     fontVariantNumeric: 'tabular-nums',
-                    cursor: 'pointer',
+                    userSelect: 'none',
                   }}
                 >
                   {formatElapsed(elapsed)}
-                </button>
+                </span>
                 <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', margin: '0 5px' }} />
               </>
             )}
 
-            <BarButton label="Jump to slide (G)" onClick={() => setPicker((v) => !v)} active={picker}>
-              <LayersIcon size={16} />
-            </BarButton>
             <BarButton label="Blank the screen (B)" onClick={() => setBlank(true)}>
               <EyeOffIcon size={16} />
             </BarButton>
@@ -716,7 +806,7 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
               wide
             >
               <DocumentTextIcon size={15} />
-              Presenter
+              Notes
             </BarButton>
 
             <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', margin: '0 5px' }} />
@@ -739,3 +829,4 @@ export function PresentMode({ open, onClose, deck, ast, startIndex = 0, theme = 
     </div>
   );
 }
+

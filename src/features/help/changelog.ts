@@ -27,6 +27,26 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '0.8.0',
+    date: '2026-08-12',
+    summary: 'Infinite Pan & Zoom, macOS Dock slide drawer, and Auto-Play presentation controls.',
+    added: [
+      'Infinite Pan & Smooth Zoom: Pinch or Ctrl+Scroll between 10% and 400% on the canvas, with Space+Drag stage panning.',
+      'Auto-Hiding Presenter Sidebar: Hover the left edge in Present mode to reveal a slide thumbnail drawer, macOS Dock style.',
+      'Unified Auto-Play Slideshow: Integrated Play/Pause icon button driving 5-second automatic slide advancement and presentation timer.',
+      'Smart Auto-Layout Containers: Dynamic flex container reflows layout spacing and gaps when items are added or removed.',
+    ],
+    improved: [
+      'Relocated slide navigation handle to top-left edge to avoid overlapping slide navigation arrows.',
+      'Updated ionic circle outline icons (play-circle-outline and pause-circle-outline) for toolbar controls.',
+      'Renamed Presenter label to Notes in present mode toolbar.',
+    ],
+    fixed: [
+      'Ensured blackout eye-off icon inherits white stroke/fill against dark presenter bar.',
+      'Made presenter timer display non-clickable so presentation timer and auto-play are unified.',
+    ],
+  },
+  {
     version: '0.7.0',
     date: '2026-08-12',
     summary: 'Deck setup happens when you create a deck, not after you have built one.',

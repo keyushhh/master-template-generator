@@ -40,14 +40,53 @@ interface ChartDataEditorProps {
   onClose: () => void;
 }
 
+function parseCSV(csvText: string): { categories: string[]; series: OverlayChartSeries[] } | null {
+  const lines = csvText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2) return null;
+  const delimiter = lines[0].includes('\t') ? '\t' : ',';
+  const rows = lines.map((l) => l.split(delimiter).map((cell) => cell.trim().replace(/^["']|["']$/g, '')));
+  const header = rows[0];
+  if (header.length < 2) return null;
+  const seriesNames = header.slice(1);
+  const categories: string[] = [];
+  const seriesValues: number[][] = seriesNames.map(() => []);
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row.length) continue;
+    categories.push(row[0] || `Row ${i}`);
+    for (let s = 0; s < seriesNames.length; s++) {
+      const val = parseFloat(row[s + 1] || '0');
+      seriesValues[s].push(Number.isFinite(val) ? val : 0);
+    }
+  }
+  const series: OverlayChartSeries[] = seriesNames.map((name, s) => ({
+    name: name || `Series ${s + 1}`,
+    values: seriesValues[s],
+  }));
+  return { categories, series };
+}
+
 export function ChartDataEditor({ chartType, categories, series, onChange, onClose }: ChartDataEditorProps) {
   const wrap = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
   }, [onClose]);
+
+  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      const parsed = parseCSV(text);
+      if (parsed) onChange(parsed);
+    };
+    reader.readAsText(file);
+  };
 
   // Pie has one slice value per category, not one value per series - editing
   // more than the first series would have nothing to render.
@@ -166,7 +205,7 @@ export function ChartDataEditor({ chartType, categories, series, onChange, onClo
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
         <button
           onClick={addCategory}
           style={{ ...cellInput, cursor: 'pointer', width: 'auto', padding: '0 10px', fontWeight: 600 }}
@@ -181,6 +220,19 @@ export function ChartDataEditor({ chartType, categories, series, onChange, onClo
             + Series
           </button>
         )}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          style={{ ...cellInput, cursor: 'pointer', width: 'auto', padding: '0 10px', fontWeight: 600, marginLeft: 'auto', background: 'rgba(16, 185, 129, 0.2)', color: 'var(--emerald-400)', border: '1px solid var(--emerald-500)' }}
+        >
+          Import CSV
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          style={{ display: 'none' }}
+          onChange={handleCSVUpload}
+        />
       </div>
     </div>
   );
