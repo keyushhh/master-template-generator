@@ -10,6 +10,9 @@ interface MacFolderIconProps {
   isHovered?: boolean;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
+  /** An exact pixel size, for continuous zoom rather than the three fixed
+   *  steps. Takes over from `size` when given. */
+  sizePx?: number;
 }
 
 /** Hue & color filters applied to the high-res SVG assets */
@@ -34,6 +37,7 @@ export function MacFolderIcon({
   isHovered = false,
   className = '',
   size = 'md',
+  sizePx,
 }: MacFolderIconProps) {
   const defaultSrc = isEmpty ? folderEmpty : folderFilled;
   const hoverSrc = isEmpty ? folderEmptyHover : folderFilledHover;
@@ -46,24 +50,32 @@ export function MacFolderIcon({
   }[size];
 
   return (
-    <div className={`relative shrink-0 ${dims} select-none flex items-center justify-center ${className}`}>
-      {/* Base Resting SVG */}
+    <div
+      className={`relative shrink-0 ${sizePx ? '' : dims} select-none flex items-center justify-center ${className}`}
+      style={sizePx ? { width: sizePx, height: sizePx } : undefined}
+    >
+      {/* Base Resting SVG. Linear pacing, and the open state trails it by a
+          beat, so it still reads as one thing leaving before the other
+          arrives rather than a flat simultaneous crossfade. */}
       <img
         src={defaultSrc}
         alt="Folder"
-        className={`absolute inset-0 w-full h-full object-contain transition-all duration-300 ease-out ${
-          isHovered ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+        className={`absolute inset-0 w-full h-full object-contain ${
+          isHovered ? 'opacity-0 scale-[0.97] -translate-y-[1.5%]' : 'opacity-100 scale-100 translate-y-0'
         }`}
-        style={{ filter }}
+        style={{ filter, transition: 'opacity 260ms linear, transform 260ms linear' }}
       />
-      {/* Hover Animated SVG */}
+      {/* Hover Animated SVG - rises in a touch after the resting one starts leaving. */}
       <img
         src={hoverSrc}
         alt="Folder Open"
-        className={`absolute inset-0 w-full h-full object-contain transition-all duration-300 ease-out ${
-          isHovered ? 'opacity-100 scale-105' : 'opacity-0 scale-95'
+        className={`absolute inset-0 w-full h-full object-contain ${
+          isHovered ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-[0.94] translate-y-[2%]'
         }`}
-        style={{ filter }}
+        style={{
+          filter,
+          transition: 'opacity 460ms linear 40ms, transform 460ms linear 40ms',
+        }}
       />
     </div>
   );

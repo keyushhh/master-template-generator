@@ -27,6 +27,29 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.3.0',
+    date: '2026-08-12',
+    summary: 'Save a deck as a template, a working laser pointer, and a folder shelf that scales.',
+    added: [
+      'Save deck as template. From the command palette, snapshot the current deck’s slides as a starter you can pick from the New deck screen next time, without touching its brand colour.',
+      'The changelog can be filtered by Added, Improved or Fixed — click a tag to see just that kind of change, click Clear to see everything again.',
+      'Present mode’s annotation pen and laser pointer actually draw now, and the laser has a colour picker (red, green, blue, yellow, purple).',
+      'Pinch (or Ctrl/Cmd+scroll, or the new zoom buttons) resizes the folder shelf’s icons, up to a ceiling sized so two full rows always fit before the shelf would need to scroll. Past the smallest useful size it switches to a list instead of shrinking into something unreadable, and the list is a real table — name, date created, deck count, and the same actions as icons.',
+      'The library’s search covers folders as well as decks now, so there is one search box rather than a second one just for the shelf.',
+    ],
+    improved: [
+      'Folders sit inside one shared container instead of each getting its own boxed card, and wrap into more rows as the shelf grows rather than spreading further sideways. The shelf itself is capped at two rows at its largest icon size and scrolls internally past that, rather than pushing the decks below it further down every time a folder is added.',
+      'The folder “...” menu has icons now, highlights while open, and closes when you click anywhere else on the shelf.',
+      'Every delete — a deck, a slide, a shape, a table, a saved template, single or bulk — asks first and says plainly that it can’t be undone. Deleting a folder that has decks in it asks whether to keep them (moved to Uncategorised) or delete them too, instead of only ever moving them.',
+    ],
+    fixed: [
+      'The annotation pen and laser pointer toggled a state nothing read: clicking them changed nothing on screen. Neither drew anything, and "Clear Ink" rendered its label outside its own button.',
+      'The laser’s colour picker opened below the bottom toolbar, off the bottom of the screen, which looked like it did nothing when clicked.',
+      'Pinching the folder shelf zoomed the whole page along with the icons. React’s wheel handler is registered passive, so `preventDefault` inside it was silently ignored; a real listener on the shelf itself fixed it.',
+      'A folder deleted elsewhere (or wiped by the dev seeder) while you were looking at it left the library stuck showing an empty view for an id that no longer existed. It now returns to the root.',
+    ],
+  },
+  {
     version: '1.2.0',
     date: '2026-08-12',
     summary: 'Brand kits carry typefaces, not just colour.',

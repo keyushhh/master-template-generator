@@ -1,9 +1,14 @@
 import { createTemplateDeck } from '../deck/deckBuilder';
 import {
+  createFolder,
   createProject,
+  deleteFolder,
   deleteProject,
+  listFolders,
   listProjects,
+  moveProjectToFolder,
   setProjectUpdatedAt,
+  type FolderColor,
 } from '../deck/deckStore';
 import { createBrandKit, deleteBrandKit, listBrandKits } from '../theme/brandKitStore';
 import type { Deck } from '../deck/types';
@@ -111,6 +116,84 @@ function ageFor(i: number, total: number, rand: () => number): number {
 export function clearLibrary(): void {
   for (const p of listProjects()) deleteProject(p.id);
   for (const k of listBrandKits()) deleteBrandKit(k.id);
+}
+
+/** Folder names varied enough to catch a long one wrapping the card's title. */
+const FOLDER_NAMES = [
+  'Q3 Clients',
+  'Pitch Decks',
+  'Retail Vertical',
+  'Internal',
+  'Archive 2025',
+  'Onboarding',
+  'Strategy Work',
+  'Brand Refresh',
+  'Renewals',
+  'Case Studies',
+  'Workshops',
+  'New Business',
+  'Retainer Clients',
+  'One-offs',
+  'Templates',
+  'Q4 Planning',
+  'Executive Reviews',
+  'Media Plans',
+  'Research',
+  'Proposals',
+  'Legacy',
+  'Fast Track',
+  'VIP Accounts',
+  'A Folder With A Genuinely Long Name',
+];
+
+const FOLDER_COLORS: FolderColor[] = [
+  'orange',
+  'purple',
+  'blue',
+  'emerald',
+  'rose',
+  'slate',
+  'indigo',
+  'amber',
+];
+
+/** Remove every folder (decks inside are untouched - they fall back to Uncategorised). */
+export function clearFolders(): void {
+  for (const f of listFolders()) deleteFolder(f.id);
+}
+
+/**
+ * Replace the folder shelf with `count` folders, so the grid's wrap-to-a-new-row
+ * behaviour can be judged at a size beyond the two or three anyone has by hand.
+ *
+ * Deliberately doesn't touch decks: folders are a layout question on their own,
+ * and forcing a deck reseed alongside it would make "just the folders" a state
+ * you could never isolate. Whatever decks already exist get distributed across
+ * roughly two-thirds of the new folders, so counts vary and some stay empty -
+ * both are real states the empty-folder icon and the deck-count line need to
+ * survive looking at.
+ */
+export function seedFolders(count: number): void {
+  clearFolders();
+
+  const rand = rng(count * 104729);
+  const projects = listProjects();
+  let cursor = 0;
+
+  for (let i = 0; i < count; i++) {
+    const name =
+      FOLDER_NAMES[i % FOLDER_NAMES.length] +
+      (i >= FOLDER_NAMES.length ? ` ${Math.floor(i / FOLDER_NAMES.length) + 1}` : '');
+    const color = FOLDER_COLORS[i % FOLDER_COLORS.length];
+    const folder = createFolder(name, color);
+
+    if (projects.length && rand() < 0.7) {
+      const take = 1 + Math.floor(rand() * 4);
+      for (let j = 0; j < take && cursor < projects.length; j++, cursor++) {
+        moveProjectToFolder(projects[cursor].id, folder.id);
+      }
+    }
+  }
 }
 
 /**

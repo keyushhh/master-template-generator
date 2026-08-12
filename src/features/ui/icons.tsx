@@ -32,6 +32,30 @@ function Ion({ size, children }: { size: number; children: React.ReactNode }) {
   );
 }
 
+/**
+ * Lucide (lucide.dev), for the handful of glyphs Ionicons doesn't have.
+ * Native 24 viewBox, stroke-only - do not mix its children into `Ion`, whose
+ * 512 grid and fill-aware styling belong to a different icon set entirely.
+ */
+function Lucide({ size, children }: { size: number; children: React.ReactNode }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      style={{ flexShrink: 0, display: 'block' }}
+    >
+      {children}
+    </svg>
+  );
+}
+
 interface IconProps {
   size?: number;
 }
@@ -514,6 +538,27 @@ export function FolderOpenIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** ionicons: locate-outline */
+export function LaserPointerIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="48" d="M256 96V56M256 456v-40"/>
+      <path d="M256 112a144 144 0 10144 144 144 144 0 00-144-144z" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32"/>
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="48" d="M416 256h40M56 256h40"/>
+      <circle cx="256" cy="256" r="24" fill="currentColor"/>
+    </Ion>
+  );
+}
+
+/** ionicons: pencil-outline */
+export function PencilIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32" d="M364.13 125.25L87 403l-23 45 44.99-23 277.76-277.13-22.62-22.62zM420.69 68.69l-22.62 22.62 22.62 22.63 22.62-22.63a16 16 0 000-22.62h0a16 16 0 00-22.62 0z"/>
+    </Ion>
+  );
+}
+
 /** ionicons: folder-open-outline */
 export function FolderOpenOutlineIcon({ size = 14 }: IconProps) {
   return (
@@ -539,5 +584,28 @@ export function ArrowForwardNavIcon({ size = 14 }: IconProps) {
     <Ion size={size}>
       <path d="M268 112l144 144-144 144M392 256H100" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="48px"/>
     </Ion>
+  );
+}
+
+/** lucide: zoom-in */
+export function ZoomInIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      <line x1="11" y1="8" x2="11" y2="14" />
+      <line x1="8" y1="11" x2="14" y2="11" />
+    </Lucide>
+  );
+}
+
+/** lucide: zoom-out */
+export function ZoomOutIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      <line x1="8" y1="11" x2="14" y2="11" />
+    </Lucide>
   );
 }

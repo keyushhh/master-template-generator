@@ -55,6 +55,8 @@ import {
   PlayIcon,
   SearchIcon,
   SortIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
   TrashIcon,
 } from '../features/ui/icons';
 
@@ -75,6 +77,40 @@ import { Pagination } from '../features/library/Pagination';
 import { FolderChip } from '../features/library/FolderChip';
 
 const VIEW_KEY = 'wozku-library-view-v1';
+const FOLDER_ZOOM_KEY = 'wozku-folder-zoom-v1';
+const FOLDER_LIST_KEY = 'wozku-folder-listview-v1';
+/**
+ * Pixel width/height of a folder icon at each end of the pinch-zoom range, and
+ * the default before anyone has touched it - the size the icon shipped at, so
+ * zooming is additive rather than a reset.
+ *
+ * The floor isn't "as small as the icon can render" - it's the smallest size
+ * the card around it still works at all: below it the name truncates to two
+ * or three letters and there's nowhere left to put the "..." menu without it
+ * sitting on top of the icon. Pinching past this floor switches to the list
+ * instead of continuing to shrink into something unreadable.
+ */
+const FOLDER_ZOOM_MIN = 84;
+/** The ceiling is sized to the shelf's own height cap: two rows at this icon
+ *  size fill it right up to where scrolling would start anyway (see
+ *  FOLDER_SHELF_MAX_HEIGHT), so zooming in never fights the shelf for room -
+ *  the biggest a folder gets is the biggest that still shows two full rows. */
+const FOLDER_ZOOM_MAX = 220;
+const FOLDER_ZOOM_DEFAULT = 112;
+/** Two rows at FOLDER_ZOOM_MAX, plus the shelf's own padding - past this the
+ *  shelf scrolls internally instead of growing and pushing the decks below it
+ *  further down every time a folder is added. */
+const FOLDER_SHELF_MAX_HEIGHT = 760;
+
+function readStoredFolderZoom(): number {
+  const raw = Number(localStorage.getItem(FOLDER_ZOOM_KEY));
+  if (Number.isFinite(raw) && raw >= FOLDER_ZOOM_MIN && raw <= FOLDER_ZOOM_MAX) return raw;
+  return FOLDER_ZOOM_DEFAULT;
+}
+
+function readStoredFolderListView(): boolean {
+  return localStorage.getItem(FOLDER_LIST_KEY) === '1';
+}
 
 /** 'table' was called 'list' while it really was one. It is a sortable,
  *  paginated table now, and the old name kept it sounding like the simpler
@@ -310,6 +346,8 @@ export function HomePage() {
    * ever got to see it twice.
    */
   const [homeView, setHomeView] = useState<View>(() => readStoredView());
+  const [folderZoom, setFolderZoom] = useState<number>(() => readStoredFolderZoom());
+  const [folderListView, setFolderListView] = useState<boolean>(() => readStoredFolderListView());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState<Sort>({ key: 'updated', dir: 'desc' });
@@ -369,19 +407,119 @@ export function HomePage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  /**
+   * Every "..." menu on this page - a deck's, a folder card's, the folder
+   * header's - closes on a click anywhere outside it.
+   *
+   * One listener rather than one per menu, because that's what "anywhere
+   * outside" actually means: not "outside this specific menu's own box" (each
+   * of those already stops its own clicks from bubbling here) but "outside
+   * all of them, no matter which is open or where it lives on the page."
+   * Setting a state that's already null/false is a no-op react bails out of,
+   * so closing all three on every outside click costs nothing extra.
+   */
+  useEffect(() => {
+    const onOutsideClick = () => {
+      setMenuId(null);
+      setFolderMenuId(null);
+      setFolderHeaderMenuOpen(false);
+    };
+    document.addEventListener('click', onOutsideClick);
+    return () => document.removeEventListener('click', onOutsideClick);
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem(VIEW_KEY, homeView);
     } catch {}
   }, [homeView]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(FOLDER_ZOOM_KEY, String(folderZoom));
+      localStorage.setItem(FOLDER_LIST_KEY, folderListView ? '1' : '0');
+    } catch {}
+  }, [folderZoom, folderListView]);
+
+  /**
+   * Move the shelf's size by `delta` px, in either direction.
+   *
+   * Shrinking past the floor doesn't clamp and stop - it hands off to the
+   * list, which is the "smaller than the smallest icon" state rather than a
+   * size at all. Growing back out of the list does the reverse: one more
+   * zoom-in step past the floor, not a jump to some arbitrary icon size.
+   * Sharing this between the wheel handler and the +/- buttons is what keeps
+   * a pinch and a click agree on where that handoff happens.
+   */
+  const adjustFolderZoom = useCallback(
+    (delta: number) => {
+      if (delta < 0) {
+        if (folderListView) return; // already past the floor - nothing smaller to hand off to
+        const next = folderZoom + delta;
+        if (next < FOLDER_ZOOM_MIN) {
+          setFolderZoom(FOLDER_ZOOM_MIN);
+          setFolderListView(true);
+        } else {
+          setFolderZoom(next);
+        }
+      } else if (folderListView) {
+        setFolderListView(false);
+        setFolderZoom(FOLDER_ZOOM_MIN);
+      } else {
+        setFolderZoom(Math.min(FOLDER_ZOOM_MAX, folderZoom + delta));
+      }
+    },
+    [folderListView, folderZoom]
+  );
+
+  /**
+   * Trackpad pinch, on the folder shelf only.
+   *
+   * A pinch reaches the browser as a `wheel` event with `ctrlKey` set - that's
+   * the actual signal (there is no separate "pinch" DOM event), and it's also
+   * what Ctrl+scroll sends, so this doubles as that for a mouse. Without
+   * `preventDefault` the browser zooms the whole page instead, which is the
+   * one thing pinching a folder should never do - but React's `onWheel` prop
+   * is registered passive, so `preventDefault` inside it is silently ignored
+   * and the page-zoom happens anyway. A real (non-passive) listener on the
+   * shelf itself is the only way to actually stop it, and attaching it to the
+   * shelf rather than the window is what keeps the effect scoped to it: pinch
+   * anywhere else on the page and this listener never fires.
+   */
+  const folderShelfRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = folderShelfRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      adjustFolderZoom(-e.deltaY * 0.6);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [activeFolderId === null && folders.length > 0, adjustFolderZoom]);
+
   const kitThemes = useMemo(() => brandKitThemes(kits), [kits]);
   const sampleCover = useMemo(() => createTemplateDeck().slides[0], []);
 
   const reload = useCallback(() => {
+    const freshFolders = listFolders();
     setProjects(listProjectSummaries());
-    setFolders(listFolders());
+    setFolders(freshFolders);
     setKits(listBrandKits());
+    // A folder that vanished out from under an open view (deleted elsewhere,
+    // or wiped by the dev seeder) would otherwise leave the page "inside" an
+    // id nothing matches - decks nowhere, no folder name to show, no way out
+    // but the browser back button. Bounce to the root instead.
+    setActiveFolderId((id) => {
+      if (id && !freshFolders.some((f) => f.id === id)) {
+        setNavHistory([null]);
+        setNavIndex(0);
+        return null;
+      }
+      return id;
+    });
   }, []);
 
   const themeOf = useCallback(
@@ -592,6 +730,15 @@ export function HomePage() {
     [folders]
   );
 
+  /** The one search field covers folders too, not just decks - a second box
+   *  just for folders would be one more place to look, for a shelf that's
+   *  right next to the decks the first box already searches. */
+  const visibleFolders = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return folders;
+    return folders.filter((f) => f.name.toLowerCase().includes(q));
+  }, [folders, query]);
+
   /** True when the list on screen may contain decks from folders, so a result
    *  needs to say where it lives or it looks like filing did nothing. */
   const showFolderOrigin = activeFolderId === null && query.trim().length > 0;
@@ -665,6 +812,45 @@ export function HomePage() {
         currentFolderId={p.folderId}
       />
     ) : null;
+
+  /** The folder card's overflow menu - shared between the icon grid and the
+   *  list fallback, so the two only ever have one set of actions to keep in sync. */
+  const folderDropdown = (f: FolderMeta) => (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="absolute right-0 top-[calc(100%+4px)] z-30 w-44 py-1 bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-xl text-left"
+    >
+      <button
+        onClick={() => { setFolderMenuId(null); navigateToFolder(f.id); }}
+        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-100 text-left"
+      >
+        <FolderOpenOutlineIcon size={14} />
+        Open Folder
+      </button>
+      <button
+        onClick={() => { setFolderMenuId(null); void handleExportZip(f); }}
+        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 text-left"
+      >
+        <DownloadIcon size={14} />
+        Export as ZIP (.zip)
+      </button>
+      <button
+        onClick={() => { setFolderMenuId(null); setEditingFolder(f); setFolderModalOpen(true); }}
+        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-100 text-left"
+      >
+        <CreateIcon size={14} />
+        Rename / Recolor
+      </button>
+      <div className="my-1 h-px bg-neutral-200" />
+      <button
+        onClick={() => { setFolderMenuId(null); handleDeleteFolder(f); }}
+        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50 text-left"
+      >
+        <TrashIcon size={14} />
+        Delete Folder
+      </button>
+    </div>
+  );
 
   const nameField = (p: ProjectSummary, className: string) =>
     renamingId === p.id ? (
@@ -794,7 +980,7 @@ export function HomePage() {
 
                 <div className="relative">
                   <button
-                    onClick={() => setFolderHeaderMenuOpen((v) => !v)}
+                    onClick={(e) => { e.stopPropagation(); setFolderHeaderMenuOpen((v) => !v); }}
                     className={`w-9 h-9 flex items-center justify-center rounded-[var(--radius-sharp)] transition-colors cursor-pointer ${
                       folderHeaderMenuOpen
                         ? 'bg-emerald-100 border border-emerald-300 text-emerald-700'
@@ -1057,133 +1243,240 @@ export function HomePage() {
                 )}
 
                 {/* ── High-Fidelity SVG Folders Section (below Hero deck, above Everything Else) ── */}
-                {activeFolderId === null && folders.length > 0 && (
+                {activeFolderId === null && visibleFolders.length > 0 && (
                   <section className="mb-10 pt-4 border-t border-neutral-200/60">
                     <div className="flex items-center justify-between mb-4">
-                      <Eyebrow>Folders ({folders.length})</Eyebrow>
-                      <button
-                        onClick={() => { setEditingFolder(null); setFolderModalOpen(true); }}
-                        className="flex items-center gap-2 px-3.5 h-8 bg-white border border-neutral-200 hover:border-neutral-300 rounded-[var(--radius-sharp)] text-[12px] font-bold text-neutral-800 transition-all cursor-pointer"
-                      >
-                        <FolderIcon size={14} />
-                        New Folder
-                      </button>
-                    </div>
-
-                    <div
-                      className="bg-white border border-neutral-200 rounded-[var(--radius-sharp)] p-5"
-                      onClick={() => setFolderMenuId(null)}
-                    >
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-                      {folders.map((f) => {
-                        const deckCount = projects.filter((p) => p.folderId === f.id).length;
-                        const isMenuOpen = folderMenuId === f.id;
-                        const isHovered = hoveredFolderId === f.id;
-                        const isDragOver = dragOverFolderId === f.id;
-                        return (
-                          <div
-                            key={f.id}
-                            onClick={() => navigateToFolder(f.id)}
-                            onMouseEnter={() => setHoveredFolderId(f.id)}
-                            onMouseLeave={() => setHoveredFolderId(null)}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              e.dataTransfer.dropEffect = 'move';
-                              setDragOverFolderId(f.id);
-                            }}
-                            onDragLeave={() => setDragOverFolderId(null)}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              setDragOverFolderId(null);
-                              const deckId = e.dataTransfer.getData('text/plain');
-                              if (deckId) {
-                                moveProjectToFolder(deckId, f.id);
-                                reload();
-                                showToast(`Moved deck to "${f.name}"`);
-                              }
-                            }}
-                            className={`group relative flex flex-col items-center p-4 rounded-[var(--radius-sharp)] transition-all duration-200 cursor-pointer ${
-                              isDragOver
-                                ? 'bg-emerald-50 border-2 border-emerald-500 scale-105 z-20'
-                                : 'border border-transparent hover:bg-neutral-50 hover:border-neutral-200'
+                      <Eyebrow>Folders ({visibleFolders.length})</Eyebrow>
+                      <div className="flex items-center gap-2">
+                        {/* Pinch (Ctrl/Cmd+scroll on a trackpad reaches the DOM as a
+                            wheel event with ctrlKey set) resizes the icons directly
+                            on the shelf; these are the same control for anyone
+                            without a trackpad, and the only way to discover it at all. */}
+                        <div className="flex items-center h-8 border border-neutral-200 bg-white">
+                          <button
+                            onClick={() => adjustFolderZoom(-16)}
+                            aria-label={folderListView ? 'Already at the smallest size (list)' : 'Smaller folder icons'}
+                            title={folderListView ? 'Already at the smallest size' : 'Smaller folder icons'}
+                            aria-pressed={folderListView}
+                            className={`w-8 h-full flex items-center justify-center transition-colors cursor-pointer ${
+                              folderListView ? 'text-emerald-700 bg-emerald-50' : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'
                             }`}
                           >
-                            {/* 3-dot context menu */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setFolderMenuId(isMenuOpen ? null : f.id);
+                            <ZoomOutIcon size={13} />
+                          </button>
+                          <span className="w-px h-4 bg-neutral-200" />
+                          <button
+                            onClick={() => adjustFolderZoom(16)}
+                            aria-label="Larger folder icons"
+                            title="Larger folder icons"
+                            className="w-8 h-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+                          >
+                            <ZoomInIcon size={13} />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => { setEditingFolder(null); setFolderModalOpen(true); }}
+                          className="flex items-center gap-2 px-3.5 h-8 bg-white border border-neutral-200 hover:border-neutral-300 rounded-[var(--radius-sharp)] text-[12px] font-bold text-neutral-800 transition-all cursor-pointer"
+                        >
+                          <FolderIcon size={14} />
+                          New Folder
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Capped rather than left to grow with the folder count: past a
+                        couple of rows the shelf would start pushing the actual decks
+                        further down the page every time someone made a new folder,
+                        which is the one thing a shelf of folders should never do to
+                        the thing it's sitting on top of. Scrolls internally instead. */}
+                    <div
+                      ref={folderShelfRef}
+                      className="bg-white border border-neutral-200 rounded-[var(--radius-sharp)] p-5 overflow-y-auto"
+                      style={{ maxHeight: FOLDER_SHELF_MAX_HEIGHT }}
+                      onClick={() => setFolderMenuId(null)}
+                    >
+                    {folderListView ? (
+                      <div className="flex flex-col">
+                        <div className="grid grid-cols-[1fr_130px_90px_150px] items-center gap-3 px-2 pb-2 border-b border-neutral-200">
+                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                            Name
+                          </span>
+                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                            Date created
+                          </span>
+                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                            Decks
+                          </span>
+                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                            Actions
+                          </span>
+                        </div>
+                        <div className="flex flex-col divide-y divide-neutral-100">
+                          {visibleFolders.map((f) => {
+                            const deckCount = projects.filter((p) => p.folderId === f.id).length;
+                            const isDragOver = dragOverFolderId === f.id;
+                            const actionBtn =
+                              'w-7 h-7 flex items-center justify-center rounded-[var(--radius-sharp)] transition-colors cursor-pointer';
+                            return (
+                              <div
+                                key={f.id}
+                                onClick={() => navigateToFolder(f.id)}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  e.dataTransfer.dropEffect = 'move';
+                                  setDragOverFolderId(f.id);
+                                }}
+                                onDragLeave={() => setDragOverFolderId(null)}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  setDragOverFolderId(null);
+                                  const deckId = e.dataTransfer.getData('text/plain');
+                                  if (deckId) {
+                                    moveProjectToFolder(deckId, f.id);
+                                    reload();
+                                    showToast(`Moved deck to "${f.name}"`);
+                                  }
+                                }}
+                                className={`grid grid-cols-[1fr_130px_90px_150px] items-center gap-3 px-2 py-2 cursor-pointer transition-colors ${
+                                  isDragOver ? 'bg-emerald-50' : 'hover:bg-neutral-50'
+                                }`}
+                              >
+                                <span className="flex items-center gap-3 min-w-0">
+                                  <MacFolderIcon color={f.color} isEmpty={deckCount === 0} sizePx={28} />
+                                  <span className="truncate text-[13px] font-semibold text-neutral-900">
+                                    {f.name}
+                                  </span>
+                                </span>
+                                <span className="text-[12px] text-neutral-500">
+                                  {relativeTime(f.createdAt)}
+                                </span>
+                                <span className="font-mono text-[11px] text-neutral-400 tabular-nums">
+                                  {deckCount} {deckCount === 1 ? 'deck' : 'decks'}
+                                </span>
+                                <span className="flex items-center justify-start gap-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); navigateToFolder(f.id); }}
+                                    title="Open Folder"
+                                    aria-label={`Open folder "${f.name}"`}
+                                    className={`${actionBtn} text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100`}
+                                  >
+                                    <FolderOpenOutlineIcon size={14} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); void handleExportZip(f); }}
+                                    title="Export as ZIP (.zip)"
+                                    aria-label={`Export folder "${f.name}" as ZIP`}
+                                    className={`${actionBtn} text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50`}
+                                  >
+                                    <DownloadIcon size={14} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditingFolder(f); setFolderModalOpen(true); }}
+                                    title="Rename / Recolor"
+                                    aria-label={`Rename folder "${f.name}"`}
+                                    className={`${actionBtn} text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100`}
+                                  >
+                                    <CreateIcon size={14} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteFolder(f); }}
+                                    title="Delete Folder"
+                                    aria-label={`Delete folder "${f.name}"`}
+                                    className={`${actionBtn} text-rose-500 hover:text-rose-700 hover:bg-rose-50`}
+                                  >
+                                    <TrashIcon size={14} />
+                                  </button>
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className="grid gap-4"
+                        style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${folderZoom}px, 1fr))` }}
+                      >
+                        {visibleFolders.map((f) => {
+                          const deckCount = projects.filter((p) => p.folderId === f.id).length;
+                          const isMenuOpen = folderMenuId === f.id;
+                          const isHovered = hoveredFolderId === f.id;
+                          const isDragOver = dragOverFolderId === f.id;
+                          return (
+                            <div
+                              key={f.id}
+                              onClick={() => navigateToFolder(f.id)}
+                              onMouseEnter={() => setHoveredFolderId(f.id)}
+                              onMouseLeave={() => setHoveredFolderId(null)}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                setDragOverFolderId(f.id);
                               }}
-                              className={`absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-[var(--radius-sharp)] transition-colors ${
-                                isMenuOpen
-                                  ? 'text-emerald-700 bg-emerald-100'
-                                  : 'text-neutral-400 hover:text-neutral-900 bg-transparent hover:bg-neutral-100'
+                              onDragLeave={() => setDragOverFolderId(null)}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                setDragOverFolderId(null);
+                                const deckId = e.dataTransfer.getData('text/plain');
+                                if (deckId) {
+                                  moveProjectToFolder(deckId, f.id);
+                                  reload();
+                                  showToast(`Moved deck to "${f.name}"`);
+                                }
+                              }}
+                              className={`group relative flex flex-col items-center p-4 rounded-[var(--radius-sharp)] transition-all duration-200 cursor-pointer ${
+                                isDragOver
+                                  ? 'bg-emerald-50 border-2 border-emerald-500 scale-105 z-20'
+                                  : 'border border-transparent'
                               }`}
                             >
-                              <EllipsisIcon size={14} />
-                            </button>
-
-                            {/* Context Dropdown */}
-                            {isMenuOpen && (
-                              <div
-                                onClick={(e) => e.stopPropagation()}
-                                className="absolute top-9 right-2 z-30 w-44 py-1 bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-xl text-left"
-                              >
-                                <button
-                                  onClick={() => { setFolderMenuId(null); navigateToFolder(f.id); }}
-                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-100 text-left"
-                                >
-                                  <FolderOpenOutlineIcon size={14} />
-                                  Open Folder
-                                </button>
-                                <button
-                                  onClick={() => { setFolderMenuId(null); void handleExportZip(f); }}
-                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 text-left"
-                                >
-                                  <DownloadIcon size={14} />
-                                  Export as ZIP (.zip)
-                                </button>
-                                <button
-                                  onClick={() => { setFolderMenuId(null); setEditingFolder(f); setFolderModalOpen(true); }}
-                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-100 text-left"
-                                >
-                                  <CreateIcon size={14} />
-                                  Rename / Recolor
-                                </button>
-                                <div className="my-1 h-px bg-neutral-200" />
-                                <button
-                                  onClick={() => { setFolderMenuId(null); handleDeleteFolder(f); }}
-                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50 text-left"
-                                >
-                                  <TrashIcon size={14} />
-                                  Delete Folder
-                                </button>
+                              {/* Header row, reserved regardless of icon size - the "..." lives
+                                  here rather than absolutely pinned over the icon, so it can
+                                  never end up sitting on top of it once the icon shrinks below
+                                  the space that corner used to have free. */}
+                              <div className="w-full h-6 flex justify-end mb-2">
+                                <span className="relative">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setFolderMenuId(isMenuOpen ? null : f.id);
+                                    }}
+                                    className={`w-6 h-6 flex items-center justify-center rounded-[var(--radius-sharp)] transition-colors ${
+                                      isMenuOpen
+                                        ? 'text-emerald-700 bg-emerald-100'
+                                        : 'text-neutral-400 hover:text-neutral-900 bg-transparent hover:bg-neutral-100'
+                                    }`}
+                                  >
+                                    <EllipsisIcon size={14} />
+                                  </button>
+                                  {isMenuOpen && folderDropdown(f)}
+                                </span>
                               </div>
-                            )}
 
-                            {/* SVG Animated Folder Icon with hover state & color swap */}
-                            <div className="mb-3">
-                              <MacFolderIcon
-                                color={f.color}
-                                isEmpty={deckCount === 0}
-                                isHovered={isHovered}
-                                size="md"
-                              />
-                            </div>
+                              {/* SVG Animated Folder Icon with hover state & color swap */}
+                              <div className="mb-3">
+                                <MacFolderIcon
+                                  color={f.color}
+                                  isEmpty={deckCount === 0}
+                                  isHovered={isHovered}
+                                  sizePx={folderZoom}
+                                />
+                              </div>
 
-                            {/* Folder Title & Count */}
-                            <div className="text-center w-full min-w-0">
-                              <h4 className="text-[14px] font-semibold text-neutral-900 truncate">
-                                {f.name}
-                              </h4>
-                              <p className="text-[12px] font-medium text-neutral-400">
-                                {deckCount} {deckCount === 1 ? 'deck' : 'decks'}
-                              </p>
+                              {/* Folder Title & Count */}
+                              <div className="text-center w-full min-w-0">
+                                <h4 className="text-[14px] font-semibold text-neutral-900 truncate">
+                                  {f.name}
+                                </h4>
+                                <p className="text-[12px] font-medium text-neutral-400">
+                                  {deckCount} {deckCount === 1 ? 'deck' : 'decks'}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     </div>
                   </section>
                 )}

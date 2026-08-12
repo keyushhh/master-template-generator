@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { clearLibrary, seedLibrary } from './seedLibrary';
+import { clearFolders, clearLibrary, seedFolders, seedLibrary } from './seedLibrary';
 import { CloseIcon, FlashIcon } from '../ui/icons';
 import { setFitOutline, useFitOutline } from '../fit/fitStore';
 
@@ -27,6 +27,7 @@ interface DevPanelProps {
 }
 
 const SEEDS = [1, 3, 8, 20, 40];
+const FOLDER_SEEDS = [1, 4, 8, 16, 24];
 
 export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: DevPanelProps) {
   const [open, setOpen] = useState(false);
@@ -105,6 +106,35 @@ export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: De
               <span className="text-[10.5px] text-white/35 leading-snug">
                 Spread over 1&ndash;5 clients and back-dated across today, this week, this
                 month and older.
+              </span>
+            </div>
+
+            <div className="h-px bg-white/10" />
+
+            <div className="flex flex-col gap-1.5">
+              <span className="font-mono text-[9px] font-bold tracking-[0.14em] uppercase text-white/35">
+                Seed folders
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {FOLDER_SEEDS.map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => apply(() => seedFolders(n))}
+                    className={`${btn} bg-white/8 border-white/15 text-white hover:bg-white/20`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={() => apply(clearFolders)}
+                  className={`${btn} bg-white/8 border-white/15 text-white hover:bg-white/20`}
+                >
+                  0
+                </button>
+              </div>
+              <span className="text-[10.5px] text-white/35 leading-snug">
+                Replaces the folder shelf only - decks are left alone and get distributed
+                across the new folders, some left empty.
               </span>
             </div>
 

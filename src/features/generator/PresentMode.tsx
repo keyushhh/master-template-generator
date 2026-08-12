@@ -10,11 +10,18 @@ import {
   CloseIcon,
   DocumentTextIcon,
   EyeOffIcon,
+  LaserPointerIcon,
   LayersIcon,
   PauseCircleIcon,
+  PencilIcon,
   PlayCircleIcon,
   RefreshIcon,
+  TrashIcon,
 } from '../ui/icons';
+
+/** Colours on offer for the laser dot. Red first: it's the one every real
+ *  presenter remote defaults to, so it should be the one this does too. */
+const LASER_COLORS = ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#a855f7'];
 
 interface PresentModeProps {
   open: boolean;
@@ -51,6 +58,7 @@ function BarButton({
   onClick,
   disabled,
   active,
+  activeColor,
   wide,
   children,
 }: {
@@ -58,6 +66,10 @@ function BarButton({
   onClick: () => void;
   disabled?: boolean;
   active?: boolean;
+  /** Override the active-state fill. Defaults to the house emerald; a tool
+   *  whose effect on screen has its own colour (the laser dot, red ink) should
+   *  say so here, or its toolbar button and its effect read as unrelated. */
+  activeColor?: string;
   /** Lets a control carry a text label beside its icon. */
   wide?: boolean;
   children: React.ReactNode;
@@ -84,7 +96,7 @@ function BarButton({
         border: 'none',
         borderRadius: 'var(--radius-sharp)',
         background: active
-          ? 'var(--emerald-600)'
+          ? activeColor ?? 'var(--emerald-600)'
           : !disabled && hover
             ? 'rgba(255,255,255,0.13)'
             : 'transparent',
@@ -95,6 +107,7 @@ function BarButton({
         cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'background .15s, color .15s',
         whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}
     >
       {children}
@@ -141,6 +154,8 @@ export function PresentMode({
 
   const [toolMode, setToolMode] = useState<'pointer' | 'laser' | 'pen'>('pointer');
   const [laserPos, setLaserPos] = useState<{ x: number; y: number } | null>(null);
+  const [laserColor, setLaserColor] = useState(LASER_COLORS[0]);
+  const [laserColorPickerOpen, setLaserColorPickerOpen] = useState(false);
   const [penStrokes, setPenStrokes] = useState<Record<string, Array<{ points: Array<{ x: number; y: number }> }>>>({});
   const [currentStroke, setCurrentStroke] = useState<Array<{ x: number; y: number }> | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -204,7 +219,10 @@ export function PresentMode({
   }, []);
 
   useEffect(() => {
-    if (toolMode !== 'laser') setLaserPos(null);
+    if (toolMode !== 'laser') {
+      setLaserPos(null);
+      setLaserColorPickerOpen(false);
+    }
     if (toolMode !== 'pen') {
       isDrawingRef.current = false;
       strokeRef.current = [];
@@ -472,9 +490,8 @@ export function PresentMode({
             width: 16,
             height: 16,
             borderRadius: '50%',
-            background:
-              'radial-gradient(circle, rgba(239,68,68,0.95) 0%, rgba(239,68,68,0.4) 55%, transparent 100%)',
-            boxShadow: '0 0 14px 4px rgba(239,68,68,0.65)',
+            background: `radial-gradient(circle, ${laserColor}f2 0%, ${laserColor}66 55%, transparent 100%)`,
+            boxShadow: `0 0 14px 4px ${laserColor}a6`,
             transform: 'translate(-50%, -50%)',
             pointerEvents: 'none',
           }}
@@ -1012,23 +1029,94 @@ export function PresentMode({
               </>
             )}
 
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <BarButton
+                label={toolMode === 'laser' ? 'Turn off laser pointer' : 'Laser Pointer'}
+                onClick={() => setToolMode((m) => (m === 'laser' ? 'pointer' : 'laser'))}
+                active={toolMode === 'laser'}
+                activeColor={laserColor}
+              >
+                <LaserPointerIcon size={16} />
+              </BarButton>
+              {toolMode === 'laser' && (
+                <button
+                  type="button"
+                  onClick={() => setLaserColorPickerOpen((v) => !v)}
+                  aria-label="Choose laser colour"
+                  title="Choose laser colour"
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: '50%',
+                    background: laserColor,
+                    border: '2px solid rgba(255,255,255,0.85)',
+                    boxShadow: '0 0 0 1px rgba(0,0,0,0.35)',
+                    padding: 0,
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+              {laserColorPickerOpen && toolMode === 'laser' && (
+                <>
+                  <div
+                    onClick={() => setLaserColorPickerOpen(false)}
+                    style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 'calc(100% + 10px)',
+                      left: 0,
+                      zIndex: 41,
+                      display: 'flex',
+                      gap: 8,
+                      padding: 9,
+                      background: CHROME_BG,
+                      border: CHROME_BORDER,
+                      borderRadius: 'var(--radius-sharp)',
+                      boxShadow: '0 16px 36px rgba(0,0,0,0.45)',
+                    }}
+                  >
+                    {LASER_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => {
+                          setLaserColor(c);
+                          setLaserColorPickerOpen(false);
+                        }}
+                        aria-label={`Use ${c} laser`}
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: '50%',
+                          background: c,
+                          border: c === laserColor ? '2px solid #fff' : '2px solid transparent',
+                          padding: 0,
+                          cursor: 'pointer',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <BarButton
-              label="Laser Pointer"
-              onClick={() => setToolMode((m) => (m === 'laser' ? 'pointer' : 'laser'))}
-              active={toolMode === 'laser'}
-            >
-              <span style={{ fontSize: 13, fontWeight: 700, color: toolMode === 'laser' ? '#ef4444' : 'inherit' }}>🔴</span>
-            </BarButton>
-            <BarButton
-              label="Annotation Pen"
+              label={toolMode === 'pen' ? 'Turn off annotation pen' : 'Annotation Pen'}
               onClick={() => setToolMode((m) => (m === 'pen' ? 'pointer' : 'pen'))}
               active={toolMode === 'pen'}
             >
-              <span style={{ fontSize: 13, fontWeight: 700, color: toolMode === 'pen' ? 'var(--emerald-400)' : 'inherit' }}>✏️</span>
+              <PencilIcon size={16} />
             </BarButton>
             {penStrokes[slide.instanceId]?.length ? (
-              <BarButton label="Clear annotations" onClick={() => setPenStrokes((s) => ({ ...s, [slide.instanceId]: [] }))}>
-                <span style={{ fontSize: 11, fontWeight: 600 }}>Clear Ink</span>
+              <BarButton
+                label="Clear annotations"
+                onClick={() => setPenStrokes((s) => ({ ...s, [slide.instanceId]: [] }))}
+                wide
+              >
+                <TrashIcon size={14} />
+                Clear Ink
               </BarButton>
             ) : null}
 
