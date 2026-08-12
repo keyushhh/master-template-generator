@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { FitStage } from '../features/generator/FitStage';
 import { PresentMode } from '../features/generator/PresentMode';
@@ -354,6 +355,11 @@ export function HomePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menuId, setMenuId] = useState<string | null>(null);
   const [folderMenuId, setFolderMenuId] = useState<string | null>(null);
+  /** Viewport coordinates for the open folder menu, captured off the trigger
+   *  button at click time. The menu is portalled to the body and positioned
+   *  from these rather than living where it's rendered in the tree, so the
+   *  shelf's own scroll clipping (needed for the height cap) can't cut it off. */
+  const [folderMenuPos, setFolderMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -499,6 +505,18 @@ export function HomePage() {
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [activeFolderId === null && folders.length > 0, adjustFolderZoom]);
+
+  /** The open folder menu is portalled to the body at fixed coordinates
+   *  captured off its trigger - scrolling the shelf moves the trigger without
+   *  moving the menu, so the two would drift apart. Closing on scroll is
+   *  simpler and more honest than trying to track the trigger's position. */
+  useEffect(() => {
+    const el = folderShelfRef.current;
+    if (!el) return;
+    const onScroll = () => setFolderMenuId(null);
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [activeFolderId === null && folders.length > 0]);
 
   const kitThemes = useMemo(() => brandKitThemes(kits), [kits]);
   const sampleCover = useMemo(() => createTemplateDeck().slides[0], []);
@@ -814,12 +832,22 @@ export function HomePage() {
     ) : null;
 
   /** The folder card's overflow menu - shared between the icon grid and the
-   *  list fallback, so the two only ever have one set of actions to keep in sync. */
-  const folderDropdown = (f: FolderMeta) => (
-    <div
-      onClick={(e) => e.stopPropagation()}
-      className="absolute right-0 top-[calc(100%+4px)] z-30 w-44 py-1 bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-xl text-left"
-    >
+   *  list fallback, so the two only ever have one set of actions to keep in sync.
+   *
+   *  Portalled to the body at fixed viewport coordinates rather than absolutely
+   *  positioned off its trigger: the trigger lives inside the shelf's scroll
+   *  clipping (the same box that caps the shelf's height), and an absolutely
+   *  positioned child can never draw outside its scrolling ancestor's bounds -
+   *  it would get cut off exactly where the shelf's own edge is, regardless of
+   *  z-index. */
+  const folderDropdown = (f: FolderMeta) => {
+    if (!folderMenuPos) return null;
+    return createPortal(
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="fixed z-[300] w-44 py-1 bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-xl text-left"
+        style={{ top: folderMenuPos.top, right: folderMenuPos.right }}
+      >
       <button
         onClick={() => { setFolderMenuId(null); navigateToFolder(f.id); }}
         className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-100 text-left"
@@ -841,16 +869,18 @@ export function HomePage() {
         <CreateIcon size={14} />
         Rename / Recolor
       </button>
-      <div className="my-1 h-px bg-neutral-200" />
-      <button
-        onClick={() => { setFolderMenuId(null); handleDeleteFolder(f); }}
-        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50 text-left"
-      >
-        <TrashIcon size={14} />
-        Delete Folder
-      </button>
-    </div>
-  );
+        <div className="my-1 h-px bg-neutral-200" />
+        <button
+          onClick={() => { setFolderMenuId(null); handleDeleteFolder(f); }}
+          className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50 text-left"
+        >
+          <TrashIcon size={14} />
+          Delete Folder
+        </button>
+      </div>,
+      document.body
+    );
+  };
 
   const nameField = (p: ProjectSummary, className: string) =>
     renamingId === p.id ? (
@@ -1433,13 +1463,22 @@ export function HomePage() {
                               {/* Header row, reserved regardless of icon size - the "..." lives
                                   here rather than absolutely pinned over the icon, so it can
                                   never end up sitting on top of it once the icon shrinks below
-                                  the space that corner used to have free. */}
-                              <div className="w-full h-6 flex justify-end mb-2">
+                                  the space that corner used to have free. Sized to the icon's own
+                                  width (not the card's, which is often wider once the grid column
+                                  stretches to fill its row) so the button's right edge lines up
+                                  with the icon's right edge, not with empty space beside it. */}
+                              <div className="h-6 flex justify-end mb-2" style={{ width: folderZoom }}>
                                 <span className="relative">
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setFolderMenuId(isMenuOpen ? null : f.id);
+                                      if (isMenuOpen) {
+                                        setFolderMenuId(null);
+                                      } else {
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setFolderMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                        setFolderMenuId(f.id);
+                                      }
                                     }}
                                     className={`w-6 h-6 flex items-center justify-center rounded-[var(--radius-sharp)] transition-colors ${
                                       isMenuOpen
