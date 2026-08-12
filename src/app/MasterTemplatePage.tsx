@@ -1181,9 +1181,17 @@ export function MasterTemplatePage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const handleAddBlank = useCallback(() => {
+  /** Add a blank slide at `index` (default: the end of the deck). The rail picks
+   *  the index from its scroll position, so the new slide appears where the user
+   *  is looking rather than always below the fold. */
+  const handleAddBlank = useCallback((index?: number) => {
     const blank = createBlankSlide();
-    mutateDeck((prev) => ({ ...prev, slides: [...prev.slides, blank] }));
+    mutateDeck((prev) => {
+      const at = index === undefined ? prev.slides.length : Math.max(0, Math.min(index, prev.slides.length));
+      const slides = [...prev.slides];
+      slides.splice(at, 0, blank);
+      return { ...prev, slides };
+    });
     setCurrentSlideId(blank.instanceId);
   }, [mutateDeck]);
 

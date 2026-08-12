@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SlideInstance } from '../deck/types';
 import type { DocumentNode } from '../business-record/parser/ast';
@@ -82,6 +82,11 @@ function InsertAfterIcon() {
     </svg>
   );
 }
+
+/** Space between the overflow menu and its trigger button. */
+const MENU_GAP = 6;
+/** Smallest gap the overflow menu keeps from the window edge. */
+const MENU_EDGE_GAP = 8;
 
 /** One row of a thumbnail's overflow menu. */
 function MenuRow({ label, icon, onClick, danger }: { label: string; icon: React.ReactNode; onClick: () => void; danger?: boolean }) {
@@ -202,10 +207,27 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
   // Drag-to-reorder state.
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-  /** The open overflow menu: which slide, and where to pin it. Coordinates are
-   *  viewport-fixed because the menu is portalled out of the clipping rail. */
-  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  /** The open overflow menu: which slide, and the trigger's viewport rect edges
+   *  to pin it against. Coordinates are viewport-fixed because the menu is
+   *  portalled out of the clipping rail. Both `top` and `bottom` are kept (not
+   *  just one anchor point) so the menu can open upwards when the trigger sits
+   *  too near the bottom of the window for it to fit below. */
+  const [menu, setMenu] = useState<{ id: string; x: number; top: number; bottom: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  /** Measured menu height, 0 until it has been laid out once. Needed to decide
+   *  whether the menu fits below its trigger, and the reason the menu is hidden
+   *  for its first layout pass rather than positioned from a guessed height. */
+  const [menuHeight, setMenuHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    if (!menu) {
+      setMenuHeight(0);
+      return;
+    }
+    // Runs before paint, so the measured position is the first one drawn - the
+    // menu never visibly jumps from "below" to "above".
+    setMenuHeight(menuRef.current?.offsetHeight ?? 0);
+  }, [menu]);
 
   useEffect(() => {
     if (!menu) return;
@@ -260,6 +282,10 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
                 return (
                   <div
                     key={slide.instanceId}
+                    /* Lets the rail measure which thumbnails are on screen, so
+                       "Add slide" can drop the new slide where the user is
+                       looking instead of always at the end. */
+                    data-slide-row={slide.instanceId}
                     draggable
                     onDragStart={(e) => {
                       setDragId(slide.instanceId);
@@ -393,7 +419,7 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
                               setMenu((m) =>
                                 m?.id === slide.instanceId
                                   ? null
-                                  : { id: slide.instanceId, x: rect.right, y: rect.bottom + 6 }
+                                  : { id: slide.instanceId, x: rect.right, top: rect.top, bottom: rect.bottom }
                               )
                             }
                           >
@@ -454,10 +480,29 @@ export function SlideNavList({ slides, ast, logoUrl, onToggleHidden, onDuplicate
             className="w-[168px] py-1 bg-white border border-neutral-200"
             style={{
               position: 'fixed',
-              top: menu.y,
+              // Below the trigger by preference, above it when the window has no
+              // room below - which is every menu opened on the last thumbnail,
+              // where the rail's own scroll has the trigger sitting near the
+              // bottom edge. Clamped to the viewport as a final guard so a menu
+              // that fits in neither direction is still fully on screen.
+              top: Math.max(
+                MENU_EDGE_GAP,
+                Math.min(
+                  menuHeight && menu.bottom + MENU_GAP + menuHeight > window.innerHeight - MENU_EDGE_GAP
+                    ? menu.top - MENU_GAP - menuHeight
+                    : menu.bottom + MENU_GAP,
+                  window.innerHeight - MENU_EDGE_GAP - menuHeight
+                )
+              ),
               // Right-aligned to the trigger, then clamped so it can never hang
               // off the window edge.
               left: Math.max(8, Math.min(menu.x - 168, window.innerWidth - 176)),
+              // A menu taller than the window scrolls internally rather than
+              // spilling past both edges.
+              maxHeight: window.innerHeight - MENU_EDGE_GAP * 2,
+              overflowY: 'auto',
+              // Hidden only for the single pre-measurement layout pass.
+              visibility: menuHeight ? 'visible' : 'hidden',
               zIndex: 400,
               boxShadow: '0 10px 30px -8px rgba(15,23,20,0.28)',
             }}
