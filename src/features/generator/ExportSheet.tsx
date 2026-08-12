@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FitStage } from './FitStage';
 import { analyzeCoverage } from '../deck/deckBuilder';
 import { useToast } from '../toast/Toast';
@@ -9,6 +9,8 @@ import { AlertIcon, ArrowForwardIcon, CheckIcon, CloseIcon, LayersIcon, WarningI
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 import { useFitReport } from '../fit/fitStore';
 import { placeholderReport } from '../preflight/placeholders';
+import { catalogNow, fontByFamily, isBundled } from '../fonts/fontCatalog';
+import { familiesInDeck } from '../fonts/deckFonts';
 
 type ExportKind = 'pptx' | 'pdf' | 'png' | 'html';
 
@@ -157,6 +159,22 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
   // rail. The moment it matters is the moment you are about to send it.
   const unfilled = open ? placeholderReport(visible) : [];
 
+  /**
+   * Typefaces in this deck that PowerPoint will not have outlines for.
+   *
+   * Only shown for the PowerPoint format, because it is the only one affected:
+   * PDF, HTML and the image export all render from the DOM, so whatever is on the
+   * canvas is what lands. Only checked once the catalogue is in memory - it is
+   * loaded lazily, and a warning that appears a second after the sheet opens is
+   * worse than one that waits for the next open.
+   */
+  const unembeddable = useMemo(() => {
+    if (!open || kind !== 'pptx' || !catalogNow()) return [];
+    return familiesInDeck({ generated: false, slides: visible }, theme).filter(
+      (f) => !isBundled(f) && !fontByFamily(f)
+    );
+  }, [open, kind, visible, theme]);
+
   const run = useCallback(async () => {
     if (busy || empty) return;
     setBusy(true);
@@ -174,7 +192,22 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
         const onProgress = (current: number, total: number) => setProgress({ current, total });
         if (kind === 'pdf') await mod.exportToPDF(ids, projectName, onProgress);
         else if (kind === 'png') await mod.exportSlidesAsPngZip(ids, projectName, onProgress);
-        else await mod.exportToPPTX(visible, projectName, deck.logoUrl, onProgress, deck.logoScale, theme);
+        else {
+          const report = await mod.exportToPPTX(
+            visible, projectName, deck.logoUrl, onProgress, deck.logoScale, theme
+          );
+          // Say what actually travelled. PowerPoint has no font catalogue, so a
+          // family we could not fetch outlines for is one it will substitute -
+          // and a substitution nobody mentioned is how you find out about it in
+          // front of a client. Google Slides resolves these by name regardless,
+          // which is why this is a note rather than a failure.
+          if (report?.named.length) {
+            showToast(
+              `Exported. ${report.named.join(', ')} could not be embedded, so desktop PowerPoint will substitute ${report.named.length === 1 ? 'it' : 'them'}. Google Slides will still show ${report.named.length === 1 ? 'it' : 'them'} correctly.`,
+              'info'
+            );
+          }
+        }
       }
     } catch (err) {
       console.error(`${kind} export error:`, err);
@@ -279,7 +312,7 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
               Nothing here blocks the export. Every one of these is sometimes
               the right thing to ship, and that call belongs to the designer,
               not to a dialog. */}
-          {(unfilled.length > 0 || clipped.length > 0 || issues > 0) && (
+          {(unfilled.length > 0 || clipped.length > 0 || issues > 0 || unembeddable.length > 0) && (
             <div className="bg-amber-50 border-b border-amber-200">
               <div className="flex items-center gap-2 px-5 pt-2.5 pb-1.5">
                 <span className="text-amber-600 flex items-center">
@@ -347,6 +380,37 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {/* Fonts. A family with no file behind it is substituted by
+                    desktop PowerPoint, which is the one export that carries no
+                    font catalogue of its own. Worth saying before you send rather
+                    than after, and worth saying precisely: Google Slides resolves
+                    these by name, so "broken" would be wrong. */}
+                {unembeddable.length > 0 && (
+                  <div className="flex flex-col gap-1.5 px-5 py-3">
+                    <span className="text-[12.5px] font-bold text-amber-900 leading-snug">
+                      {unembeddable.length} typeface{unembeddable.length === 1 ? '' : 's'} can&rsquo;t be
+                      embedded
+                    </span>
+                    <ul className="flex flex-col gap-1 text-[11.5px] text-amber-800/90 leading-relaxed">
+                      {unembeddable.slice(0, 4).map((f) => (
+                        <li key={f} className="truncate">
+                          <span className="font-semibold">{f}</span>
+                          <span className="text-amber-700/75"> &middot; not a Google Font</span>
+                        </li>
+                      ))}
+                      {unembeddable.length > 4 && (
+                        <li className="text-amber-700/80">and {unembeddable.length - 4} more</li>
+                      )}
+                    </ul>
+                    <span className="text-[11px] text-amber-700/80">
+                      Desktop PowerPoint will substitute {unembeddable.length === 1 ? 'it' : 'them'} on a
+                      machine without {unembeddable.length === 1 ? 'it' : 'them'} installed. Google Slides
+                      and the PDF export are unaffected. Usually an imported deck carrying its original
+                      author&rsquo;s fonts.
+                    </span>
                   </div>
                 )}
 

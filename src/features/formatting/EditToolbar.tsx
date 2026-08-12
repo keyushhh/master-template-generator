@@ -26,7 +26,7 @@ import { createPortal } from 'react-dom';
 import type { ImportedShape, OverlayChartType, OverlayShape, SlotStyle } from '../deck/types';
 import {
   ACCENT_SWATCHES,
-  FONT_CHOICES,
+  fontStack,
   NEUTRAL_SWATCHES,
   SIZE_MAX,
   SIZE_MIN,
@@ -38,6 +38,7 @@ import {
 import { layerBounds, type LayerMove } from './overlayModel';
 import { GROUP_ALIGNMENTS, type GroupAlign } from './group';
 import { TrashIcon } from '../ui/icons';
+import { FontPicker } from '../fonts/FontPicker';
 import { EyedropIcon, RefreshIcon } from '../ui/icons';
 
 const BAR_H = 44;
@@ -119,15 +120,28 @@ function Menu({
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     // Fixed coordinates stop tracking the trigger once anything moves.
     const moved = () => setOpen(false);
+    /**
+     * The page scrolled under us - not a list inside us.
+     *
+     * This listener is in the capture phase, and scroll events do reach a
+     * capturing window listener from any descendant. So a panel with its own
+     * scrolling region closed itself the instant you touched the wheel over it,
+     * which read as "the list will not scroll". Anything inside the panel is the
+     * panel's own business.
+     */
+    const scrolled = (e: Event) => {
+      if (e.target instanceof Node && panel.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', down);
     document.addEventListener('keydown', key);
     window.addEventListener('resize', moved);
-    window.addEventListener('scroll', moved, true);
+    window.addEventListener('scroll', scrolled, true);
     return () => {
       document.removeEventListener('mousedown', down);
       document.removeEventListener('keydown', key);
       window.removeEventListener('resize', moved);
-      window.removeEventListener('scroll', moved, true);
+      window.removeEventListener('scroll', scrolled, true);
     };
   }, [open]);
 
@@ -153,8 +167,23 @@ function Menu({
         createPortal(
           <div
             ref={panel}
+            /**
+             * Swallowing mousedown is what keeps the canvas selection alive while
+             * you use the menu - without it, pressing a row blurs the slot being
+             * formatted and the patch lands on nothing.
+             *
+             * So the exemptions have to be exact. A text field needs its caret. A
+             * scrollbar needs its drag, and a scrollbar press is distinguishable:
+             * its target is the scrolling element itself, whereas a press on a row
+             * targets that row's button or one of its spans. Exempting the whole
+             * scrolling *subtree* instead - which is what a `closest()` on the
+             * container does - takes the rows with it, and every click in the list
+             * silently stops working.
+             */
             onMouseDown={(e) => {
-              if ((e.target as HTMLElement).closest('textarea, input')) return;
+              const t = e.target as HTMLElement;
+              if (t.closest('textarea, input')) return;
+              if (t.hasAttribute('data-menu-scroll')) return;
               e.preventDefault();
             }}
             style={{
@@ -542,6 +571,16 @@ export function EditToolbar({
 }: EditToolbarProps) {
   const bounds = selectedShape ? layerBounds(shapes, selectedShape.id) : null;
   const shown = textStyle?.sizePx ?? effectiveSizePx;
+  /**
+   * The typeface to name, by the same rule as the size.
+   *
+   * `fontName` is read off the DOM when the slot is selected, so it is the
+   * *template's* face and never changes again while the selection is held. The
+   * override is the newer fact. Without preferring it, picking a font applied to
+   * the slide but left the toolbar and the menu's checkmark insisting on the old
+   * one - which reads as the choice not having worked at all.
+   */
+  const shownFont = textStyle?.fontFamily ?? fontName;
   const grouped = selectedSlotCount > 1;
   const isFillable = selectedShape && (selectedShape.kind === 'rect' || selectedShape.kind === 'ellipse');
   const tableDims = selectedShape?.kind === 'table'
@@ -613,62 +652,30 @@ export function EditToolbar({
             <Menu
               title={`Typeface: ${fieldLabel}`}
               label=""
-              // Wide enough for the longest family name plus its role tag on one
-              // line. At 200 both two-word names ("Space Grotesk", "JetBrains
-              // Mono") wrapped, which read as two separate options.
-              width={252}
+              // Wide enough for a search field, the category chips and a family
+              // name with its role tag on one line.
+              width={330}
               active={!!textStyle?.fontFamily}
               icon={
                 <span
                   style={{
-                    fontFamily: fontName ? `"${fontName}", var(--font-sans)` : 'var(--font-sans)',
+                    fontFamily: shownFont ? fontStack(shownFont) : 'var(--font-sans)',
                     fontSize: 12,
                     maxWidth: 116, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}
                 >
-                  {fontName ?? fieldLabel}
+                  {shownFont ?? fieldLabel}
                 </span>
               }
             >
               {(close) => (
-                <>
-                  {/* Each option renders in the face it applies, so the choice
-                      is made by looking rather than by reading a name. */}
-                  {FONT_CHOICES.map((f) => (
-                    <button
-                      key={f.face}
-                      onClick={() => { onPatch({ fontFamily: f.face }); close(); }}
-                      style={{
-                        display: 'flex', alignItems: 'baseline', gap: 10, width: '100%',
-                        height: 38, padding: '0 8px', border: 'none', cursor: 'pointer',
-                        background: textStyle?.fontFamily === f.face ? 'var(--emerald-50)' : 'transparent',
-                        color: textStyle?.fontFamily === f.face ? 'var(--emerald-700)' : 'var(--neutral-700)',
-                        borderRadius: 'var(--radius-sharp)', textAlign: 'left',
-                      }}
-                    >
-                      <span style={{ fontFamily: f.stack, fontSize: 15, fontWeight: 600, flexShrink: 0 }}>Ag</span>
-                      {/* nowrap as well as a wider menu: a family name is a
-                          single thing to read, and the fallback if one ever
-                          outgrows the box should be a clipped name, not a
-                          two-line row that looks like two options. */}
-                      <span
-                        style={{
-                          fontFamily: f.stack, fontSize: 12.5,
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {f.face}
-                      </span>
-                      <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', marginLeft: 'auto', paddingLeft: 8, flexShrink: 0 }}>{f.label}</span>
-                    </button>
-                  ))}
-                  {textStyle?.fontFamily && (
-                    <>
-                      <div style={{ height: 1, background: 'var(--neutral-200)', margin: '6px 4px' }} />
-                      <Row label="Template typeface" onClick={() => { onPatch({ fontFamily: undefined }); close(); }} />
-                    </>
-                  )}
-                </>
+                <FontPicker
+                  current={shownFont}
+                  hasOverride={!!textStyle?.fontFamily}
+                  onPick={(family) => onPatch({ fontFamily: family })}
+                  onReset={() => onPatch({ fontFamily: undefined })}
+                  close={close}
+                />
               )}
             </Menu>
           )}

@@ -85,7 +85,17 @@ export function isEmptyStyle(s: SlotStyle | undefined): boolean {
     s.italic === undefined &&
     s.underline === undefined &&
     s.color === undefined &&
-    s.align === undefined
+    s.align === undefined &&
+    // Every field of SlotStyle has to be listed here.
+    //
+    // `fontFamily` was missing, and the consequence was not a cosmetic one:
+    // `patchStyles` deletes any override this function calls empty, so setting
+    // only a typeface produced `{ fontFamily: 'Roboto' }`, was judged empty, and
+    // was thrown away. Changing the typeface of a slot that carried no other
+    // override silently did nothing, for as long as the typeface menu has
+    // existed. `scripts/resolve-check.mjs` now enumerates the type's fields so a
+    // new one cannot be forgotten the same way.
+    s.fontFamily === undefined
   );
 }
 

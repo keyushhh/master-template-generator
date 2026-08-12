@@ -473,3 +473,48 @@ export function SortIcon({ size = 14 }: IconProps) {
     </Ion>
   );
 }
+
+/** ionicons: folder-outline */
+export function FolderIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M440 432H72a40 40 0 01-40-40V120a40 40 0 0140-40h120l32 40h216a40 40 0 0140 40v232a40 40 0 01-40 40z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="32px"/>
+    </Ion>
+  );
+}
+
+/** ionicons: folder (filled) */
+export function FolderFilledIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M496 152a56 56 0 00-56-56H220.37l-32-40H72a56 56 0 00-56 56v288a56 56 0 0056 56h368a56 56 0 0056-56z" fill="currentColor"/>
+    </Ion>
+  );
+}
+
+/** ionicons: folder-open (filled open) */
+export function FolderOpenIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M408 96H252.11l-32-40H80a48.05 48.05 0 00-48 48v288a48.05 48.05 0 0048 48h328a48.05 48.05 0 0048-48V144a48.05 48.05 0 00-48-48z" fill="currentColor"/>
+    </Ion>
+  );
+}
+
+/** ionicons: arrow-back-outline */
+export function ArrowBackNavIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M244 400L100 256l144-144M120 256h292" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="48px"/>
+    </Ion>
+  );
+}
+
+/** ionicons: arrow-forward-outline */
+export function ArrowForwardNavIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M268 112l144 144-144 144M392 256H100" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="48px"/>
+    </Ion>
+  );
+}

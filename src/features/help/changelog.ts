@@ -27,6 +27,55 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.1.0',
+    date: '2026-08-12',
+    summary: 'All 1,932 Google Fonts in the typeface menu, and body copy that exports in the font you can see.',
+    added: [
+      'The typeface menu now searches the whole Google Fonts library, with filters for Sans, Serif, Display, Mono and Script. Every row is set in the face it names.',
+      'Any font you pick is fetched for the canvas, embedded into the .pptx so desktop PowerPoint has it, and named so Google Slides resolves it with nothing installed.',
+      'The export sheet warns you when a deck names a typeface that cannot be embedded, which happens with fonts an imported .pptx brought in from its original author.',
+    ],
+    improved: [
+      'The three house faces stay pinned at the top of the menu. Reaching the rest takes typing, so the on-brand choice is still the fastest one.',
+      'Google’s own brand faces are deliberately absent from the list. The API will serve them, but they carry no licence that lets us put them inside a file you send a client.',
+    ],
+    fixed: [
+      'Choosing a typeface did nothing unless the text already had some other formatting on it. The override was being judged "empty" and discarded before it reached the slide, so the menu closed and nothing changed.',
+      'The toolbar kept naming the old typeface after you had changed it. It was reporting the font measured off the slide when the slot was selected rather than the one you picked, so a change that had worked looked like one that had not.',
+      'Body copy exported in the display face while the studio drew it in the body face. Every paragraph in every deck exported before this was in the wrong typeface, and because the difference was a font rather than a position, nothing looked broken until you put the two side by side.',
+    ],
+  },
+  {
+    version: '1.0.0',
+    date: '2026-08-12',
+    summary: '3D Folders, Drag-and-Drop Deck Organization, and Bulk Move Controls.',
+    added: [
+      '3D Folder Management: Organize decks into custom color-coded folders featuring high-resolution 3D SVG folder states and smooth open-on-hover animations.',
+      'Drag-and-Drop Deck Movement: Drag any deck directly onto a folder card from both List and Grid views to instantly move it inside.',
+      'Bulk "Move to Folder" Toolbar: Move multiple selected decks at once into any folder or back to the main library directly from the table action bar.',
+      '"Add Existing Decks" Modal: Search and import existing decks into any open folder using a dedicated deck selector dialog with live slide cover thumbnails.',
+      'Row Hover Folder Controls: Added a quick "Move to Folder" hover action button on every table row with filled color-matched folder icons.',
+      'One-Click Folder ZIP Export: Download the full ZIP archive of all PowerPoint (.pptx) decks inside any folder with a single click.',
+    ],
+    improved: [
+      'Refined folder header with prominent "[ ← Back ]" navigation and interactive breadcrumbs.',
+      'Scoped deck row clicks so opening a deck happens specifically when clicking its name or cover thumbnail.',
+      'Removed unnecessary card drop shadows on folder hover to maintain clean 0px sharp-corner brand aesthetics.',
+    ],
+  },
+  {
+    version: '0.9.1',
+    date: '2026-08-12',
+    summary: 'The body typeface is now one a client’s machine can actually get.',
+    improved: [
+      'Satoshi has been replaced by DM Sans as the body typeface. Every face in the deck is now a free Google Font, self-hosted and embedded into the .pptx, and available by name in Google Slides.',
+      'The typeface menu is wider, so two-word family names read on one line instead of wrapping into what looked like two options.',
+    ],
+    fixed: [
+      'Satoshi was never embedded in exports. It came from Fontshare rather than Google Fonts, so a deck looked right in the studio and substituted to something else the moment anyone else opened it.',
+    ],
+  },
+  {
     version: '0.9.0',
     date: '2026-08-12',
     summary: 'Standalone Interactive HTML Export, Pre-Flight Quality Checklist, and Editable Export Filename.',
@@ -48,10 +97,10 @@ export const CHANGELOG: Release[] = [
   {
     version: '0.8.0',
     date: '2026-08-12',
-    summary: 'Infinite Pan & Zoom, macOS Dock slide drawer, and Auto-Play presentation controls.',
+    summary: 'Infinite Pan & Zoom, Slide Drawer, and Auto-Play presentation controls.',
     added: [
       'Infinite Pan & Smooth Zoom: Pinch or Ctrl+Scroll between 10% and 400% on the canvas, with Space+Drag stage panning.',
-      'Auto-Hiding Presenter Sidebar: Hover the left edge in Present mode to reveal a slide thumbnail drawer, macOS Dock style.',
+      'Auto-Hiding Presenter Sidebar: Hover the left edge in Present mode to reveal an interactive slide thumbnail drawer.',
       'Unified Auto-Play Slideshow: Integrated Play/Pause icon button driving 5-second automatic slide advancement and presentation timer.',
       'Smart Auto-Layout Containers: Dynamic flex container reflows layout spacing and gaps when items are added or removed.',
     ],

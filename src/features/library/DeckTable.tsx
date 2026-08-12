@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { FitStage } from '../generator/FitStage';
 import { css as themeCss, type DeckTheme } from '../theme/deckTheme';
 import type { Deck } from '../deck/types';
@@ -8,10 +9,13 @@ import {
   ArrowUpIcon,
   CheckIcon,
   CopyIcon,
+  FolderIcon,
+  FolderOpenIcon,
   PlayIcon,
   SortIcon,
   TrashIcon,
 } from '../ui/icons';
+import type { FolderMeta } from '../deck/deckStore';
 
 export type SortKey = 'name' | 'client' | 'slides' | 'updated';
 export type SortDir = 'asc' | 'desc';
@@ -38,6 +42,9 @@ interface DeckTableProps {
   onClearSelection: () => void;
   onBulkDuplicate: () => void;
   onBulkDelete: () => void;
+  folders?: FolderMeta[];
+  onBulkMoveToFolder?: (folderId: string | null) => void;
+  onMoveToFolder?: (projectId: string, folderId: string | null) => void;
   onOpen: (id: string) => void;
   onPresent: (id: string) => void;
   onDuplicate: (id: string) => void;
@@ -212,6 +219,9 @@ export function DeckTable({
   onClearSelection,
   onBulkDuplicate,
   onBulkDelete,
+  folders = [],
+  onBulkMoveToFolder,
+  onMoveToFolder,
   onOpen,
   onPresent,
   onDuplicate,
@@ -220,6 +230,8 @@ export function DeckTable({
 }: DeckTableProps) {
   const allShownSelected = rows.length > 0 && rows.every((p) => selected.has(p.id));
   const someSelected = selected.size > 0;
+  const [moveDropdownOpen, setMoveDropdownOpen] = useState(false);
+  const [rowFolderMenuId, setRowFolderMenuId] = useState<string | null>(null);
 
   return (
     <div className="bg-white border border-neutral-200">
@@ -237,6 +249,66 @@ export function DeckTable({
             <CopyIcon size={13} />
             Duplicate
           </button>
+
+          {/* Bulk Move to Folder Dropdown */}
+          {onBulkMoveToFolder && (
+            <div className="relative">
+              <button
+                onClick={() => setMoveDropdownOpen((v) => !v)}
+                className="flex items-center gap-1.5 h-[30px] px-2.5 text-[12px] font-bold text-neutral-700 bg-white border border-neutral-200 hover:border-neutral-400 transition-colors cursor-pointer"
+              >
+                <FolderIcon size={13} />
+                Move to folder
+                <span className="text-[10px] text-neutral-400 ml-0.5">▼</span>
+              </button>
+
+              {moveDropdownOpen && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute left-0 top-[calc(100%+4px)] z-30 w-52 py-1 bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-xl text-left"
+                >
+                  <button
+                    onClick={() => { setMoveDropdownOpen(false); onBulkMoveToFolder(null); }}
+                    className="w-full px-3 py-1.5 text-[12px] font-medium text-neutral-700 hover:bg-neutral-100 text-left"
+                  >
+                    Main Library (No Folder)
+                  </button>
+                  {folders.length > 0 && <div className="my-1 h-px bg-neutral-200" />}
+                  {folders.map((f) => {
+                    const iconColor =
+                      f.color === 'orange'
+                        ? '#f97316'
+                        : f.color === 'amber'
+                        ? '#f59e0b'
+                        : f.color === 'purple'
+                        ? '#a855f7'
+                        : f.color === 'emerald'
+                        ? '#10b981'
+                        : f.color === 'rose'
+                        ? '#f43f5e'
+                        : f.color === 'indigo'
+                        ? '#6366f1'
+                        : f.color === 'slate'
+                        ? '#64748b'
+                        : '#3b82f6';
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => { setMoveDropdownOpen(false); onBulkMoveToFolder(f.id); }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] font-semibold text-neutral-800 hover:bg-neutral-100 text-left cursor-pointer"
+                      >
+                        <span style={{ color: iconColor }} className="shrink-0 flex items-center">
+                          <FolderOpenIcon size={14} />
+                        </span>
+                        <span className="truncate">{f.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={onBulkDelete}
             className="flex items-center gap-1.5 h-[30px] px-2.5 text-[12px] font-bold text-red-600 bg-white border border-neutral-200 hover:border-red-300 hover:bg-red-50 transition-colors cursor-pointer"
@@ -283,8 +355,12 @@ export function DeckTable({
               return (
                 <tr
                   key={p.id}
-                  onClick={() => onOpen(p.id)}
-                  className={`group cursor-pointer transition-colors ${
+                  draggable={true}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('text/plain', p.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  className={`group transition-colors ${
                     isSelected ? 'bg-emerald-50/50' : 'hover:bg-neutral-50'
                   }`}
                 >
@@ -300,7 +376,10 @@ export function DeckTable({
 
                   {/* Deck: cover, name, and where the deck came from. */}
                   <td className="border-b border-neutral-200 px-3 py-2 align-middle max-w-0">
-                    <span className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      onClick={() => onOpen(p.id)}
+                      className="inline-flex items-center gap-2.5 max-w-full cursor-pointer group/name hover:opacity-85 transition-opacity"
+                    >
                       <span
                         className="shrink-0 block w-[48px] bg-white"
                         style={{ boxShadow: '0 0 0 1px var(--neutral-200)' }}
@@ -317,7 +396,7 @@ export function DeckTable({
                           {sourceLabel(p.deck)}
                         </span>
                       </span>
-                    </span>
+                    </div>
                   </td>
 
                   {/* Client, as a pill in the kit's own colour. */}
@@ -349,6 +428,70 @@ export function DeckTable({
 
                   <td className="border-b border-neutral-200 px-2 py-2 align-middle">
                     <span className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                      {onMoveToFolder && (
+                        p.folderId ? (
+                          <RowAction
+                            label="Remove from folder"
+                            onClick={() => onMoveToFolder(p.id, null)}
+                          >
+                            <FolderIcon size={14} />
+                          </RowAction>
+                        ) : (
+                          <div className="relative">
+                            <RowAction
+                              label="Move to folder"
+                              onClick={() => setRowFolderMenuId(rowFolderMenuId === p.id ? null : p.id)}
+                            >
+                              <FolderOpenIcon size={14} />
+                            </RowAction>
+
+                            {rowFolderMenuId === p.id && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute right-0 top-[calc(100%+4px)] z-40 w-48 py-1 bg-white border border-neutral-200 rounded-[var(--radius-sharp)] shadow-xl text-left"
+                              >
+                                <button
+                                  onClick={() => { setRowFolderMenuId(null); onMoveToFolder(p.id, null); }}
+                                  className="w-full px-3 py-1.5 text-[12px] font-medium text-neutral-700 hover:bg-neutral-100 text-left cursor-pointer"
+                                >
+                                  Main Library (No Folder)
+                                </button>
+                                {folders.length > 0 && <div className="my-1 h-px bg-neutral-200" />}
+                                {folders.map((f) => {
+                                  const iconColor =
+                                    f.color === 'orange'
+                                      ? '#f97316'
+                                      : f.color === 'amber'
+                                      ? '#f59e0b'
+                                      : f.color === 'purple'
+                                      ? '#a855f7'
+                                      : f.color === 'emerald'
+                                      ? '#10b981'
+                                      : f.color === 'rose'
+                                      ? '#f43f5e'
+                                      : f.color === 'indigo'
+                                      ? '#6366f1'
+                                      : f.color === 'slate'
+                                      ? '#64748b'
+                                      : '#3b82f6';
+                                  return (
+                                    <button
+                                      key={f.id}
+                                      onClick={() => { setRowFolderMenuId(null); onMoveToFolder(p.id, f.id); }}
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] font-semibold text-neutral-800 hover:bg-neutral-100 text-left cursor-pointer"
+                                    >
+                                      <span style={{ color: iconColor }} className="shrink-0 flex items-center">
+                                        <FolderOpenIcon size={14} />
+                                      </span>
+                                      <span className="truncate">{f.name}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      )}
                       {visible.length > 0 && (
                         <RowAction label="Present" onClick={() => onPresent(p.id)}>
                           <PlayIcon size={14} />

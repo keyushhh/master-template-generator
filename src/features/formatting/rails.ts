@@ -108,12 +108,17 @@ export function luminance(hex: string): number {
 }
 
 /**
- * The families a slot may be switched to.
+ * The house faces, pinned to the top of the typeface menu.
  *
- * Deliberately short and brand-bound: these are the three faces the templates
- * and the exporter already embed, so anything picked here survives the round
- * trip into PowerPoint. `stack` is what the canvas renders with; `face` is the
- * single family name the .pptx carries.
+ * No longer the whole list - the picker searches the Google Fonts catalogue
+ * behind these - but still the fast path, because these three are the ones the
+ * app ships in `public/fonts` and embeds from local files. Everything reachable
+ * through search is a Google Font, which means it can be fetched for the canvas,
+ * named for Google Slides and embedded for PowerPoint; these three are simply the
+ * ones that need no network to do it.
+ *
+ * `stack` is what the canvas renders with; `face` is the single family name the
+ * .pptx carries.
  */
 export interface FontChoice {
   /** Stored on the slot, and sent to PowerPoint verbatim. */
@@ -125,10 +130,21 @@ export interface FontChoice {
 
 export const FONT_CHOICES: FontChoice[] = [
   { face: 'Space Grotesk', label: 'Display', stack: '"Space Grotesk", "Inter", sans-serif' },
-  { face: 'Satoshi', label: 'Sans', stack: '"Satoshi", "Inter", ui-sans-serif, system-ui, sans-serif' },
+  { face: 'DM Sans', label: 'Sans', stack: '"DM Sans", "Inter", ui-sans-serif, system-ui, sans-serif' },
   { face: 'JetBrains Mono', label: 'Mono', stack: '"JetBrains Mono", ui-monospace, SFMono-Regular, monospace' },
 ];
 
+/**
+ * CSS stack for a chosen face.
+ *
+ * The house three have hand-written stacks. Anything else is a family pulled from
+ * the Google Fonts catalogue at runtime, and gets the body face behind it so
+ * there is something sensible on screen for the moment before it arrives rather
+ * than the browser's default serif.
+ */
 export function fontStack(face: string | undefined): string | undefined {
-  return FONT_CHOICES.find((f) => f.face === face)?.stack;
+  if (!face) return undefined;
+  const house = FONT_CHOICES.find((f) => f.face === face);
+  if (house) return house.stack;
+  return `"${face}", "DM Sans", "Inter", ui-sans-serif, system-ui, sans-serif`;
 }

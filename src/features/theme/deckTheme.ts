@@ -41,9 +41,15 @@ type Hex = string;
  * conflating them breaks one of them.
  *
  * PowerPoint's `fontFace` takes a single family name and has no concept of a
- * fallback list. CSS needs the whole stack: Satoshi is not self-hosted in
- * `public/fonts`, so a bare `font-family: Satoshi` would drop the slide's body
- * copy to the browser's default serif instead of Inter or the system UI face.
+ * fallback list. CSS needs the whole stack, so the canvas has something to draw
+ * with in the moment before a web font lands and on a machine that blocks it.
+ *
+ * All three families are now self-hosted in `public/fonts` and embedded into the
+ * .pptx, which is the property that matters: a family named in the export but
+ * absent from the file is substituted by PowerPoint, and the deck the client
+ * opens stops being the deck you designed. Satoshi used to be the exception -
+ * it came from Fontshare, was never embedded, and silently substituted on every
+ * machine but ours.
  */
 export interface ThemeFont {
   /** Single family name, for PowerPoint's `fontFace`. */
@@ -146,8 +152,8 @@ export const WOZKU_THEME: DeckTheme = {
       stack: '"Space Grotesk", "Inter", sans-serif',
     },
     sans: {
-      family: 'Satoshi',
-      stack: '"Satoshi", "Inter", ui-sans-serif, system-ui, sans-serif',
+      family: 'DM Sans',
+      stack: '"DM Sans", "Inter", ui-sans-serif, system-ui, sans-serif',
     },
     mono: {
       family: 'JetBrains Mono',
@@ -388,12 +394,54 @@ export function accentRamp(baseHex: string): DeckTheme['accent'] {
  * substitute face on the client's machine - the one failure mode this product
  * cannot afford. The agency's typographic system, the client's colour.
  */
-export function brandKitTheme(kit: { id: string; name: string; accent: string }): DeckTheme {
+/** The typeface roles a kit may override. Absent means the house face. */
+export interface KitFonts {
+  display?: string;
+  sans?: string;
+  mono?: string;
+}
+
+/**
+ * One role's face, given a chosen family and the house face it replaces.
+ *
+ * The chosen family goes in front of the house stack rather than replacing it, so
+ * the fallback chain stays *role-correct*: a client's mono falls back to JetBrains
+ * Mono and then to the system monospace, never to a sans. A single generic stack
+ * for all three roles would put body-face fallbacks behind a code face, which is
+ * what you would see for the second before the web font arrives.
+ */
+function roleFont(family: string | undefined, house: ThemeFont): ThemeFont {
+  if (!family || family === house.family) return house;
+  return { family, stack: `"${family}", ${house.stack}` };
+}
+
+/**
+ * A client kit as a theme.
+ *
+ * Colour and type, because a brand is both. The kit stores family *names* and the
+ * roles are resolved here, which is what makes the rest of the app free: every
+ * renderer reads `--font-display` / `--font-sans` / `--font-mono` out of
+ * `themeCssVars`, the exporter reads `theme().fonts.<role>.family`, and
+ * `familiesInDeck` already collects all three for embedding. So a kit's typefaces
+ * reach the canvas, the thumbnails, present mode and the .pptx without any of
+ * them knowing kits exist.
+ */
+export function brandKitTheme(kit: {
+  id: string;
+  name: string;
+  accent: string;
+  fonts?: KitFonts;
+}): DeckTheme {
   return {
     ...WOZKU_THEME,
     id: kit.id,
     name: kit.name,
     accent: accentRamp(kit.accent),
+    fonts: {
+      display: roleFont(kit.fonts?.display, WOZKU_THEME.fonts.display),
+      sans: roleFont(kit.fonts?.sans, WOZKU_THEME.fonts.sans),
+      mono: roleFont(kit.fonts?.mono, WOZKU_THEME.fonts.mono),
+    },
   };
 }
 

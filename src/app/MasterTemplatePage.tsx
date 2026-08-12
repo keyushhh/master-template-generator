@@ -14,6 +14,8 @@ import { NewDeckModal } from '../features/deck/NewDeckModal';
 import { CommandPalette, type Command } from '../features/command/CommandPalette';
 import { SWITCHABLE } from '../features/deck/templateSwitch';
 import { MOD_KEY } from '../features/help/platform';
+import { ensureFonts } from '../features/fonts/loadFont';
+import { familiesInDeck } from '../features/fonts/deckFonts';
 import { StudioHeader } from '../features/generator/StudioHeader';
 import { useToast } from '../features/toast/Toast';
 import type { DocumentNode } from '../features/business-record/parser/ast';
@@ -1266,6 +1268,19 @@ export function MasterTemplatePage() {
     () => themeById(displayDeck.themeId, brandKitThemes(brandKits)),
     [displayDeck.themeId, brandKits]
   );
+
+  /**
+   * Pull in every typeface this deck uses.
+   *
+   * The house three come with the document; anything a slot has been switched to
+   * is a Google Font that has to be requested. Without this, opening a saved deck
+   * paints it in the fallback stack until something happens to request the real
+   * face - and worse, the fit check would measure the fallback and report clipping
+   * that is not there.
+   */
+  useEffect(() => {
+    void ensureFonts(familiesInDeck(displayDeck, deckTheme));
+  }, [displayDeck, deckTheme]);
 
   /** Put the deck on a theme. `undefined` means the house look, which is also
    *  what an absent `themeId` has always meant, so this clears rather than

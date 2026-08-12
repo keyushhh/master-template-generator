@@ -10,7 +10,7 @@
 /** Brand type stack, from src/theme/tokens.css. */
 const DISPLAY = 'Space Grotesk';
 const MONO = 'JetBrains Mono';
-const SANS = 'Satoshi';
+const SANS = 'DM Sans';
 
 const MONO_FACES = /courier|consolas|monaco|menlo|mono|typewriter/i;
 const SERIF_FACES = /times|georgia|garamond|cambria|book|serif|palatino|baskerville/i;

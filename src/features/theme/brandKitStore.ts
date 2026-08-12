@@ -1,4 +1,4 @@
-import { brandKitTheme, type DeckTheme } from './deckTheme';
+import { brandKitTheme, type DeckTheme, type KitFonts } from './deckTheme';
 
 /**
  * Saved client brand kits.
@@ -25,6 +25,16 @@ export interface BrandKit {
   name: string;
   /** The client's brand colour. Hex, no '#', uppercase. */
   accent: string;
+  /**
+   * The client's typefaces, per role. Family names only, never a resolved stack:
+   * a stack is derived, and a kit that stored one would freeze today's fallback
+   * chain into saved data.
+   *
+   * Absent, or any role absent, means the house face for that role - the same way
+   * an absent `themeId` on a deck means the house look. So every kit saved before
+   * this existed keeps working and reads as "Wozku type, client colour".
+   */
+  fonts?: KitFonts;
   updatedAt: number;
 }
 
@@ -56,29 +66,55 @@ function write(kits: BrandKit[]): boolean {
   }
 }
 
-export function createBrandKit(name: string, accent: string): BrandKit {
+export function createBrandKit(name: string, accent: string, fonts?: KitFonts): BrandKit {
   const kit: BrandKit = {
     id: newId(),
     name: name.trim() || 'Untitled kit',
     accent: accent.replace('#', '').toUpperCase(),
+    ...(cleanFonts(fonts) ? { fonts: cleanFonts(fonts) } : {}),
     updatedAt: Date.now(),
   };
   write([...listBrandKits(), kit]);
   return kit;
 }
 
-export function updateBrandKit(id: string, patch: Partial<Pick<BrandKit, 'name' | 'accent'>>): void {
+/**
+ * Drops roles set to nothing, and the whole object if no role survives.
+ *
+ * An absent role has to mean "the house face", so storing `{ display: undefined }`
+ * or an empty object would be a third state that means the same as absence and
+ * reads differently in the saved JSON.
+ */
+function cleanFonts(fonts: KitFonts | undefined): KitFonts | undefined {
+  if (!fonts) return undefined;
+  const out: KitFonts = {};
+  for (const role of ['display', 'sans', 'mono'] as const) {
+    const family = fonts[role]?.trim();
+    if (family) out[role] = family;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+export function updateBrandKit(
+  id: string,
+  patch: Partial<Pick<BrandKit, 'name' | 'accent'>> & { fonts?: KitFonts }
+): void {
   write(
-    listBrandKits().map((k) =>
-      k.id === id
-        ? {
-            ...k,
-            ...(patch.name !== undefined ? { name: patch.name.trim() || k.name } : {}),
-            ...(patch.accent !== undefined ? { accent: patch.accent.replace('#', '').toUpperCase() } : {}),
-            updatedAt: Date.now(),
-          }
-        : k
-    )
+    listBrandKits().map((k) => {
+      if (k.id !== id) return k;
+      const next: BrandKit = {
+        ...k,
+        ...(patch.name !== undefined ? { name: patch.name.trim() || k.name } : {}),
+        ...(patch.accent !== undefined ? { accent: patch.accent.replace('#', '').toUpperCase() } : {}),
+        updatedAt: Date.now(),
+      };
+      if (patch.fonts !== undefined) {
+        const fonts = cleanFonts(patch.fonts);
+        if (fonts) next.fonts = fonts;
+        else delete next.fonts;
+      }
+      return next;
+    })
   );
 }
 

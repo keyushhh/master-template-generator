@@ -3,7 +3,8 @@ import pptxgen from 'pptxgenjs';
 import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
 import { addNativeSlide, clearExportTheme, setExportTheme } from './pptxNative';
-import { embedPptxFonts } from './pptxFontEmbed';
+import { embedPptxFonts, type FontEmbedReport } from './pptxFontEmbed';
+import { familiesInDeck } from '../fonts/deckFonts';
 import type { SlideInstance } from '../deck/types';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 
@@ -152,33 +153,24 @@ function sanitize(title: string): string {
  * Build a PPTX from the deck's data model, one native (fully editable) slide
  * per template - real text boxes, shapes, and tables via pptxgenjs, not a
  * flattened screenshot. Only genuine raster content (photos, logos, maps) is
- * placed as an image. Runs entirely client-side (no server needed).
+/**
+ * Generate a PPTX ArrayBuffer for a deck client-side.
  */
-export async function exportToPPTX(
+export async function exportPptxBuffer(
   slides: SlideInstance[],
-  deckTitle: string,
   logoUrl: string | undefined,
-  onProgress?: (current: number, total: number) => void,
-  /** Deck-level logo size multiplier, so a resized logo exports resized. */
   logoScale = 1,
-  /** The deck's resolved theme. Absent means Wozku's own, which is what every
-   *  deck saved before themes existed resolves to. */
   theme: DeckTheme = WOZKU_THEME
-) {
+): Promise<{ buffer: ArrayBuffer; report: FontEmbedReport } | null> {
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
 
   const total = slides.length;
-  if (total === 0) return;
+  if (total === 0) return null;
 
-  // The exporter reads its palette from module state (see pptxNative's note on
-  // why), so the deck's theme is installed for the duration of this export and
-  // released in `finally` - otherwise a throw part-way through would leave one
-  // client's colours applied to whatever gets exported next.
   setExportTheme(theme);
   try {
     for (let i = 0; i < total; i++) {
-      onProgress?.(i, total);
       const num = String(i + 1).padStart(2, '0');
       const slide = pptx.addSlide();
       await addNativeSlide(slide, slides[i], num, logoUrl, `${i + 1} / ${total}`, logoScale);
@@ -187,17 +179,43 @@ export async function exportToPPTX(
     clearExportTheme();
   }
 
-  onProgress?.(total, total);
-
   const rawBuffer = (await pptx.write({ outputType: 'arraybuffer' })) as ArrayBuffer;
   let finalBuffer = rawBuffer;
+  let report: FontEmbedReport = { embedded: [], named: [], approximate: [] };
   try {
-    finalBuffer = await embedPptxFonts(rawBuffer);
+    // Every family the deck actually names, not just the theme's three: a slot
+    // switched to a Google Font needs its outlines in the file too, or PowerPoint
+    // substitutes exactly the face someone deliberately chose.
+    const families = familiesInDeck({ generated: false, slides }, theme);
+    const embedded = await embedPptxFonts(rawBuffer, families);
+    finalBuffer = embedded.buffer;
+    report = embedded.report;
   } catch (err) {
     console.error('Font embedding failed, exporting without embedded fonts:', err);
   }
+  return { buffer: finalBuffer, report };
+}
 
-  const blob = new Blob([finalBuffer], {
+/**
+ * Build a PPTX from the deck's data model, one native (fully editable) slide
+ * per template - real text boxes, shapes, and tables via pptxgenjs, not a
+ * flattened screenshot. Only genuine raster content (photos, logos, maps) is
+ * placed as an image. Runs entirely client-side (no server needed).
+ */
+export async function exportToPPTX(
+  slides: SlideInstance[],
+  deckTitle: string,
+  logoUrl: string | undefined,
+  onProgress?: (current: number, total: number) => void,
+  logoScale = 1,
+  theme: DeckTheme = WOZKU_THEME
+) {
+  onProgress?.(0, slides.length);
+  const built = await exportPptxBuffer(slides, logoUrl, logoScale, theme);
+  if (!built) return;
+  onProgress?.(slides.length, slides.length);
+
+  const blob = new Blob([built.buffer], {
     type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   });
   const url = URL.createObjectURL(blob);
@@ -206,6 +224,9 @@ export async function exportToPPTX(
   a.download = `${sanitize(deckTitle)}.pptx`;
   a.click();
   URL.revokeObjectURL(url);
+  // Handed back so the caller can say which typefaces travelled and which will be
+  // substituted. Silence here is what let the old body-face bug live for months.
+  return built.report;
 }
 
 /**

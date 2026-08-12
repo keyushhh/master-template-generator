@@ -99,6 +99,18 @@ export function clearExportTheme(): void {
  * theme before an export (see `setExportTheme`) reaches every one of them.
  */
 const FONT_DISPLAY = () => theme().fonts.display.family;
+/**
+ * Body copy.
+ *
+ * This role existed in the theme and in the canvas from the beginning and was
+ * missing here, so every paragraph in an exported deck came out in the display
+ * face while the studio drew it in the body face. The slide root sets
+ * `font-family: var(--font-sans)` and body paragraphs inherit it, so the canvas
+ * was right and the export was wrong - and because the divergence was a font
+ * rather than a position, nothing looked broken until you compared the two side
+ * by side.
+ */
+const FONT_SANS = () => theme().fonts.sans.family;
 const FONT_MONO = () => theme().fonts.mono.family;
 
 const NEUTRAL_50 = () => theme().neutral.n50;
@@ -620,6 +632,7 @@ function buildIndex(slide: pptxgen.Slide, content: SlideInstance['content'], num
     addEditorialLabel(slide, `Part 0${i + 1}`, cx + 30, cy, { size: 10 });
     addText(slide, part.title, box(cx + 30, cy + 30, colW - 30, 50), { size: 32, bold: true, lineSpacingMultiple: 1.05, slot: `parts.${i}.title` });
     addText(slide, part.description, box(cx + 30, cy + 85, colW - 30, 120), {
+      fontFace: FONT_SANS(),
       size: 18,
       color: NEUTRAL_500(),
       lineSpacingMultiple: 1.5,
@@ -648,7 +661,7 @@ function buildExecutiveSummary(slide: pptxgen.Slide, content: SlideInstance['con
   const rightW = 1640 - leftW - gap;
 
   addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, leftW, 400), {
-    fontFace: FONT_DISPLAY(),
+    fontFace: FONT_SANS(),
     size: 32,
     color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
@@ -687,7 +700,7 @@ async function buildSectionDivider(slide: pptxgen.Slide, content: SlideInstance[
     slot: 'heading',
   });
   addText(slide, content.subtitle ?? PLACEHOLDER, box(150, 730, 960, 100), {
-    fontFace: FONT_DISPLAY(),
+    fontFace: FONT_SANS(),
     size: 30,
     color: WHITE(),
     transparency: 45,
@@ -712,7 +725,7 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
     slot: 'leftHeading',
   });
   addText(slide, content.leftBody ?? PLACEHOLDER, box(140, 515, 700, 160), {
-    fontFace: FONT_DISPLAY(),
+    fontFace: FONT_SANS(),
     size: 32,
     color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
@@ -737,7 +750,7 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
     slot: 'rightHeading',
   });
   addText(slide, content.rightBody ?? PLACEHOLDER, box(1000, 515, 780, 300), {
-    fontFace: FONT_DISPLAY(),
+    fontFace: FONT_SANS(),
     size: 32,
     color: NEUTRAL_900(),
     lineSpacingMultiple: 1.5,
@@ -759,7 +772,7 @@ function buildDataMonument(slide: pptxgen.Slide, content: SlideInstance['content
     slot: 'heading',
   });
   addText(slide, content.body ?? PLACEHOLDER, box(140, 745, 800, 220), {
-    fontFace: FONT_DISPLAY(),
+    fontFace: FONT_SANS(),
     size: 32,
     color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
@@ -857,7 +870,7 @@ function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['con
     return {
       text: c.text,
       options: {
-        fontFace: FONT_DISPLAY(),
+        fontFace: FONT_SANS(),
         fontSize: pt(ov?.sizePx ?? cellFont),
         color: ov?.color ?? c.options.color ?? NEUTRAL_900(),
         bold: ov?.bold,
@@ -905,7 +918,7 @@ function buildStrategicRoadmap(slide: pptxgen.Slide, content: SlideInstance['con
     addEditorialLabel(slide, `Phase ${String(i + 1).padStart(2, '0')}`, x, railY + 42, { size: 12 });
     addText(slide, p.title, box(x, railY + 85, itemW, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05, slot: `phases.${i}.title` });
     addText(slide, p.description || PLACEHOLDER, box(x, railY + 140, itemW, 140), {
-      fontFace: FONT_DISPLAY(),
+      fontFace: FONT_SANS(),
       size: 18,
       color: NEUTRAL_500(),
       lineSpacingMultiple: 1.5,
@@ -932,7 +945,7 @@ async function buildImageEditorial(slide: pptxgen.Slide, content: SlideInstance[
   });
   const bodyY = 455 + headingH + 40;
   addText(slide, content.body ?? PLACEHOLDER, box(140, bodyY, headingW - 60, 260), {
-    fontFace: FONT_DISPLAY(),
+    fontFace: FONT_SANS(),
     size: 32,
     color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
@@ -983,7 +996,7 @@ function buildProcessArchitecture(slide: pptxgen.Slide, content: SlideInstance['
     });
     addText(slide, s.title, box(x + 40, top + 110, colW - 80, 60), { size: 32, bold: true, lineSpacingMultiple: 1.05, slot: `steps.${i}.title` });
     addText(slide, s.description || PLACEHOLDER, box(x + 40, top + 170, colW - 80, h - 200), {
-      fontFace: FONT_DISPLAY(),
+      fontFace: FONT_SANS(),
       size: 18,
       color: NEUTRAL_500(),
       lineSpacingMultiple: 1.5,
@@ -1096,7 +1109,7 @@ async function buildExit(slide: pptxgen.Slide, content: SlideInstance['content']
   addEditorialLabel(slide, content.eyebrow ?? 'Conclusion', 140, 360, { color: EMERALD_400(), slot: 'eyebrow' });
   addText(slide, content.heading ?? 'Thank You.', box(140, 415, 1600, 280), { size: 180, bold: true, color: WHITE(), slot: 'heading' });
   addText(slide, content.body ?? PLACEHOLDER, box(140, 700, 800, 200), {
-    fontFace: FONT_DISPLAY(),
+    fontFace: FONT_SANS(),
     size: 32,
     color: INK_DIM_ON_DARK(),
     transparency: 50,
@@ -1132,7 +1145,7 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
     addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 780, { color: EMERALD_400(), slot: 'eyebrow' });
     addText(slide, content.heading ?? 'Blank Slide.', box(140, 835, 1600, 110), { size: 72, bold: true, color: WHITE(), slot: 'heading' });
     addText(slide, content.body ?? 'Click to add your content…', box(140, 955, 1200, 100), {
-      fontFace: FONT_DISPLAY(),
+      fontFace: FONT_SANS(),
       size: 28,
       color: INK_HEADING_ON_DARK(),
       lineSpacingMultiple: 1.5,
@@ -1146,7 +1159,7 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
     addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200, { slot: 'eyebrow' });
     addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 780, 180), { size: 64, bold: true, lineSpacingMultiple: 0.95, slot: 'heading' });
     addText(slide, content.body ?? 'Click to add your content…', box(140, 460, 780, 400), {
-      fontFace: FONT_DISPLAY(),
+      fontFace: FONT_SANS(),
       size: 28,
       color: NEUTRAL_500(),
       lineSpacingMultiple: 1.5,
@@ -1163,7 +1176,7 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
   addEditorialLabel(slide, content.eyebrow ?? 'Section', 140, 200, { slot: 'eyebrow' });
   addText(slide, content.heading ?? 'Blank Slide.', box(140, 255, 1640, 130), { size: 88, bold: true, slot: 'heading' });
   addText(slide, content.body ?? 'Click to add your content…', box(140, 400, 1200, 200), {
-    fontFace: FONT_DISPLAY(),
+    fontFace: FONT_SANS(),
     size: 28,
     color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,
@@ -1171,7 +1184,7 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
   });
   addText(slide, content.secondHeading ?? 'Second Section.', box(140, 620, 1640, 80), { size: 40, bold: true, slot: 'secondHeading' });
   addText(slide, content.secondBody ?? 'Click to add more content…', box(140, 710, 1200, 200), {
-    fontFace: FONT_DISPLAY(),
+    fontFace: FONT_SANS(),
     size: 28,
     color: NEUTRAL_500(),
     lineSpacingMultiple: 1.5,

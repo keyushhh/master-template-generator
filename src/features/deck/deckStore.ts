@@ -15,10 +15,21 @@ const SESSION_PREFIX = 'wozku-project-';
 /** Legacy single-session key, migrated into a project on first load. */
 const LEGACY_KEY = 'wozku-master-template-session-v1';
 
+export type FolderColor = 'orange' | 'purple' | 'blue' | 'emerald' | 'rose' | 'slate' | 'indigo' | 'amber';
+
+export interface FolderMeta {
+  id: string;
+  name: string;
+  color: FolderColor;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface ProjectMeta {
   id: string;
   name: string;
   updatedAt: number;
+  folderId?: string | null;
 }
 
 export interface StoredSession {
@@ -234,4 +245,77 @@ export function ensureInitialized(defaultDeck: () => Deck): { id: string; sessio
   const session: StoredSession = { ast: null, deck: defaultDeck() };
   const meta = createProject('Untitled deck', session);
   return { id: meta.id, session };
+}
+
+const FOLDERS_KEY = 'wozku-folders-v1';
+
+export function listFolders(): FolderMeta[] {
+  try {
+    const raw = localStorage.getItem(FOLDERS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as FolderMeta[];
+    return Array.isArray(parsed) ? parsed.sort((a, b) => b.updatedAt - a.updatedAt) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFolders(folders: FolderMeta[]): void {
+  try {
+    localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+  } catch {}
+}
+
+export function createFolder(name: string, color: FolderColor = 'blue'): FolderMeta {
+  const clean = name.trim() || 'New Folder';
+  const folder: FolderMeta = {
+    id: `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    name: clean,
+    color,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  const folders = listFolders();
+  writeFolders([folder, ...folders]);
+  return folder;
+}
+
+export function renameFolder(id: string, name: string): void {
+  const clean = name.trim();
+  if (!clean) return;
+  const folders = listFolders();
+  writeFolders(folders.map((f) => (f.id === id ? { ...f, name: clean, updatedAt: Date.now() } : f)));
+}
+
+export function updateFolderColor(id: string, color: FolderColor): void {
+  const folders = listFolders();
+  writeFolders(folders.map((f) => (f.id === id ? { ...f, color, updatedAt: Date.now() } : f)));
+}
+
+export function deleteFolder(id: string): void {
+  const folders = listFolders();
+  writeFolders(folders.filter((f) => f.id !== id));
+  // Move decks inside this folder to root (null)
+  const index = readIndex();
+  const updatedProjects = index.projects.map((p) => (p.folderId === id ? { ...p, folderId: null } : p));
+  writeIndex({ ...index, projects: updatedProjects });
+}
+
+export function moveProjectToFolder(projectId: string, folderId: string | null): void {
+  const index = readIndex();
+  writeIndex({
+    ...index,
+    projects: index.projects.map((p) => (p.id === projectId ? { ...p, folderId: folderId ?? null, updatedAt: Date.now() } : p)),
+  });
+}
+
+export function moveProjectsToFolder(projectIds: string[], folderId: string | null): void {
+  const set = new Set(projectIds);
+  const index = readIndex();
+  writeIndex({
+    ...index,
+    projects: index.projects.map((p) =>
+      set.has(p.id) ? { ...p, folderId: folderId ?? null, updatedAt: Date.now() } : p
+    ),
+  });
 }
