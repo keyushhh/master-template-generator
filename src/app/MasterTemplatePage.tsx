@@ -11,6 +11,7 @@ import { PresentMode } from '../features/generator/PresentMode';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
 import { BorrowSlideModal } from '../features/generator/BorrowSlideModal';
 import { NewDeckModal } from '../features/deck/NewDeckModal';
+import { SaveAsTemplateModal } from '../features/deck/SaveAsTemplateModal';
 import { CommandPalette, type Command } from '../features/command/CommandPalette';
 import { SWITCHABLE } from '../features/deck/templateSwitch';
 import { MOD_KEY } from '../features/help/platform';
@@ -259,6 +260,7 @@ export function MasterTemplatePage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [borrowOpen, setBorrowOpen] = useState(false);
   const [newDeckOpen, setNewDeckOpen] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
 
   // Two-step confirm for Reset (disarms after 3 s)
   const [resetArmed, setResetArmed] = useState(false);
@@ -1239,7 +1241,14 @@ export function MasterTemplatePage() {
   // going to find it". Allowed while a text field has focus, since the palette
   // is how you leave what you are doing.
   const overlayUp =
-    reviewOpen || sorterOpen || presentOpen || brandKitOpen || borrowOpen || shortcutsOpen || newDeckOpen;
+    reviewOpen ||
+    sorterOpen ||
+    presentOpen ||
+    brandKitOpen ||
+    borrowOpen ||
+    shortcutsOpen ||
+    newDeckOpen ||
+    saveTemplateOpen;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1574,6 +1583,13 @@ export function MasterTemplatePage() {
         label: 'New deck…',
         keywords: 'create start template blank client',
         run: () => setNewDeckOpen(true),
+      },
+      {
+        id: 'save-as-template',
+        group: 'Deck',
+        label: 'Save deck as template…',
+        keywords: 'starter reuse export save new deck',
+        run: () => setSaveTemplateOpen(true),
       },
       {
         id: 'notes',
@@ -1944,6 +1960,12 @@ export function MasterTemplatePage() {
         open={newDeckOpen}
         onClose={() => setNewDeckOpen(false)}
         onCreate={handleCreateDeck}
+      />
+      <SaveAsTemplateModal
+        open={saveTemplateOpen}
+        onClose={() => setSaveTemplateOpen(false)}
+        deck={deck}
+        deckName={projectName}
       />
       <CommandPalette
         open={paletteOpen}

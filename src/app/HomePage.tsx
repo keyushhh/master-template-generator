@@ -10,7 +10,9 @@ import { createTemplateDeck } from '../features/deck/deckBuilder';
 import { NewDeckModal } from '../features/deck/NewDeckModal';
 import { MacFolderIcon } from '../features/deck/MacFolderIcon';
 import { FolderModal } from '../features/deck/FolderModal';
+import { DeleteFolderModal } from '../features/deck/DeleteFolderModal';
 import { MoveDecksToFolderModal } from '../features/deck/MoveDecksToFolderModal';
+import { ConfirmModal, cannotBeUndone } from '../features/ui/ConfirmModal';
 import { exportFolderToZip } from '../features/export/folderExport';
 import { useToast } from '../features/toast/Toast';
 import type { Deck } from '../features/deck/types';
@@ -47,6 +49,7 @@ import {
   EllipsisIcon,
   FolderIcon,
   FolderOpenIcon,
+  FolderOpenOutlineIcon,
   GripIcon,
   TableIcon,
   PlayIcon,
@@ -316,6 +319,7 @@ export function HomePage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deletingFolder, setDeletingFolder] = useState<FolderMeta | null>(null);
   const [hoveredFolderId, setHoveredFolderId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [moveDecksModalOpen, setMoveDecksModalOpen] = useState(false);
@@ -445,15 +449,34 @@ export function HomePage() {
   };
 
   const handleDeleteFolder = (folder: FolderMeta) => {
-    if (window.confirm(`Are you sure you want to delete folder "${folder.name}"? Decks inside will be moved back to All Decks.`)) {
-      deleteFolder(folder.id);
-      if (activeFolderId === folder.id) {
-        navigateToFolder(null);
-      } else {
-        reload();
-      }
-      showToast(`Deleted folder "${folder.name}"`);
+    setDeletingFolder(folder);
+  };
+
+  const finishDeleteFolder = (folder: FolderMeta) => {
+    setDeletingFolder(null);
+    if (activeFolderId === folder.id) {
+      navigateToFolder(null);
+    } else {
+      reload();
     }
+  };
+
+  const confirmDeleteFolderKeepDecks = () => {
+    if (!deletingFolder) return;
+    const folder = deletingFolder;
+    deleteFolder(folder.id);
+    finishDeleteFolder(folder);
+    showToast(`Deleted folder "${folder.name}"`);
+  };
+
+  const confirmDeleteFolderWithDecks = () => {
+    if (!deletingFolder) return;
+    const folder = deletingFolder;
+    const ids = projects.filter((p) => p.folderId === folder.id).map((p) => p.id);
+    ids.forEach((id) => deleteProject(id));
+    deleteFolder(folder.id);
+    finishDeleteFolder(folder);
+    showToast(`Deleted folder "${folder.name}" and ${ids.length} deck${ids.length === 1 ? '' : 's'}`);
   };
 
   const handleBulkMoveToFolder = (targetFolderId: string | null) => {
@@ -772,7 +795,11 @@ export function HomePage() {
                 <div className="relative">
                   <button
                     onClick={() => setFolderHeaderMenuOpen((v) => !v)}
-                    className="w-9 h-9 flex items-center justify-center bg-white border border-neutral-200 hover:border-neutral-400 rounded-[var(--radius-sharp)] text-neutral-700 transition-colors cursor-pointer"
+                    className={`w-9 h-9 flex items-center justify-center rounded-[var(--radius-sharp)] transition-colors cursor-pointer ${
+                      folderHeaderMenuOpen
+                        ? 'bg-emerald-100 border border-emerald-300 text-emerald-700'
+                        : 'bg-white border border-neutral-200 hover:border-neutral-400 text-neutral-700'
+                    }`}
                     title="Folder options"
                   >
                     <EllipsisIcon size={16} />
@@ -1043,7 +1070,11 @@ export function HomePage() {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                    <div
+                      className="bg-white border border-neutral-200 rounded-[var(--radius-sharp)] p-5"
+                      onClick={() => setFolderMenuId(null)}
+                    >
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                       {folders.map((f) => {
                         const deckCount = projects.filter((p) => p.folderId === f.id).length;
                         const isMenuOpen = folderMenuId === f.id;
@@ -1074,7 +1105,7 @@ export function HomePage() {
                             className={`group relative flex flex-col items-center p-4 rounded-[var(--radius-sharp)] transition-all duration-200 cursor-pointer ${
                               isDragOver
                                 ? 'bg-emerald-50 border-2 border-emerald-500 scale-105 z-20'
-                                : 'bg-white/50 hover:bg-white border border-neutral-200/40 hover:border-neutral-300'
+                                : 'border border-transparent hover:bg-neutral-50 hover:border-neutral-200'
                             }`}
                           >
                             {/* 3-dot context menu */}
@@ -1083,7 +1114,11 @@ export function HomePage() {
                                 e.stopPropagation();
                                 setFolderMenuId(isMenuOpen ? null : f.id);
                               }}
-                              className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-neutral-900 bg-transparent hover:bg-neutral-100 rounded-[var(--radius-sharp)] transition-colors"
+                              className={`absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-[var(--radius-sharp)] transition-colors ${
+                                isMenuOpen
+                                  ? 'text-emerald-700 bg-emerald-100'
+                                  : 'text-neutral-400 hover:text-neutral-900 bg-transparent hover:bg-neutral-100'
+                              }`}
                             >
                               <EllipsisIcon size={14} />
                             </button>
@@ -1096,27 +1131,31 @@ export function HomePage() {
                               >
                                 <button
                                   onClick={() => { setFolderMenuId(null); navigateToFolder(f.id); }}
-                                  className="w-full px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-100 text-left"
+                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-100 text-left"
                                 >
+                                  <FolderOpenOutlineIcon size={14} />
                                   Open Folder
                                 </button>
                                 <button
                                   onClick={() => { setFolderMenuId(null); void handleExportZip(f); }}
-                                  className="w-full px-3 py-1.5 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 text-left"
+                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 text-left"
                                 >
+                                  <DownloadIcon size={14} />
                                   Export as ZIP (.zip)
                                 </button>
                                 <button
                                   onClick={() => { setFolderMenuId(null); setEditingFolder(f); setFolderModalOpen(true); }}
-                                  className="w-full px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-100 text-left"
+                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-100 text-left"
                                 >
+                                  <CreateIcon size={14} />
                                   Rename / Recolor
                                 </button>
                                 <div className="my-1 h-px bg-neutral-200" />
                                 <button
                                   onClick={() => { setFolderMenuId(null); handleDeleteFolder(f); }}
-                                  className="w-full px-3 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50 text-left"
+                                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-semibold text-rose-600 hover:bg-rose-50 text-left"
                                 >
+                                  <TrashIcon size={14} />
                                   Delete Folder
                                 </button>
                               </div>
@@ -1144,6 +1183,7 @@ export function HomePage() {
                           </div>
                         );
                       })}
+                    </div>
                     </div>
                   </section>
                 )}
@@ -1296,7 +1336,11 @@ export function HomePage() {
                                       <span className="relative">
                                         <button
                                           onClick={(e) => { e.stopPropagation(); setMenuId(menuId === p.id ? null : p.id); }}
-                                          className="p-1 text-neutral-400 hover:text-neutral-700"
+                                          className={`p-1 rounded-[var(--radius-sharp)] transition-colors ${
+                                            menuId === p.id
+                                              ? 'text-emerald-700 bg-emerald-100'
+                                              : 'text-neutral-400 hover:text-neutral-700'
+                                          }`}
                                         >
                                           <EllipsisIcon size={14} />
                                         </button>
@@ -1352,6 +1396,37 @@ export function HomePage() {
           onSuccess={() => reload()}
         />
       )}
+
+      <DeleteFolderModal
+        open={!!deletingFolder}
+        folder={deletingFolder}
+        deckCount={deletingFolder ? projects.filter((p) => p.folderId === deletingFolder.id).length : 0}
+        onCancel={() => setDeletingFolder(null)}
+        onKeepDecks={confirmDeleteFolderKeepDecks}
+        onDeleteDecks={confirmDeleteFolderWithDecks}
+      />
+
+      <ConfirmModal
+        open={!!pendingDelete}
+        title={`Delete "${pendingDelete?.name ?? ''}"?`}
+        message={cannotBeUndone('All slides and edits in this deck will be lost.')}
+        onCancel={() => setPendingDeleteId(null)}
+        onConfirm={() => {
+          if (pendingDeleteId) deleteMany([pendingDeleteId]);
+          setPendingDeleteId(null);
+        }}
+      />
+
+      <ConfirmModal
+        open={bulkDeleteOpen}
+        title={`Delete ${selected.size} deck${selected.size === 1 ? '' : 's'}?`}
+        message={cannotBeUndone('All slides and edits in these decks will be lost.')}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => {
+          deleteMany(Array.from(selected));
+          setBulkDeleteOpen(false);
+        }}
+      />
 
       <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 

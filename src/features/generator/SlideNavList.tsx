@@ -7,6 +7,7 @@ import { CopyIcon, CreateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, GripIcon, Laye
 import type { DeckTheme } from '../theme/deckTheme';
 import { describeIssue, SEVERE_BY } from '../fit/fitScan';
 import { pruneFit, useSlideFit } from '../fit/fitStore';
+import { ConfirmModal, cannotBeUndone } from '../ui/ConfirmModal';
 
 interface SlideNavListProps {
   slides: SlideInstance[];
@@ -262,6 +263,10 @@ export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDu
    *  whether the menu fits below its trigger, and the reason the menu is hidden
    *  for its first layout pass rather than positioned from a guessed height. */
   const [menuHeight, setMenuHeight] = useState(0);
+  // The slide pending deletion, awaiting confirmation. Kept as the id (not a
+  // boolean) so the modal's copy can name the slide being removed.
+  const [pendingDeleteSlideId, setPendingDeleteSlideId] = useState<string | null>(null);
+  const pendingDeleteSlide = slides.find((s) => s.instanceId === pendingDeleteSlideId) ?? null;
 
   // Deleting the one slide with clipped text has to take its warning with it,
   // or the export sheet keeps flagging a slide that is no longer in the deck.
@@ -573,10 +578,26 @@ export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDu
               }}
             />
             <div className="my-1 h-px bg-neutral-200" />
-            <MenuRow icon={<TrashIcon size={15} />} label="Delete" danger onClick={() => { onDelete(menu.id); setMenu(null); }} />
+            <MenuRow
+              icon={<TrashIcon size={15} />}
+              label="Delete"
+              danger
+              onClick={() => { setPendingDeleteSlideId(menu.id); setMenu(null); }}
+            />
           </div>,
           document.body
         )}
+
+      <ConfirmModal
+        open={pendingDeleteSlideId !== null}
+        title={`Delete "${pendingDeleteSlide?.title ?? 'this slide'}"?`}
+        message={cannotBeUndone('This slide and everything on it will be removed from the deck.')}
+        onConfirm={() => {
+          if (pendingDeleteSlideId) onDelete(pendingDeleteSlideId);
+          setPendingDeleteSlideId(null);
+        }}
+        onCancel={() => setPendingDeleteSlideId(null)}
+      />
     </div>
   );
 }

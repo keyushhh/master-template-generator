@@ -5,6 +5,7 @@ import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
 import { CheckIcon, CloseIcon, CopyIcon, EyeIcon, EyeOffIcon, TrashIcon } from '../ui/icons';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
+import { ConfirmModal } from '../ui/ConfirmModal';
 
 interface SlideSorterProps {
   open: boolean;
@@ -59,6 +60,10 @@ export function SlideSorter({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  /** Whether the bulk-delete confirmation is open. A boolean, not the pending
+   *  ids, since the modal's copy only needs the count and `selectedList` is
+   *  still available when it confirms. */
+  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
   /** Anchor for shift-click range selection. */
   const lastClickedId = useRef<string | null>(null);
 
@@ -142,15 +147,11 @@ export function SlideSorter({
       .forEach((id) => onDuplicate(id));
     setSelected(new Set());
   };
-  const bulkDelete = () => {
-    if (
-      !window.confirm(
-        `Delete ${selected.size} slide${selected.size === 1 ? '' : 's'}? This can be undone with Cmd/Ctrl+Z.`
-      )
-    )
-      return;
+  const bulkDelete = () => setConfirmingBulkDelete(true);
+  const confirmBulkDelete = () => {
     onBulkDelete(selectedList);
     setSelected(new Set());
+    setConfirmingBulkDelete(false);
   };
 
   const toolBtn =
@@ -333,6 +334,14 @@ export function SlideSorter({
       >
         <CloseIcon size={16} />
       </button>
+
+      <ConfirmModal
+        open={confirmingBulkDelete}
+        title={`Delete ${selected.size} slide${selected.size === 1 ? '' : 's'}?`}
+        message={`Delete ${selected.size} slide${selected.size === 1 ? '' : 's'}? This can be undone with Cmd/Ctrl+Z.`}
+        onConfirm={confirmBulkDelete}
+        onCancel={() => setConfirmingBulkDelete(false)}
+      />
     </div>
   );
 }

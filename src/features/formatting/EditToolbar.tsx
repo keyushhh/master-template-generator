@@ -40,6 +40,7 @@ import { GROUP_ALIGNMENTS, type GroupAlign } from './group';
 import { TrashIcon } from '../ui/icons';
 import { FontPicker } from '../fonts/FontPicker';
 import { EyedropIcon, RefreshIcon } from '../ui/icons';
+import { ConfirmModal, cannotBeUndone } from '../ui/ConfirmModal';
 
 const BAR_H = 44;
 
@@ -569,6 +570,10 @@ export function EditToolbar({
   onSetImportedFill,
   onSetImportedLine,
 }: EditToolbarProps) {
+  // A pending shape/text-box deletion awaiting confirmation. Five delete
+  // buttons in this bar share one modal - each just stashes its own label and
+  // the underlying no-arg callback to run on confirm.
+  const [pendingDelete, setPendingDelete] = useState<{ title: string; message: string; action: () => void } | null>(null);
   const bounds = selectedShape ? layerBounds(shapes, selectedShape.id) : null;
   const shown = textStyle?.sizePx ?? effectiveSizePx;
   /**
@@ -749,7 +754,14 @@ export function EditToolbar({
           )}
 
           {isImportedSelection && (
-            <button title="Delete this text box" aria-label="Delete text box" onClick={onDeleteImportedShape}
+            <button
+              title="Delete this text box"
+              aria-label="Delete text box"
+              onClick={() => setPendingDelete({
+                title: 'Delete this text box?',
+                message: cannotBeUndone('This text box and everything typed in it will be removed from the slide.'),
+                action: onDeleteImportedShape,
+              })}
               style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
               <TrashIcon size={13} />
             </button>
@@ -759,7 +771,14 @@ export function EditToolbar({
               button - the shape-controls branch below is skipped entirely
               while a cell is the text target. */}
           {selectedShape?.kind === 'table' && (
-            <button title="Delete this table" aria-label="Delete table" onClick={onDeleteShape}
+            <button
+              title="Delete this table"
+              aria-label="Delete table"
+              onClick={() => setPendingDelete({
+                title: 'Delete this table?',
+                message: cannotBeUndone('This table, along with its rows and content, will be removed from the slide.'),
+                action: onDeleteShape,
+              })}
               style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
               <TrashIcon size={13} />
             </button>
@@ -848,7 +867,14 @@ export function EditToolbar({
             )}
           </Menu>
 
-          <button title="Delete this shape" aria-label="Delete shape" onClick={onDeleteShape}
+          <button
+            title="Delete this shape"
+            aria-label="Delete shape"
+            onClick={() => setPendingDelete({
+              title: 'Delete this shape?',
+              message: cannotBeUndone('This shape will be removed from the slide.'),
+              action: onDeleteShape,
+            })}
             style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
             <TrashIcon size={13} />
           </button>
@@ -878,7 +904,14 @@ export function EditToolbar({
             )}
           </Menu>
 
-          <button title="Delete selected shapes" aria-label="Delete selected shapes" onClick={onDeleteImportedShape}
+          <button
+            title="Delete selected shapes"
+            aria-label="Delete selected shapes"
+            onClick={() => setPendingDelete({
+              title: `Delete ${importedShapeGroupCount} shapes?`,
+              message: cannotBeUndone(`These ${importedShapeGroupCount} shapes will be removed from the slide.`),
+              action: onDeleteImportedShape,
+            })}
             style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
             <TrashIcon size={13} />
           </button>
@@ -929,7 +962,14 @@ export function EditToolbar({
 
           <Sep />
 
-          <button title="Delete this shape" aria-label="Delete shape" onClick={onDeleteImportedShape}
+          <button
+            title="Delete this shape"
+            aria-label="Delete shape"
+            onClick={() => setPendingDelete({
+              title: 'Delete this shape?',
+              message: cannotBeUndone('This shape will be removed from the slide.'),
+              action: onDeleteImportedShape,
+            })}
             style={{ ...ctl, padding: '0 7px', color: '#dc2626' }}>
             <TrashIcon size={13} />
           </button>
@@ -940,6 +980,16 @@ export function EditToolbar({
         </span>
       )}
 
+      <ConfirmModal
+        open={pendingDelete !== null}
+        title={pendingDelete?.title ?? 'Delete this?'}
+        message={pendingDelete?.message ?? ''}
+        onConfirm={() => {
+          pendingDelete?.action();
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

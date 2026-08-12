@@ -8,6 +8,7 @@ import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
 import { ShapeOverlay } from '../formatting/ShapeOverlay';
 import { createOverlayShape, overlayOf, withOverlay } from '../formatting/overlayModel';
 import { TrashIcon } from '../ui/icons';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import { FitProbe } from '../fit/FitProbe';
 import { FitFixChip } from '../fit/FitFixChip';
 import { css as themeCss, themeCssVars, WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
@@ -664,6 +665,10 @@ function ImageSlot({ src, editing, onChange, placeholder, style, onDeleteContain
   onDeleteContainer?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // Local to this one image slot instance, so confirming "Delete Container" on
+  // one image placeholder never opens the modal for a different slot on the
+  // same slide.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) {
@@ -698,13 +703,21 @@ function ImageSlot({ src, editing, onChange, placeholder, style, onDeleteContain
       {editing && onDeleteContainer && (
         <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 20 }}>
           <button
-            onClick={onDeleteContainer}
+            onClick={() => setConfirmingDelete(true)}
             title="Remove this image area entirely"
             style={{ ...btn, background: 'rgba(220,38,38,0.92)', display: 'inline-flex', alignItems: 'center', gap: 8 }}
           >
             <TrashIcon size={16} />
             Delete Container
           </button>
+          <ConfirmModal
+            open={confirmingDelete}
+            title="Remove this image?"
+            message="You can add a new one anytime, but this one will need to be re-uploaded."
+            confirmLabel="Remove"
+            onConfirm={() => { setConfirmingDelete(false); onDeleteContainer(); }}
+            onCancel={() => setConfirmingDelete(false)}
+          />
         </div>
       )}
 

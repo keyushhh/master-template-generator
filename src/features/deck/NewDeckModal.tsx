@@ -16,10 +16,24 @@ import {
   WOZKU_THEME,
   type DeckTheme,
 } from '../theme/deckTheme';
-import { AddIcon, CheckIcon, CloseIcon } from '../ui/icons';
+import { AddIcon, CheckIcon, CloseIcon, TrashIcon } from '../ui/icons';
 import { ensureFonts } from '../fonts/loadFont';
-import { DECK_STARTERS, starterById } from './deckStarters';
+import { DECK_STARTERS, type DeckStarter } from './deckStarters';
+import { deleteDeckTemplate, instantiateDeckTemplate, listDeckTemplates, type SavedDeckTemplate } from './deckTemplateStore';
 import type { Deck } from './types';
+import { ConfirmModal, cannotBeUndone } from '../ui/ConfirmModal';
+
+/** A saved template, shaped like a built-in starter so both can share one list. */
+function starterFromTemplate(t: SavedDeckTemplate): DeckStarter & { custom: true; savedId: string } {
+  return {
+    id: `custom:${t.id}`,
+    savedId: t.id,
+    custom: true,
+    name: t.name,
+    description: t.description || `${t.slideCount} slide${t.slideCount === 1 ? '' : 's'}, saved from a deck.`,
+    build: () => instantiateDeckTemplate(t),
+  };
+}
 
 /** Colours to offer when composing a kit here. The same set the fuller brand kit
  *  manager offers, so a kit made in either place starts from the same palette. */
@@ -64,10 +78,19 @@ export function NewDeckModal({
   /** `undefined` is the house look, the same thing an absent `themeId` means. */
   const [themeId, setThemeId] = useState<string | undefined>(undefined);
   const [kits, setKits] = useState<BrandKit[]>([]);
+  const [savedTemplates, setSavedTemplates] = useState<SavedDeckTemplate[]>([]);
   /** Composing a kit inline, so a first deck for a new client is one screen. */
   const [composing, setComposing] = useState(false);
   const [kitName, setKitName] = useState('');
   const [kitAccent, setKitAccent] = useState(SUGGESTED[0]);
+  /** The saved template pending delete confirmation, so the modal can name it. */
+  const [pendingDeleteTemplate, setPendingDeleteTemplate] = useState<SavedDeckTemplate | null>(null);
+
+  const allStarters: (DeckStarter & { custom?: boolean; savedId?: string })[] = useMemo(
+    () => [...DECK_STARTERS, ...savedTemplates.map(starterFromTemplate)],
+    [savedTemplates]
+  );
+  const activeStarter = allStarters.find((s) => s.id === starterId) ?? allStarters[0];
 
   useEffect(() => {
     if (!open) return;
@@ -75,10 +98,17 @@ export function NewDeckModal({
     setStarterId(DECK_STARTERS[0].id);
     setThemeId(undefined);
     setKits(listBrandKits());
+    setSavedTemplates(listDeckTemplates());
     setComposing(false);
     setKitName('');
     setKitAccent(SUGGESTED[0]);
   }, [open]);
+
+  const removeTemplate = (savedId: string) => {
+    deleteDeckTemplate(savedId);
+    setSavedTemplates(listDeckTemplates());
+    if (starterId === `custom:${savedId}`) setStarterId(DECK_STARTERS[0].id);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -110,7 +140,7 @@ export function NewDeckModal({
   // whole reason they are on one screen. Memoised on the starter alone: the deck
   // is only built here to be looked at, and rebuilding it on every keystroke in
   // the name field would remount the preview under the cursor.
-  const previewDeck = useMemo(() => starterById(starterId).build(), [starterId]);
+  const previewDeck = useMemo(() => activeStarter.build(), [activeStarter]);
 
   /**
    * A kit's typefaces have to be in the page before its cover is drawn.
@@ -141,8 +171,7 @@ export function NewDeckModal({
   };
 
   const create = () => {
-    const starter = starterById(starterId);
-    const deck = starter.build();
+    const deck = activeStarter.build();
     onCreate(name.trim() || 'Untitled deck', { ...deck, themeId });
     onClose();
   };
@@ -151,6 +180,7 @@ export function NewDeckModal({
     'w-full flex items-center gap-3 px-3 py-2.5 text-left border transition-colors cursor-pointer';
 
   return createPortal(
+    <>
     <div
       className="wg-overlay fixed inset-0 z-[300] flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
       onClick={onClose}
@@ -188,14 +218,14 @@ export function NewDeckModal({
             )}
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-[12.5px] font-bold text-neutral-800">
-                {starterById(starterId).name}
+                {activeStarter.name}
               </span>
               <span className="font-mono text-[10px] text-neutral-400">
                 {previewDeck.slides.length} slide{previewDeck.slides.length === 1 ? '' : 's'}
               </span>
             </div>
             <p className="text-[11.5px] text-neutral-500 leading-relaxed">
-              {starterById(starterId).description}
+              {activeStarter.description}
             </p>
             <div className="mt-auto flex items-center gap-2 pt-3 border-t border-neutral-200">
               <span
@@ -228,7 +258,7 @@ export function NewDeckModal({
               <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
                 Start from
               </span>
-              {DECK_STARTERS.map((s) => {
+              {allStarters.map((s) => {
                 const active = s.id === starterId;
                 return (
                   <button
@@ -247,6 +277,11 @@ export function NewDeckModal({
                         }`}
                       >
                         {s.name}
+                        {s.custom && (
+                          <span className="ml-1.5 font-mono text-[8.5px] font-bold tracking-[0.1em] uppercase text-neutral-400 align-middle">
+                            Saved
+                          </span>
+                        )}
                       </span>
                       <span className="text-[11.5px] text-neutral-500 leading-snug">
                         {s.description}
@@ -255,6 +290,20 @@ export function NewDeckModal({
                     {active && (
                       <span className="shrink-0 mt-0.5 text-emerald-600 flex items-center">
                         <CheckIcon size={15} />
+                      </span>
+                    )}
+                    {s.custom && s.savedId && (
+                      <span
+                        role="button"
+                        aria-label={`Delete template "${s.name}"`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const saved = savedTemplates.find((t) => t.id === s.savedId);
+                          if (saved) setPendingDeleteTemplate(saved);
+                        }}
+                        className="shrink-0 mt-0.5 text-neutral-300 hover:text-rose-600 flex items-center cursor-pointer"
+                      >
+                        <TrashIcon size={13} />
                       </span>
                     )}
                   </button>
@@ -438,7 +487,18 @@ export function NewDeckModal({
           </div>
         </div>
       </div>
-    </div>,
+    </div>
+    <ConfirmModal
+      open={pendingDeleteTemplate !== null}
+      title={`Delete "${pendingDeleteTemplate?.name ?? 'this template'}"?`}
+      message={cannotBeUndone('Decks already made from it are unaffected, but this saved template will be gone.')}
+      onConfirm={() => {
+        if (pendingDeleteTemplate) removeTemplate(pendingDeleteTemplate.id);
+        setPendingDeleteTemplate(null);
+      }}
+      onCancel={() => setPendingDeleteTemplate(null)}
+    />
+    </>,
     document.body
   );
 }

@@ -130,6 +130,7 @@ export function PresentMode({
 }: PresentModeProps) {
   const visible = useMemo(() => deck.slides.filter((s) => !s.hidden), [deck.slides]);
   const [index, setIndex] = useState(startIndex);
+  const currentSlideId = visible[Math.min(index, Math.max(visible.length - 1, 0))]?.instanceId;
   const [presenter, setPresenter] = useState(false);
   const [blank, setBlank] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -142,6 +143,80 @@ export function PresentMode({
   const [laserPos, setLaserPos] = useState<{ x: number; y: number } | null>(null);
   const [penStrokes, setPenStrokes] = useState<Record<string, Array<{ points: Array<{ x: number; y: number }> }>>>({});
   const [currentStroke, setCurrentStroke] = useState<Array<{ x: number; y: number }> | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const isDrawingRef = useRef(false);
+  const strokeRef = useRef<Array<{ x: number; y: number }>>([]);
+
+  /** Point in [0,1] relative to the slide stage, so it stays correct across scale/resize. */
+  const relativePoint = useCallback((e: { clientX: number; clientY: number }) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return { x: 0, y: 0 };
+    return {
+      x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)),
+      y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)),
+    };
+  }, []);
+
+  const handleStagePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (toolMode !== 'pen') return;
+      e.preventDefault();
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
+      isDrawingRef.current = true;
+      const p = relativePoint(e);
+      strokeRef.current = [p];
+      setCurrentStroke([p]);
+    },
+    [toolMode, relativePoint]
+  );
+
+  const handleStagePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (toolMode === 'laser') {
+        setLaserPos(relativePoint(e));
+      } else if (toolMode === 'pen' && isDrawingRef.current) {
+        const p = relativePoint(e);
+        strokeRef.current = [...strokeRef.current, p];
+        setCurrentStroke(strokeRef.current);
+      }
+    },
+    [toolMode, relativePoint]
+  );
+
+  const handleStagePointerUp = useCallback(() => {
+    if (toolMode !== 'pen' || !isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    const pts = strokeRef.current;
+    strokeRef.current = [];
+    setCurrentStroke(null);
+    if (pts.length > 1 && currentSlideId) {
+      setPenStrokes((strokes) => ({
+        ...strokes,
+        [currentSlideId]: [...(strokes[currentSlideId] ?? []), { points: pts }],
+      }));
+    }
+  }, [toolMode, currentSlideId]);
+
+  const handleStagePointerLeave = useCallback(() => {
+    setLaserPos(null);
+  }, []);
+
+  useEffect(() => {
+    if (toolMode !== 'laser') setLaserPos(null);
+    if (toolMode !== 'pen') {
+      isDrawingRef.current = false;
+      strokeRef.current = [];
+      setCurrentStroke(null);
+    }
+  }, [toolMode]);
+
+  useEffect(() => {
+    isDrawingRef.current = false;
+    strokeRef.current = [];
+    setCurrentStroke(null);
+  }, [currentSlideId]);
 
   const [teleprompterSpeed, setTeleprompterSpeed] = useState<number>(1);
   const [teleprompterAutoScroll, setTeleprompterAutoScroll] = useState<boolean>(false);
@@ -329,6 +404,8 @@ export function PresentMode({
   const atEnd = index === total - 1;
   const chromeVisible = !idle || picker || sidebarHover;
 
+  const activeStrokes = penStrokes[slide.instanceId] ?? [];
+
   const slideBox = (
     <div style={{ position: 'relative', boxShadow: '0 30px 80px rgba(0,0,0,0.55)', flexShrink: 0 }}>
       <SlideStage
@@ -340,10 +417,69 @@ export function PresentMode({
         theme={theme}
       />
       <div
-        onClick={next}
-        style={{ position: 'absolute', inset: 0, cursor: atEnd ? 'default' : 'pointer' }}
+        ref={stageRef}
+        onClick={toolMode === 'pointer' ? next : undefined}
+        onPointerDown={handleStagePointerDown}
+        onPointerMove={handleStagePointerMove}
+        onPointerUp={handleStagePointerUp}
+        onPointerCancel={handleStagePointerUp}
+        onPointerLeave={handleStagePointerLeave}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          cursor:
+            toolMode === 'pen' ? 'crosshair' : toolMode === 'laser' ? 'none' : atEnd ? 'default' : 'pointer',
+        }}
         aria-hidden
       />
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+        aria-hidden
+      >
+        {activeStrokes.map((stroke, i) => (
+          <polyline
+            key={i}
+            points={stroke.points.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
+            fill="none"
+            stroke="#ef4444"
+            strokeWidth={0.6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        {currentStroke && currentStroke.length > 1 && (
+          <polyline
+            points={currentStroke.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
+            fill="none"
+            stroke="#ef4444"
+            strokeWidth={0.6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+      </svg>
+      {toolMode === 'laser' && laserPos && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: `${laserPos.x * 100}%`,
+            top: `${laserPos.y * 100}%`,
+            width: 16,
+            height: 16,
+            borderRadius: '50%',
+            background:
+              'radial-gradient(circle, rgba(239,68,68,0.95) 0%, rgba(239,68,68,0.4) 55%, transparent 100%)',
+            boxShadow: '0 0 14px 4px rgba(239,68,68,0.65)',
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
     </div>
   );
 
