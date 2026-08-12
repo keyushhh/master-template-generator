@@ -33,6 +33,7 @@ import {
   type ProjectSummary,
 } from '../features/deck/deckStore';
 import { brandKitThemes, listBrandKits } from '../features/theme/brandKitStore';
+import { ensureFonts } from '../features/fonts/loadFont';
 import { css as themeCss, themeById, WOZKU_THEME, type DeckTheme } from '../features/theme/deckTheme';
 import logoBlack from '../assets/Logo_Black_Transparent.png';
 import {
@@ -47,7 +48,7 @@ import {
   FolderIcon,
   FolderOpenIcon,
   GripIcon,
-  ListIcon,
+  TableIcon,
   PlayIcon,
   SearchIcon,
   SortIcon,
@@ -68,10 +69,30 @@ import { ScrollToTop } from '../features/ui/ScrollToTop';
 import { DeckTable, type Sort, type SortKey } from '../features/library/DeckTable';
 import { relativeTime } from '../features/library/relativeTime';
 import { Pagination } from '../features/library/Pagination';
+import { FolderChip } from '../features/library/FolderChip';
 
 const VIEW_KEY = 'wozku-library-view-v1';
 
-type View = 'list' | 'grid';
+/** 'table' was called 'list' while it really was one. It is a sortable,
+ *  paginated table now, and the old name kept it sounding like the simpler
+ *  thing. The stored value is migrated on read rather than left to mean two
+ *  different words for the same view. */
+type View = 'table' | 'grid';
+
+/**
+ * The saved preference, migrated.
+ *
+ * Anyone who used the library before this rename has `'list'` in storage. Left
+ * alone it matches neither view, so the render would fall through to the grid -
+ * the exact behaviour the rename was meant to fix, for every existing user. The
+ * table is the default for a fresh browser too: it is the view that scales, and
+ * it answers "which deck was that" in a way a wall of covers cannot.
+ */
+function readStoredView(): View {
+  const raw = localStorage.getItem(VIEW_KEY);
+  if (raw === 'grid') return 'grid';
+  return 'table';
+}
 
 /**
  * Time buckets.
@@ -180,7 +201,7 @@ function DeckMenu({
                 onClick={() => { onMoveToFolder(null); setMoveOpen(false); }}
                 className={`${row} ${!currentFolderId ? 'font-bold text-emerald-700 bg-emerald-50' : 'text-neutral-700 hover:bg-neutral-100'}`}
               >
-                Root (Unorganized)
+                Uncategorised
               </button>
               {folders.length > 0 && <div className="my-1 h-px bg-neutral-200" />}
               {folders.map((f) => {
@@ -274,9 +295,18 @@ export function HomePage() {
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [kitFilter, setKitFilter] = useState<string | null>(null);
-  const [view, setView] = useState<View>(
-    () => (localStorage.getItem(VIEW_KEY) as View | null) ?? 'list'
-  );
+  /**
+   * The view the *library* is in. Not the view on screen: inside a folder the
+   * grid is forced, and that is a consequence of where you are rather than a
+   * preference you expressed.
+   *
+   * Keeping them separate is the fix for a real bug. Opening a folder used to
+   * call `setView('grid')`, and every view change is persisted - so visiting one
+   * folder silently overwrote the saved library preference, and coming back out
+   * left the library in grid for good. The default was 'list' all along; nobody
+   * ever got to see it twice.
+   */
+  const [homeView, setHomeView] = useState<View>(() => readStoredView());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState<Sort>({ key: 'updated', dir: 'desc' });
@@ -293,6 +323,20 @@ export function HomePage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [newDeckOpen, setNewDeckOpen] = useState(false);
+
+  /**
+   * Pull in the typefaces the brand kits use.
+   *
+   * Every cover on this page is drawn through its deck's kit theme, and a kit can
+   * now name its own display, body and mono faces. Without this the library shows
+   * covers in the fallback stack while the studio shows them correctly - the same
+   * deck looking like two different decks depending on the screen.
+   */
+  useEffect(() => {
+    void ensureFonts(
+      kits.flatMap((k) => [k.fonts?.display, k.fonts?.sans, k.fonts?.mono])
+    );
+  }, [kits]);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderMeta | null>(null);
   const [folderHeaderMenuOpen, setFolderHeaderMenuOpen] = useState(false);
@@ -323,9 +367,9 @@ export function HomePage() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(VIEW_KEY, view);
+      localStorage.setItem(VIEW_KEY, homeView);
     } catch {}
-  }, [view]);
+  }, [homeView]);
 
   const kitThemes = useMemo(() => brandKitThemes(kits), [kits]);
   const sampleCover = useMemo(() => createTemplateDeck().slides[0], []);
@@ -369,9 +413,6 @@ export function HomePage() {
     setNavHistory(nextHistory);
     setNavIndex(nextHistory.length - 1);
     setActiveFolderId(folderId);
-    if (folderId !== null) {
-      setView('grid');
-    }
   };
 
   const goBackNav = () => {
@@ -441,7 +482,7 @@ export function HomePage() {
     moveProjectToFolder(projectId, folderId);
     setMenuId(null);
     reload();
-    showToast(folderId ? 'Moved to folder' : 'Moved to unorganized', 'success');
+    showToast(folderId ? 'Moved to folder' : 'Moved to Uncategorised', 'success');
   };
 
   const toggleSelect = useCallback((id: string) => {
@@ -487,23 +528,68 @@ export function HomePage() {
     [folders, activeFolderId]
   );
 
+  /**
+   * The decks this screen is about.
+   *
+   * Inside a folder: that folder's decks. On the library itself: the ones that are
+   * in no folder at all.
+   *
+   * That second half is what makes a folder mean something. Before this, filing a
+   * deck away left it sitting in the library list as well, so the list only ever
+   * grew and moving a deck into a folder tidied nothing - it just added a second
+   * place the same deck appeared. A deck is either filed or it is not, and the
+   * library is the "not" pile.
+   *
+   * The hero reads from this list too, so it follows the same rule without a
+   * second decision: the deck offered to resume is the most recent *uncategorised*
+   * one, and a filed deck is reached through its folder.
+   */
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return projects.filter((p) => {
-      if (activeFolderId !== null && (p.folderId ?? null) !== activeFolderId) return false;
+      const folder = p.folderId ?? null;
+      if (activeFolderId !== null) {
+        // Inside a folder the folder is the scope, search included. You opened it
+        // to narrow things down; a search that then left it would undo that.
+        if (folder !== activeFolderId) return false;
+      } else if (folder !== null && !q) {
+        // Browsing the library: filed decks are not here, they are in their
+        // folder. Searching it: everything, filed or not - the whole point of a
+        // search field is that you do not have to remember where you put it.
+        return false;
+      }
       if (kitFilter && themeOf(p).id !== kitFilter) return false;
       return !q || p.name.toLowerCase().includes(q);
     });
   }, [projects, query, kitFilter, themeOf, activeFolderId]);
+
+  /** Folder name and colour by id, for marking search results that are filed. */
+  const folderById = useMemo(
+    () => new Map(folders.map((f) => [f.id, f])),
+    [folders]
+  );
+
+  /** True when the list on screen may contain decks from folders, so a result
+   *  needs to say where it lives or it looks like filing did nothing. */
+  const showFolderOrigin = activeFolderId === null && query.trim().length > 0;
 
   useEffect(() => {
     setPage(1);
     setSelected(new Set());
   }, [query, kitFilter, activeFolderId]);
 
-  useEffect(() => setPage(1), [sort, pageSize, view]);
+  useEffect(() => setPage(1), [sort, pageSize, homeView, activeFolderId]);
 
   const isFolderView = activeFolderId !== null;
+  /**
+   * What is actually on screen.
+   *
+   * A folder is always a grid: the table's columns are about locating a deck among
+   * many (client, slides, edited), and a folder is already the answer to "which
+   * ones". So there is no view control inside one, and the library's own
+   * preference is left exactly as the user set it for when they come back out.
+   */
+  const view: View = isFolderView ? 'grid' : homeView;
   const hero = isFolderView ? null : (filtered[0] ?? null);
   const rest = isFolderView ? filtered : filtered.slice(1);
 
@@ -624,7 +710,7 @@ export function HomePage() {
 
             <button
               onClick={() => { setEditingFolder(null); setFolderModalOpen(true); }}
-              className="flex items-center gap-1.5 h-[34px] px-3.5 text-[12.5px] font-bold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer whitespace-nowrap shadow-sm"
+              className="flex items-center gap-1.5 h-[34px] px-3.5 text-[12.5px] font-bold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer whitespace-nowrap"
             >
               <FolderIcon size={14} />
               New Folder
@@ -1062,13 +1148,34 @@ export function HomePage() {
                   </section>
                 )}
 
+                {/* Every deck is filed. A state this screen could not reach until
+                    filed decks stopped appearing here as well, and one worth
+                    naming: folders above and nothing below reads like something
+                    failed to load rather than like a tidy library. */}
+                {!isFolderView && rest.length === 0 && !hero && folders.length > 0 && !query && (
+                  <section className="pb-20">
+                    <div className="flex items-baseline gap-3 pb-3">
+                      <Eyebrow>Uncategorised</Eyebrow>
+                      <span className="font-mono text-[10.5px] text-neutral-400 tabular-nums">00</span>
+                    </div>
+                    <div className="border border-neutral-200 bg-white/70 px-5 py-8 text-center">
+                      <p className="text-[13px] font-bold text-neutral-700">
+                        Every deck is in a folder
+                      </p>
+                      <p className="mt-1 text-[12px] text-neutral-500">
+                        New decks land here until you file them.
+                      </p>
+                    </div>
+                  </section>
+                )}
+
                 {/* Index / Directory Table */}
                 {rest.length > 0 && (
                   <section className="pb-20">
                     {!isFolderView && (
                       <div className="flex items-center justify-between gap-4 pb-3">
                         <div className="flex items-baseline gap-3">
-                          <Eyebrow>Everything else</Eyebrow>
+                          <Eyebrow>{showFolderOrigin ? 'Results' : 'Uncategorised'}</Eyebrow>
                           <span className="font-mono text-[10.5px] text-neutral-400 tabular-nums">
                             {String(rest.length).padStart(2, '0')}
                           </span>
@@ -1076,12 +1183,12 @@ export function HomePage() {
 
                         <div className="flex items-center border border-neutral-200 bg-white/70">
                           {[
-                            { id: 'list' as View, label: 'List', icon: <ListIcon size={13} /> },
+                            { id: 'table' as View, label: 'Table', icon: <TableIcon size={13} /> },
                             { id: 'grid' as View, label: 'Grid', icon: <GripIcon size={13} /> },
                           ].map((v) => (
                             <button
                               key={v.id}
-                              onClick={() => setView(v.id)}
+                              onClick={() => setHomeView(v.id)}
                               aria-pressed={view === v.id}
                               title={`${v.label} view`}
                               className={`flex items-center gap-1.5 h-[27px] px-2.5 text-[11px] font-bold transition-colors cursor-pointer ${
@@ -1098,9 +1205,10 @@ export function HomePage() {
                       </div>
                     )}
 
-                    {!isFolderView && view === 'list' ? (
+                    {!isFolderView && view === 'table' ? (
                       <DeckTable
                         rows={sortedShown}
+                        showFolderOrigin={showFolderOrigin}
                         total={rest.length}
                         page={page}
                         pageSize={pageSize}
@@ -1175,8 +1283,16 @@ export function HomePage() {
                                       </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-neutral-150 text-[11px] text-neutral-500">
-                                      <KitChip theme={theme} />
+                                    <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-neutral-150 text-[11px] text-neutral-500">
+                                      <span className="flex items-center gap-1.5 min-w-0">
+                                        <KitChip theme={theme} />
+                                        {/* Where the deck actually lives, on a
+                                            library search that reached into
+                                            folders. */}
+                                        {showFolderOrigin && p.folderId && folderById.get(p.folderId) && (
+                                          <FolderChip folder={folderById.get(p.folderId)!} />
+                                        )}
+                                      </span>
                                       <span className="relative">
                                         <button
                                           onClick={(e) => { e.stopPropagation(); setMenuId(menuId === p.id ? null : p.id); }}

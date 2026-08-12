@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { FitStage } from '../generator/FitStage';
+import { FontField } from '../fonts/FontField';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import { AddIcon, CheckIcon, CloseIcon, CreateIcon, TrashIcon } from '../ui/icons';
-import { BUILT_IN_THEMES, accentRamp, css, isHex6, WOZKU_THEME, type DeckTheme } from './deckTheme';
+import {
+  BUILT_IN_THEMES,
+  type DeckTheme,
+  type KitFonts,
+  WOZKU_THEME,
+  accentRamp,
+  brandKitTheme,
+  css,
+  isHex6,
+} from './deckTheme';
 import type { BrandKit } from './brandKitStore';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
@@ -17,14 +27,21 @@ interface BrandKitModalProps {
   /** Which theme the deck is currently on. */
   activeThemeId: string | undefined;
   onApply: (themeId: string | undefined) => void;
-  onCreateKit: (name: string, accent: string) => void;
-  onUpdateKit: (id: string, patch: { name?: string; accent?: string }) => void;
+  onCreateKit: (name: string, accent: string, fonts?: KitFonts) => void;
+  onUpdateKit: (id: string, patch: { name?: string; accent?: string; fonts?: KitFonts }) => void;
   onDeleteKit: (id: string) => void;
 }
 
 /** A few sensible starting colours, so creating a kit never begins on a blank
  *  field. Not a palette to choose from - the point is the client's own hex. */
 const SUGGESTED = ['2563EB', 'DC2626', 'D97706', '7C3AED', '0F766E', '171717'];
+
+/** The three roles the templates use, in the order they matter on a slide. */
+const ROLES: { key: 'display' | 'sans' | 'mono'; label: string; hint: string }[] = [
+  { key: 'display', label: 'Display', hint: 'Headings' },
+  { key: 'sans', label: 'Body', hint: 'Paragraphs' },
+  { key: 'mono', label: 'Mono', hint: 'Labels' },
+];
 
 /** Shows the four derived steps of an accent, which is the only honest preview of
  *  what one hex will actually do across fourteen templates. */
@@ -86,6 +103,9 @@ export function BrandKitModal({
   const [editing, setEditing] = useState<string | 'new' | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftAccent, setDraftAccent] = useState('');
+  /** Per-role family overrides being composed. An absent role means the house
+   *  face, which is the same thing absence means in the saved kit. */
+  const [draftFonts, setDraftFonts] = useState<KitFonts>({});
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -119,25 +139,34 @@ export function BrandKitModal({
     setEditing('new');
     setDraftName('');
     setDraftAccent(SUGGESTED[0]);
+    setDraftFonts({});
   };
   const startEdit = (kit: BrandKit) => {
     setEditing(kit.id);
     setDraftName(kit.name);
     setDraftAccent(kit.accent);
+    setDraftFonts({ ...(kit.fonts ?? {}) });
   };
 
   const canSave = draftName.trim().length > 0 && isHex6(draftAccent);
 
   const commit = () => {
     if (!canSave) return;
-    if (editing === 'new') onCreateKit(draftName, draftAccent);
-    else if (editing) onUpdateKit(editing, { name: draftName, accent: draftAccent });
+    if (editing === 'new') onCreateKit(draftName, draftAccent, draftFonts);
+    else if (editing) onUpdateKit(editing, { name: draftName, accent: draftAccent, fonts: draftFonts });
     setEditing(null);
   };
 
   /** Theme shown in the live preview: the one being edited, else the active one. */
   const previewTheme: DeckTheme = editing
-    ? { ...WOZKU_THEME, id: 'preview', name: 'Preview', accent: accentRamp(isHex6(draftAccent) ? draftAccent : WOZKU_THEME.accent.base) }
+    // Built through `brandKitTheme`, the same function that resolves a saved kit,
+    // so the preview cannot show a combination the saved kit would not produce.
+    ? brandKitTheme({
+        id: 'preview',
+        name: 'Preview',
+        accent: isHex6(draftAccent) ? draftAccent.replace('#', '') : WOZKU_THEME.accent.base,
+        fonts: draftFonts,
+      })
     : [...BUILT_IN_THEMES, ...kits.map((k) => ({ ...WOZKU_THEME, id: k.id, name: k.name, accent: accentRamp(k.accent) }))]
         .find((t) => t.id === activeThemeId) ?? WOZKU_THEME;
 
@@ -255,6 +284,57 @@ export function BrandKitModal({
                       style={{ background: css(hex) }}
                     />
                   ))}
+                </div>
+
+                {/* ── Typefaces ─────────────────────────────────────────────
+                    The other half of a brand. A kit was colour-only, which meant a
+                    client whose brand face is Poppins could only get it one slot at
+                    a time, on every slide, by hand.
+
+                    Three roles rather than one font, because the templates use
+                    three and always have: display for headings and figures, body
+                    for paragraphs, mono for the eyebrows, HUD labels and slide
+                    numbers. Any role left on House keeps the Wozku face, so a kit
+                    can change just the headings and leave the rest alone. */}
+                <div className="flex flex-col gap-2 pt-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+                      Typefaces
+                    </span>
+                    {(draftFonts.display || draftFonts.sans || draftFonts.mono) && (
+                      <button
+                        onClick={() => setDraftFonts({})}
+                        className="font-mono text-[9px] uppercase tracking-[0.08em] text-neutral-400 hover:text-neutral-800 transition-colors cursor-pointer"
+                      >
+                        Reset to house
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    {ROLES.map((role) => (
+                      <FontField
+                        key={role.key}
+                        label={role.label}
+                        hint={role.hint}
+                        value={draftFonts[role.key]}
+                        fallback={WOZKU_THEME.fonts[role.key].family}
+                        onChange={(family) =>
+                          setDraftFonts((prev) => {
+                            const next = { ...prev };
+                            if (family) next[role.key] = family;
+                            else delete next[role.key];
+                            return next;
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+
+                  <span className="text-[11px] text-neutral-400 leading-snug">
+                    Every face here is a Google Font, so it is embedded into the .pptx and
+                    resolves by name in Google Slides. Nothing to install on anyone&rsquo;s machine.
+                  </span>
                 </div>
 
                 <div className="flex items-center gap-2 pt-1">

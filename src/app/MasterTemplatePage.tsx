@@ -15,6 +15,8 @@ import { CommandPalette, type Command } from '../features/command/CommandPalette
 import { SWITCHABLE } from '../features/deck/templateSwitch';
 import { MOD_KEY } from '../features/help/platform';
 import { ensureFonts } from '../features/fonts/loadFont';
+import { planAutoFitForSlides } from '../features/fit/autoFit';
+import { clippedSlideIds } from '../features/fit/fitStore';
 import { familiesInDeck } from '../features/fonts/deckFonts';
 import { StudioHeader } from '../features/generator/StudioHeader';
 import { useToast } from '../features/toast/Toast';
@@ -26,7 +28,7 @@ import { EditToolbar } from '../features/formatting/EditToolbar';
 import { StageRail } from '../features/formatting/StageRail';
 import { NotesPanel } from '../features/formatting/NotesPanel';
 import { ChartDataEditor } from '../features/formatting/ChartDataEditor';
-import { themeById } from '../features/theme/deckTheme';
+import { themeById, type KitFonts } from '../features/theme/deckTheme';
 import { BrandKitModal } from '../features/theme/BrandKitModal';
 import {
   brandKitThemes,
@@ -1282,6 +1284,75 @@ export function MasterTemplatePage() {
     void ensureFonts(familiesInDeck(displayDeck, deckTheme));
   }, [displayDeck, deckTheme]);
 
+  /**
+   * Fit every slide the check has flagged, in one action.
+   *
+   * The per-slide button under the canvas is the right tool when you are looking
+   * at the slide. It is the wrong one when the export sheet has just told you six
+   * slides are cut off, because then it means visiting six slides to press the
+   * same button six times.
+   *
+   * Needs edit mode, for the same reason the single-slide fix does: the search
+   * resolves a clipped box to a slot through `data-slot`, which only exists on an
+   * editable slide. So this enters edit mode if it has to, waits a frame for the
+   * attributes to exist, and lands you in the deck where the change happened -
+   * which is also where a single Cmd+Z can undo the whole sweep.
+   */
+  const fitAllPending = useRef(false);
+
+  const runFitAll = useCallback(() => {
+    const ids = clippedSlideIds();
+    if (ids.length === 0) {
+      showToast('Nothing is being cut off.', 'info');
+      return;
+    }
+
+    const { plans, stubborn } = planAutoFitForSlides(ids);
+
+    if (plans.length) {
+      // One mutation for the whole sweep. Twelve slides fixed is one undo.
+      mutateDeck((prev) => ({
+        ...prev,
+        slides: prev.slides.map((slide) => {
+          const found = plans.find((p) => p.instanceId === slide.instanceId);
+          if (!found) return slide;
+          let styles = slide.content.styles;
+          for (const p of found.plan) styles = patchStyles(styles, p.slot, { sizePx: p.sizePx });
+          return { ...slide, content: { ...slide.content, styles } };
+        }),
+      }));
+    }
+
+    const fixed = plans.length
+      ? `Fitted ${plans.length} slide${plans.length === 1 ? '' : 's'}`
+      : '';
+    const left = stubborn.length
+      ? `${stubborn.length} still need${stubborn.length === 1 ? 's' : ''} shorter copy rather than smaller type`
+      : '';
+    if (fixed && left) showToast(`${fixed}. ${left}.`, 'info');
+    else if (fixed) showToast(`${fixed}.`, 'success');
+    else showToast(`Resizing cannot fix ${stubborn.length === 1 ? 'this' : 'these'}. ${left}.`, 'error');
+  }, [mutateDeck, showToast]);
+
+  const handleFitAll = useCallback(() => {
+    if (editing) runFitAll();
+    else {
+      handleEnterEdit();
+      fitAllPending.current = true;
+    }
+  }, [editing, runFitAll, handleEnterEdit]);
+
+  // Edit mode has arrived, so the slots exist. One frame so the attributes are
+  // actually in the DOM before anything looks for them.
+  useEffect(() => {
+    if (!fitAllPending.current || !editing) return;
+    const raf = requestAnimationFrame(() => {
+      fitAllPending.current = false;
+      runFitAll();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [editing, runFitAll]);
+
   /** Put the deck on a theme. `undefined` means the house look, which is also
    *  what an absent `themeId` has always meant, so this clears rather than
    *  storing a redundant 'wozku'. */
@@ -1292,8 +1363,8 @@ export function MasterTemplatePage() {
     [mutateDeck]
   );
 
-  const handleCreateKit = useCallback((name: string, accent: string) => {
-    const kit = createBrandKit(name, accent);
+  const handleCreateKit = useCallback((name: string, accent: string, fonts?: KitFonts) => {
+    const kit = createBrandKit(name, accent, fonts);
     setBrandKits(listBrandKits());
     // Adopt it immediately: creating a kit inside a deck is how you say "this
     // deck is for this client", and making them then pick it from the list would
@@ -1301,7 +1372,7 @@ export function MasterTemplatePage() {
     mutateDeck((prev) => ({ ...prev, themeId: kit.id }));
   }, [mutateDeck]);
 
-  const handleUpdateKit = useCallback((id: string, patch: { name?: string; accent?: string }) => {
+  const handleUpdateKit = useCallback((id: string, patch: { name?: string; accent?: string; fonts?: KitFonts }) => {
     updateBrandKit(id, patch);
     setBrandKits(listBrandKits());
   }, []);
@@ -1571,6 +1642,13 @@ export function MasterTemplatePage() {
         run: handleRedo,
       },
       {
+        id: 'fit-all',
+        group: 'Editing',
+        label: 'Fit text on every clipped slide',
+        keywords: 'overflow clipped shrink cut off resize all',
+        run: handleFitAll,
+      },
+      {
         id: 'shortcuts',
         group: 'Editing',
         label: 'Keyboard shortcuts',
@@ -1623,6 +1701,7 @@ export function MasterTemplatePage() {
     handleUndo,
     handleRedo,
     applyLayout,
+    handleFitAll,
   ]);
 
   return (
@@ -1819,6 +1898,7 @@ export function MasterTemplatePage() {
         ast={ast}
         projectName={projectName}
         onOpenSorter={() => setSorterOpen(true)}
+        onFitAll={handleFitAll}
         theme={deckTheme}
       />
       <SlideSorter

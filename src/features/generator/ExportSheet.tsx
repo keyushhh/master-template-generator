@@ -21,6 +21,8 @@ interface ExportSheetProps {
   ast: DocumentNode | null;
   projectName: string;
   onOpenSorter: () => void;
+  /** Shrink the type on every clipped slide. Absent hides the offer. */
+  onFitAll?: () => void;
   theme?: DeckTheme;
 }
 
@@ -104,7 +106,7 @@ function sanitize(name: string): string {
  * Present is intentionally absent: it is a different verb from export, and the
  * header's mode control already carries it one click away.
  */
-export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorter, theme = WOZKU_THEME }: ExportSheetProps) {
+export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorter, onFitAll, theme = WOZKU_THEME }: ExportSheetProps) {
   const { showToast } = useToast();
   const [kind, setKind] = useState<ExportKind>('pptx');
   const [busy, setBusy] = useState(false);
@@ -363,10 +365,28 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                     fixable. */}
                 {clipped.length > 0 && (
                   <div className="flex flex-col gap-1 px-5 py-2">
-                    <span className="text-[12px] font-bold text-amber-900 leading-snug">
-                      Text cut off on {clipped.length} slide
-                      {clipped.length === 1 ? '' : 's'}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[12px] font-bold text-amber-900 leading-snug">
+                        Text cut off on {clipped.length} slide
+                        {clipped.length === 1 ? '' : 's'}
+                      </span>
+                      {/* The fix, offered where the problem is named. Reading
+                          "six slides are cut off" and then visiting six slides to
+                          press the same button six times is not a fix, it is a
+                          list of chores. Closes the sheet on purpose: this is an
+                          edit, and it should land you in the deck where it
+                          happened, with one undo available. */}
+                      {onFitAll && (
+                        <button
+                          onClick={() => { onClose(); onFitAll(); }}
+                          disabled={busy}
+                          className="ml-auto h-[24px] px-2.5 flex items-center gap-1.5 text-[11px] font-bold text-white bg-amber-700 hover:bg-amber-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Step the type down on every one of these slides until nothing is cut off"
+                        >
+                          Fit {clipped.length === 1 ? 'it' : 'all'}
+                        </button>
+                      )}
+                    </div>
                     <ul className="flex flex-col gap-0.5 text-[11px] text-amber-800/90 leading-snug">
                       {clipped.slice(0, 3).map((s, idx) => (
                         <li key={s.id} className="truncate">

@@ -68,6 +68,11 @@ export function pruneFit(liveIds: readonly string[]): void {
   if (changed) notify();
 }
 
+/** Slide ids with at least one finding, for callers that are not components. */
+export function clippedSlideIds(): string[] {
+  return [...issuesBySlide.keys()];
+}
+
 /** Findings for one slide. */
 export function useSlideFit(slideId: string): ClipIssue[] {
   return useSyncExternalStore(

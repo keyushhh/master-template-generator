@@ -16,7 +16,8 @@ import { createJiti } from 'jiti';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const jiti = createJiti(resolve(here, 'brand-kit-check.mjs'), { interopDefault: true });
-const { accentRamp, hexToHsl, isHex6 } = await jiti.import('../src/features/theme/deckTheme.ts');
+const { accentRamp, brandKitTheme, hexToHsl, isHex6, themeCssVars, WOZKU_THEME } =
+  await jiti.import('../src/features/theme/deckTheme.ts');
 
 /** Relative luminance, for ordering steps by how light they actually read. */
 function luminance(hex) {
@@ -103,5 +104,72 @@ for (const [label, input] of CASES) {
   console.log('');
 }
 
+// ---------------------------------------------------------------------------
+// Typefaces
+//
+// A kit carries type as well as colour. The rule that matters is that an unset
+// role means the house face - not an empty string, not a broken stack - because
+// every kit saved before type existed has no `fonts` at all and must keep
+// rendering as house type on the client's colour.
+// ---------------------------------------------------------------------------
+
+console.log('Typefaces\n');
+
+const houseKit = brandKitTheme({ id: 'k1', name: 'No type', accent: '2563EB' });
+for (const role of ['display', 'sans', 'mono']) {
+  if (houseKit.fonts[role].family !== WOZKU_THEME.fonts[role].family) {
+    fail(`kit with no fonts: ${role} is the house face`, houseKit.fonts[role].family);
+  } else pass(`kit with no fonts: ${role} is the house face (${houseKit.fonts[role].family})`);
+}
+
+const fullKit = brandKitTheme({
+  id: 'k2', name: 'Full', accent: '2563EB',
+  fonts: { display: 'Playfair Display', sans: 'Inter', mono: 'IBM Plex Mono' },
+});
+for (const [role, want] of [['display', 'Playfair Display'], ['sans', 'Inter'], ['mono', 'IBM Plex Mono']]) {
+  if (fullKit.fonts[role].family !== want) fail(`kit fonts: ${role} is the chosen face`, fullKit.fonts[role].family);
+  else pass(`kit fonts: ${role} is the chosen face (${want})`);
+}
+
+// The chosen family goes in front of the house stack, so the fallback chain stays
+// role-correct: a client's mono falls back to a mono, never to a sans.
+for (const [role, want] of [['display', 'Playfair Display'], ['sans', 'Inter'], ['mono', 'IBM Plex Mono']]) {
+  const stack = fullKit.fonts[role].stack;
+  const startsRight = stack.startsWith(`"${want}"`);
+  const keepsHouse = stack.includes(WOZKU_THEME.fonts[role].family);
+  if (!startsRight || !keepsHouse) fail(`kit fonts: ${role} stack falls back within its role`, stack);
+  else pass(`kit fonts: ${role} stack falls back within its role`);
+}
+
+const partial = brandKitTheme({ id: 'k3', name: 'Partial', accent: '2563EB', fonts: { display: 'Lora' } });
+if (partial.fonts.display.family !== 'Lora') fail('partial kit: display overridden', partial.fonts.display.family);
+else pass('partial kit: display overridden (Lora)');
+for (const role of ['sans', 'mono']) {
+  if (partial.fonts[role].family !== WOZKU_THEME.fonts[role].family) {
+    fail(`partial kit: ${role} left on the house face`, partial.fonts[role].family);
+  } else pass(`partial kit: ${role} left on the house face`);
+}
+
+// An empty string is not a choice. It would otherwise produce `"" , stack` and a
+// family name of nothing in the exported XML.
+const blank = brandKitTheme({ id: 'k4', name: 'Blank', accent: '2563EB', fonts: { display: '' } });
+if (blank.fonts.display.family !== WOZKU_THEME.fonts.display.family) {
+  fail('empty family falls back to the house face', blank.fonts.display.family);
+} else pass('empty family falls back to the house face');
+
+// And the CSS vars the canvas reads have to carry the kit's stacks, since that is
+// the only route from a kit to a rendered slide.
+const vars = themeCssVars(fullKit);
+for (const [v, want] of [['--font-display', 'Playfair Display'], ['--font-sans', 'Inter'], ['--font-mono', 'IBM Plex Mono']]) {
+  if (!vars[v]?.includes(want)) fail(`${v} carries the kit face`, vars[v]);
+  else pass(`${v} carries the kit face (${want})`);
+}
+
+// Colour must be untouched by any of this.
+const ramp = accentRamp('2563EB');
+if (fullKit.accent.base !== ramp.base) fail('kit type does not disturb the colour ramp', fullKit.accent.base);
+else pass('kit type does not disturb the colour ramp');
+
+console.log('');
 console.log(failed === 0 ? 'All brand kit checks passed.' : `${failed} check(s) failed.`);
 process.exit(failed === 0 ? 0 : 1);

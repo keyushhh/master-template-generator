@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FitStage } from '../generator/FitStage';
+import { FolderChip } from './FolderChip';
 import { css as themeCss, type DeckTheme } from '../theme/deckTheme';
 import type { Deck } from '../deck/types';
 import type { ProjectSummary } from '../deck/deckStore';
@@ -43,6 +44,9 @@ interface DeckTableProps {
   onBulkDuplicate: () => void;
   onBulkDelete: () => void;
   folders?: FolderMeta[];
+  /** Mark rows that live in a folder. Set while searching the library, where the
+   *  list reaches filed decks as well as loose ones. */
+  showFolderOrigin?: boolean;
   onBulkMoveToFolder?: (folderId: string | null) => void;
   onMoveToFolder?: (projectId: string, folderId: string | null) => void;
   onOpen: (id: string) => void;
@@ -220,6 +224,7 @@ export function DeckTable({
   onBulkDuplicate,
   onBulkDelete,
   folders = [],
+  showFolderOrigin = false,
   onBulkMoveToFolder,
   onMoveToFolder,
   onOpen,
@@ -229,6 +234,8 @@ export function DeckTable({
   renderName,
 }: DeckTableProps) {
   const allShownSelected = rows.length > 0 && rows.every((p) => selected.has(p.id));
+  const folderOf = (id: string | null | undefined) =>
+    id ? folders.find((f) => f.id === id) : undefined;
   const someSelected = selected.size > 0;
   const [moveDropdownOpen, setMoveDropdownOpen] = useState(false);
   const [rowFolderMenuId, setRowFolderMenuId] = useState<string | null>(null);
@@ -392,8 +399,17 @@ export function DeckTable({
                       </span>
                       <span className="flex flex-col min-w-0 gap-[1px]">
                         {renderName(p, 'text-[12.5px] font-bold text-neutral-900 leading-[1.25]')}
-                        <span className="text-[10.5px] text-neutral-400 truncate leading-[1.25]">
-                          {sourceLabel(p.deck)}
+                        <span className="flex items-center gap-1.5 min-w-0 leading-[1.25]">
+                          <span className="text-[10.5px] text-neutral-400 truncate">
+                            {sourceLabel(p.deck)}
+                          </span>
+                          {/* Beside the source line rather than in a column of its
+                              own: it is present on a search and absent the rest of
+                              the time, and a column that is empty in the normal
+                              case costs width on every row forever. */}
+                          {showFolderOrigin && p.folderId && folderOf(p.folderId) && (
+                            <FolderChip folder={folderOf(p.folderId)!} />
+                          )}
                         </span>
                       </span>
                     </div>

@@ -17,6 +17,7 @@ import {
   type DeckTheme,
 } from '../theme/deckTheme';
 import { AddIcon, CheckIcon, CloseIcon } from '../ui/icons';
+import { ensureFonts } from '../fonts/loadFont';
 import { DECK_STARTERS, starterById } from './deckStarters';
 import type { Deck } from './types';
 
@@ -110,6 +111,18 @@ export function NewDeckModal({
   // is only built here to be looked at, and rebuilding it on every keystroke in
   // the name field would remount the preview under the cursor.
   const previewDeck = useMemo(() => starterById(starterId).build(), [starterId]);
+
+  /**
+   * A kit's typefaces have to be in the page before its cover is drawn.
+   *
+   * A kit carries type as well as colour now, so the preview beside these choices
+   * is only truthful once those faces have arrived - otherwise picking a client
+   * shows their colour on the house type and the deck looks different the moment
+   * it opens.
+   */
+  useEffect(() => {
+    void ensureFonts([theme.fonts.display.family, theme.fonts.sans.family, theme.fonts.mono.family]);
+  }, [theme]);
   const cover = previewDeck.slides[0];
 
   if (!open) return null;

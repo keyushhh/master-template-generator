@@ -326,6 +326,19 @@ export function ImageIcon({ size = 14 }: IconProps) {
 }
 
 /** ionicons: list-outline */
+/** A table: an outer frame, a header row, and a column division. Distinct from
+ *  ListIcon's bullets, which read as a list of items rather than a grid of
+ *  fields - and the library's list view is a real table now. */
+export function TableIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <rect x="64" y="80" width="384" height="352" rx="16" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="32px"/>
+      <path d="M64 176h384M240 176v256" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
+      <path d="M64 304h384" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
+    </Ion>
+  );
+}
+
 export function ListIcon({ size = 14 }: IconProps) {
   return (
     <Ion size={size}>

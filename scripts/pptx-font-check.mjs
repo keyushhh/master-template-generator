@@ -72,6 +72,65 @@ check(
   wrongFace.length ? `also found: ${wrongFace.join(', ')}` : `${bodyRuns.length} body runs`
 );
 
+// --- a client kit's typefaces, end to end -----------------------------------
+//
+// The point of putting type on a brand kit is that it reaches the exported file,
+// not just the canvas. Nothing in the exporter knows kits exist - it reads
+// `theme().fonts.<role>.family` - so this asserts the seam rather than the
+// feature: a kit theme goes in, the kit's three faces come out, and the house
+// faces are gone entirely.
+const KIT = deckTheme.brandKitTheme({
+  id: 'kit_test',
+  name: 'Test Client',
+  accent: 'D97706',
+  fonts: { display: 'Playfair Display', sans: 'Inter', mono: 'IBM Plex Mono' },
+});
+
+const kitParts = await renderSlideXml(rig, KIT);
+const kitXml = kitParts.map((p) => p.xml).join('');
+const kitCounts = {};
+for (const m of kitXml.matchAll(/typeface="([^"]*)"/g)) {
+  kitCounts[m[1]] = (kitCounts[m[1]] ?? 0) + 1;
+}
+
+for (const [role, face] of [
+  ['display', 'Playfair Display'],
+  ['sans', 'Inter'],
+  ['mono', 'IBM Plex Mono'],
+]) {
+  check(`kit ${role} face reaches the export (${face})`, (kitCounts[face] ?? 0) > 0,
+    `${kitCounts[face] ?? 0} runs`);
+}
+
+const houseLeak = ['Space Grotesk', 'DM Sans', 'JetBrains Mono'].filter((f) => kitCounts[f]);
+check('no house face survives a kit that overrides all three', houseLeak.length === 0,
+  houseLeak.length ? `leaked: ${houseLeak.join(', ')}` : '');
+
+// Run counts per role must be identical whichever theme is in effect: a kit
+// changes which face is named, never which runs exist.
+const sameShape =
+  (kitCounts['Playfair Display'] ?? 0) === (counts[theme.fonts.display.family] ?? 0) &&
+  (kitCounts['Inter'] ?? 0) === (counts[theme.fonts.sans.family] ?? 0) &&
+  (kitCounts['IBM Plex Mono'] ?? 0) === (counts[theme.fonts.mono.family] ?? 0);
+check('a kit changes the faces, not the runs', sameShape,
+  `${JSON.stringify(kitCounts)} vs ${JSON.stringify(counts)}`);
+
+// A kit that overrides only one role must leave the other two on the house face.
+const PARTIAL = deckTheme.brandKitTheme({
+  id: 'kit_partial', name: 'Partial', accent: 'D97706', fonts: { display: 'Lora' },
+});
+const partialXml = (await renderSlideXml(rig, PARTIAL)).map((p) => p.xml).join('');
+check('a partial kit keeps the house faces for the roles it does not set',
+  partialXml.includes('typeface="Lora"') &&
+    partialXml.includes(`typeface="${theme.fonts.sans.family}"`) &&
+    partialXml.includes(`typeface="${theme.fonts.mono.family}"`) &&
+    !partialXml.includes(`typeface="${theme.fonts.display.family}"`));
+
+// And the house export must still be untouched afterwards - the theme is module
+// state in the exporter, so a leak here would silently restyle the next export.
+const houseAgain = (await renderSlideXml(rig)).map((p) => p.xml).join('');
+check('no leak: the house export after a kit export is identical', houseAgain === xml);
+
 let failed = 0;
 for (const r of results) {
   if (!r.ok) failed++;

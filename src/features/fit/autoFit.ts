@@ -138,3 +138,34 @@ export function planAutoFit(root: HTMLElement): AutoFitResult {
 
   return { plan, stubborn: [...stubborn, ...orphans] };
 }
+
+/**
+ * Plan the same fix across several slides.
+ *
+ * Every slide in the deck stays mounted in the canvas - only the current one is
+ * visible - which is what makes this possible without navigating to each in turn.
+ * The catch is the same as for one slide: slot identity comes from `data-slot`,
+ * which only exists in edit mode, so the caller has to be in it first.
+ *
+ * Returns one entry per slide that has something to change, so the caller can
+ * commit the whole sweep as a single deck mutation. Twelve slides fixed should be
+ * one undo, not twelve.
+ */
+export function planAutoFitForSlides(instanceIds: readonly string[]): {
+  plans: { instanceId: string; plan: AutoFitPlan[] }[];
+  /** Slides where something needs shorter copy rather than smaller type. */
+  stubborn: string[];
+} {
+  const plans: { instanceId: string; plan: AutoFitPlan[] }[] = [];
+  const stubborn: string[] = [];
+
+  for (const instanceId of instanceIds) {
+    const root = document.getElementById(instanceId);
+    if (!root) continue;
+    const result = planAutoFit(root);
+    if (result.plan.length) plans.push({ instanceId, plan: result.plan });
+    if (result.stubborn.length) stubborn.push(instanceId);
+  }
+
+  return { plans, stubborn };
+}

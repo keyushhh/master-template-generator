@@ -7,6 +7,7 @@ import type { SlideInstance } from '../deck/types';
 import { relativeTime } from '../library/relativeTime';
 import { brandKitThemes, listBrandKits } from '../theme/brandKitStore';
 import { themeById } from '../theme/deckTheme';
+import { ensureFonts } from '../fonts/loadFont';
 import { CheckIcon, CloseIcon } from '../ui/icons';
 import { FitStage } from './FitStage';
 
@@ -80,6 +81,17 @@ export function BorrowSlideModal({
     () => themeById(source?.deck?.themeId, brandKitThemes(listBrandKits())),
     [source]
   );
+
+  // The source deck's kit may set its own typefaces, and these thumbnails are how
+  // you recognise the slide you are after. Loaded per source deck rather than up
+  // front: you only ever look at one at a time.
+  useEffect(() => {
+    void ensureFonts([
+      sourceTheme.fonts.display.family,
+      sourceTheme.fonts.sans.family,
+      sourceTheme.fonts.mono.family,
+    ]);
+  }, [sourceTheme]);
 
   // Selection is per deck. Switching decks with three slides still ticked and
   // then pressing Add would insert slides you can no longer see.

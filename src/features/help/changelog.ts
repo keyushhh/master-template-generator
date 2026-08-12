@@ -27,6 +27,27 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.2.0',
+    date: '2026-08-12',
+    summary: 'Brand kits carry typefaces, not just colour.',
+    added: [
+      'A brand kit now sets the client’s typefaces as well as their colour: display for headings, body for paragraphs, mono for labels. Any role left on House keeps the Wozku face, so a kit can change only the headings.',
+      'The kit’s type shows up everywhere its colour does, with nothing to set per slide: the canvas, the rail thumbnails, the library covers, present mode, and embedded into the .pptx.',
+      'Fit all. When the export sheet says text is cut off on six slides, one press fixes every one of them, as a single undo. Also in the palette as "Fit text on every clipped slide".',
+    ],
+    improved: [
+      'A deck filed into a folder leaves the library list. It lives in that folder now; take it out and it comes back. Before this, filing a deck tidied nothing, because the same deck then appeared in two places.',
+      'The library’s list is headed Uncategorised rather than "Everything else", which is what it now actually contains.',
+      'Search reaches every deck, filed or not, and a result that lives in a folder says which one. Inside a folder, search stays inside that folder.',
+      'Removed the drop shadow from the New Folder button in the masthead.',
+      'The library’s List view is called Table now, with an icon to match. It has been a real sortable table for a while and the old name undersold it.',
+      'The library opens in Table view, which is the one that scales past a screenful of decks.',
+    ],
+    fixed: [
+      'Opening a folder permanently changed the library’s own view to Grid. A folder is always a grid, but that was being saved as though you had chosen it, so coming back out left the library in Grid for good.',
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-08-12',
     summary: 'All 1,932 Google Fonts in the typeface menu, and body copy that exports in the font you can see.',
