@@ -11,7 +11,7 @@
  */
 
 import type { SlotOffset, SlotStyle } from '../deck/types';
-import { fontStack } from './rails';
+import { INDENT_STEP_PX, fontStack } from './rails';
 
 /** Reads a slot's drag offset, or undefined if it hasn't been moved. */
 export function offsetFor(
@@ -86,6 +86,13 @@ export function isEmptyStyle(s: SlotStyle | undefined): boolean {
     s.underline === undefined &&
     s.color === undefined &&
     s.align === undefined &&
+    s.lineHeight === undefined &&
+    s.letterSpacing === undefined &&
+    s.spaceBefore === undefined &&
+    s.spaceAfter === undefined &&
+    s.textCase === undefined &&
+    s.indentLevel === undefined &&
+    s.bullet === undefined &&
     // Every field of SlotStyle has to be listed here.
     //
     // `fontFamily` was missing, and the consequence was not a cosmetic one:
@@ -118,11 +125,47 @@ export function applyToCss(s: SlotStyle | undefined): React.CSSProperties {
   if (s.underline !== undefined) css.textDecoration = s.underline ? 'underline' : 'none';
   if (s.color !== undefined) css.color = `#${s.color}`;
   if (s.fontFamily !== undefined) css.fontFamily = fontStack(s.fontFamily) ?? s.fontFamily;
+  if (s.lineHeight !== undefined) css.lineHeight = s.lineHeight;
+  if (s.letterSpacing !== undefined) css.letterSpacing = `${s.letterSpacing}em`;
+  if (s.textCase !== undefined) {
+    css.textTransform = s.textCase === 'upper' ? 'uppercase' : s.textCase === 'lower' ? 'lowercase' : 'capitalize';
+  }
+  if (s.spaceBefore !== undefined) css.marginTop = s.spaceBefore;
+  if (s.spaceAfter !== undefined) css.marginBottom = s.spaceAfter;
+  if (s.indentLevel) css.paddingLeft = s.indentLevel * INDENT_STEP_PX;
+  if (s.bullet) {
+    // list-item gives a real marker without wrapping the template's markup in a <ul>.
+    css.display = 'list-item';
+    css.listStyleType = 'disc';
+    css.listStylePosition = 'inside';
+  }
   if (s.align !== undefined) {
     css.textAlign = s.align;
+    css.display = css.display ?? 'block';
+  }
+  // Vertical margins and indents do nothing to the inline span a slot renders as.
+  if (
+    css.display === undefined &&
+    (s.spaceBefore !== undefined || s.spaceAfter !== undefined || s.indentLevel)
+  ) {
     css.display = 'block';
   }
   return css;
+}
+
+/** A slot's text with its case override applied, for the exporter - the canvas gets this from text-transform. */
+export function caseText(text: string, s: SlotStyle | undefined): string {
+  switch (s?.textCase) {
+    case 'upper':
+      return text.toUpperCase();
+    case 'lower':
+      return text.toLowerCase();
+    case 'title':
+      // Like CSS capitalize: the rest of each word is left alone, so KPI and Q3 survive.
+      return text.replace(/(^|\s)(\S)/g, (_, sep: string, ch: string) => sep + ch.toUpperCase());
+    default:
+      return text;
+  }
 }
 
 /** The subset of pptxNative's TextOpts this module can override. Declared
@@ -137,6 +180,18 @@ export interface PptxTextOverride {
   color?: string; // hex, no '#'
   align?: 'left' | 'center' | 'right';
   fontFace?: string;
+  lineSpacingMultiple?: number;
+  /** em - the exporter multiplies by the effective size to get charSpacing. */
+  letterSpacingEm?: number;
+  /** pt, and it wins over letterSpacingEm - so an override has to clear it. */
+  charSpacing?: number;
+  /** Design px; the exporter converts to points. */
+  paraSpaceBeforePx?: number;
+  paraSpaceAfterPx?: number;
+  /** Carried through, not applied - the exporter rewrites the text with caseText(). */
+  textCase?: 'upper' | 'lower' | 'title';
+  indentLevel?: number;
+  bullet?: boolean;
 }
 
 /**
@@ -153,6 +208,17 @@ export function applyToPptx<T extends PptxTextOverride>(base: T, s: SlotStyle | 
   if (s.color !== undefined) out.color = s.color;
   if (s.align !== undefined) out.align = s.align;
   if (s.fontFamily !== undefined) out.fontFace = s.fontFamily;
+  if (s.lineHeight !== undefined) out.lineSpacingMultiple = s.lineHeight;
+  if (s.letterSpacing !== undefined) {
+    out.letterSpacingEm = s.letterSpacing;
+    // A template's own charSpacing would otherwise win over the user's tracking.
+    out.charSpacing = undefined;
+  }
+  if (s.spaceBefore !== undefined) out.paraSpaceBeforePx = s.spaceBefore;
+  if (s.spaceAfter !== undefined) out.paraSpaceAfterPx = s.spaceAfter;
+  if (s.textCase !== undefined) out.textCase = s.textCase;
+  if (s.indentLevel !== undefined) out.indentLevel = s.indentLevel;
+  if (s.bullet !== undefined) out.bullet = s.bullet;
   return out;
 }
 

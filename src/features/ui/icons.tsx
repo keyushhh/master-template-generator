@@ -349,6 +349,16 @@ export function ImageIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** ionicons: videocam-outline */
+export function VideoIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M374.79 308.78 457.5 367a16 16 0 0 0 22.5-14.62V159.62A16 16 0 0 0 457.5 145l-82.71 58.22A16 16 0 0 0 368 216.3v79.4a16 16 0 0 0 6.79 13.08Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
+      <rect width="336" height="256" x="32" y="128" rx="48" ry="48" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
+    </Ion>
+  );
+}
+
 /** ionicons: list-outline */
 /** A table: an outer frame, a header row, and a column division. Distinct from
  *  ListIcon's bullets, which read as a list of items rather than a grid of

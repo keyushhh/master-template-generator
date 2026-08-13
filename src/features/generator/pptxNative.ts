@@ -1,6 +1,8 @@
 import type pptxgen from 'pptxgenjs';
-import type { SlideInstance, ComparisonRow, SlotOffset, SlotStyle } from '../deck/types';
-import { applyToPptx, offsetFor, styleFor } from '../formatting/resolve';
+import type { SlideInstance, ComparisonRow, OverlayShape, SlotOffset, SlotStyle } from '../deck/types';
+import { getVideo } from '../deck/mediaStore';
+import { parseVideoSource } from '../formatting/videoSource';
+import { applyToPptx, caseText, offsetFor, styleFor } from '../formatting/resolve';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 
 /**
@@ -84,6 +86,18 @@ export function setExportTheme(next: DeckTheme | undefined): void {
 export function clearExportTheme(): void {
   activeTheme = WOZKU_THEME;
 }
+
+/** Videos that could not be embedded as themselves, so the export can say so rather than quietly shipping a still. */
+let mediaNotes: string[] = [];
+
+export function takeMediaNotes(): string[] {
+  const out = mediaNotes;
+  mediaNotes = [];
+  return out;
+}
+
+/** Above this, a base64 video would make a .pptx nothing can open; it degrades to a poster instead. */
+export const PPTX_VIDEO_LIMIT_BYTES = 64 * 1024 * 1024;
 
 /**
  * Palette and type stack, derived from the deck theme rather than restated here.
@@ -257,6 +271,11 @@ interface TextOpts {
   lineSpacingMultiple?: number;
   letterSpacingEm?: number;
   charSpacing?: number; // pt, takes precedence over letterSpacingEm
+  paraSpaceBeforePx?: number;
+  paraSpaceAfterPx?: number;
+  textCase?: 'upper' | 'lower' | 'title';
+  indentLevel?: number;
+  bullet?: boolean;
   transparency?: number;
   /** Slot name this text belongs to, matching the `slot` on the corresponding
    *  <E> in PresentationCanvas.tsx. Supplying it is what makes the user's
@@ -325,7 +344,8 @@ function addText(
   // The user's per-slot override wins over whatever the template specified.
   // Merged through the shared resolver so the canvas and this exporter can
   // never disagree about what an override means.
-  const o = applyToPptx(opts, styleFor(activeStyles, opts.slot));
+  const style = styleFor(activeStyles, opts.slot);
+  const o = applyToPptx(opts, style);
 
   // A slot the user dragged in the editor has to land in the same place here.
   // The canvas moves it with a CSS translate; this is the same delta converted
@@ -333,7 +353,13 @@ function addText(
   const off = offsetFor(activeOffsets, opts.slot);
   const placed = off ? { ...b, x: b.x + inch(off.dx), y: b.y + inch(off.dy) } : b;
 
-  const runs = typeof text === 'string' && text.includes('\n') ? splitLines(text) : text;
+  // OOXML has no run-level case property, so a case override rewrites the string.
+  const cased = typeof text === 'string' ? caseText(text, style) : text.map((r) => ({
+    ...r,
+    text: typeof r.text === 'string' ? caseText(r.text, style) : r.text,
+  }));
+
+  const runs = typeof cased === 'string' && cased.includes('\n') ? splitLines(cased) : cased;
   slide.addText(runs, {
     ...placed,
     fontFace: o.fontFace ?? FONT_DISPLAY(),
@@ -350,6 +376,10 @@ function addText(
     // label (an eyebrow, a HUD line) keeps the old letter-spacing and the text
     // either crowds or falls apart.
     charSpacing: o.charSpacing ?? (o.letterSpacingEm ? tracking(o.size, o.letterSpacingEm) : undefined),
+    paraSpaceBefore: o.paraSpaceBeforePx !== undefined ? pt(o.paraSpaceBeforePx) : undefined,
+    paraSpaceAfter: o.paraSpaceAfterPx !== undefined ? pt(o.paraSpaceAfterPx) : undefined,
+    indentLevel: o.indentLevel,
+    bullet: o.bullet ? true : undefined,
     transparency: o.transparency,
     wrap: true,
     fit: 'none',
@@ -371,7 +401,7 @@ function addText(
  * not a run property, so it cannot vary between runs sharing a paragraph. The
  * canvas has the same constraint for the same reason.
  */
-function runOpts(slot: string): pptxgen.TextPropsOptions {
+function runOpts(slot: string, basePx?: number): pptxgen.TextPropsOptions {
   const s = styleFor(activeStyles, slot);
   if (!s) return {};
   const o: pptxgen.TextPropsOptions = {};
@@ -380,7 +410,16 @@ function runOpts(slot: string): pptxgen.TextPropsOptions {
   if (s.italic !== undefined) o.italic = s.italic;
   if (s.underline !== undefined) o.underline = s.underline ? { style: 'sng' } : undefined;
   if (s.color !== undefined) o.color = s.color;
+  if (s.fontFamily !== undefined) o.fontFace = s.fontFamily;
+  // Leading, paragraph space, indent and bullets are paragraph properties, so they cannot vary between packed runs.
+  const size = s.sizePx ?? basePx;
+  if (s.letterSpacing !== undefined && size !== undefined) o.charSpacing = tracking(size, s.letterSpacing);
   return o;
+}
+
+/** A packed run's text with its own case override applied. */
+function runText(slot: string, text: string): string {
+  return caseText(text, styleFor(activeStyles, slot));
 }
 
 function addLine(slide: pptxgen.Slide, x1: number, y1: number, x2: number, y2: number, color: string, widthPx = 1) {
@@ -506,6 +545,95 @@ async function addImageContain(slide: pptxgen.Slide, dataUrl: string, b: Box) {
     w = b.h * ratio;
   }
   slide.addImage({ data: dataUrl, x: b.x + (b.w - w) / 2, y: b.y + (b.h - h) / 2, w, h });
+}
+
+/**
+ * A video shape as real PowerPoint media.
+ *
+ * YouTube/Vimeo go in as an online video, an uploaded file as embedded media,
+ * and anything we cannot carry degrades to its poster with the link attached -
+ * a still that opens the video beats an empty rectangle.
+ */
+async function addVideo(slide: pptxgen.Slide, s: OverlayShape, b: Box) {
+  // pptxgenjs requires a base64 cover; a provider thumbnail URL would throw.
+  const cover = s.posterUrl?.startsWith('data:') ? s.posterUrl : undefined;
+  const src = parseVideoSource(s.videoUrl);
+  const label = s.videoName ?? s.videoUrl ?? 'Video';
+
+  if (src && src.kind !== 'file') {
+    slide.addMedia({ type: 'online', link: src.embedUrl, cover, ...b });
+    return;
+  }
+
+  if (s.videoAssetId) {
+    const asset = await getVideo(s.videoAssetId);
+    if (!asset) {
+      mediaNotes.push(`“${label}” is not stored in this browser, so it was left out of the file.`);
+      addVideoFallback(slide, s, b, undefined);
+      return;
+    }
+    if (asset.size > PPTX_VIDEO_LIMIT_BYTES) {
+      mediaNotes.push(
+        `“${asset.name}” is ${(asset.size / (1024 * 1024)).toFixed(0)}MB, too large to embed - the slide carries its poster frame instead.`
+      );
+      addVideoFallback(slide, s, b, undefined);
+      return;
+    }
+    try {
+      const data = await blobToDataUrl(asset.blob);
+      slide.addMedia({ type: 'video', data, extn: extensionOf(asset.name, asset.type), cover, ...b });
+      return;
+    } catch {
+      mediaNotes.push(`“${asset.name}” could not be embedded; the slide carries its poster frame instead.`);
+      addVideoFallback(slide, s, b, undefined);
+      return;
+    }
+  }
+
+  if (src?.kind === 'file') {
+    try {
+      slide.addMedia({ type: 'video', path: src.embedUrl, extn: extensionOf(src.embedUrl, ''), cover, ...b });
+      return;
+    } catch {
+      addVideoFallback(slide, s, b, src.watchUrl);
+      return;
+    }
+  }
+
+  addVideoFallback(slide, s, b, undefined);
+}
+
+/** Poster (or a labelled placeholder), hyperlinked to the video where there is one. */
+function addVideoFallback(slide: pptxgen.Slide, s: OverlayShape, b: Box, link: string | undefined) {
+  const hyperlink = link ? { url: link } : undefined;
+  if (s.posterUrl?.startsWith('data:')) {
+    slide.addImage({ data: s.posterUrl, ...b, sizing: { type: 'contain', w: b.w, h: b.h }, hyperlink });
+    return;
+  }
+  addRect(slide, b, NEUTRAL_900(), undefined);
+  addText(slide, s.videoName ?? 'Video', b, {
+    fontFace: FONT_MONO(),
+    size: 24,
+    color: WHITE(),
+    align: 'center',
+    valign: 'middle',
+  });
+}
+
+function extensionOf(name: string, mime: string): string {
+  const fromName = name.split('?')[0].split('.').pop() ?? '';
+  if (/^[a-z0-9]{2,4}$/i.test(fromName)) return fromName.toLowerCase();
+  const fromMime = mime.split('/')[1];
+  return fromMime && /^[a-z0-9]{2,4}$/i.test(fromMime) ? fromMime : 'mp4';
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(r.error ?? new Error('read failed'));
+    r.readAsDataURL(blob);
+  });
 }
 
 function addImageCover(slide: pptxgen.Slide, dataUrl: string, b: Box) {
@@ -732,7 +860,10 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
     slot: 'leftBody',
   });
   const attrRuns: pptxgen.TextProps[] = attributes.flatMap((a, i) => [
-    { text: `[${String(i + 1).padStart(2, '0')}] ${a}`, options: { breakLine: true, ...runOpts(`leftAttributes.${i}`) } },
+    {
+      text: runText(`leftAttributes.${i}`, `[${String(i + 1).padStart(2, '0')}] ${a}`),
+      options: { breakLine: true, ...runOpts(`leftAttributes.${i}`, 20) },
+    },
   ]);
   addText(slide, attrRuns, box(140, 690, 700, 180), {
     fontFace: FONT_MONO(),
@@ -761,8 +892,11 @@ function buildTwoColumnContext(slide: pptxgen.Slide, content: SlideInstance['con
 function buildDataMonument(slide: pptxgen.Slide, content: SlideInstance['content']) {
   addEditorialLabel(slide, content.eyebrow ?? 'Performance Metric', 140, 260, { slot: 'eyebrow' });
   const runs: pptxgen.TextProps[] = [
-    { text: content.value ?? '000.0', options: { ...runOpts('value') } },
-    { text: ` ${content.unit ?? 'M'}`, options: { color: EMERALD_500(), fontSize: pt(420 * 0.3), ...runOpts('unit') } },
+    { text: runText('value', content.value ?? '000.0'), options: { ...runOpts('value', 420) } },
+    {
+      text: runText('unit', ` ${content.unit ?? 'M'}`),
+      options: { color: EMERALD_500(), fontSize: pt(420 * 0.3), ...runOpts('unit', 420 * 0.3) },
+    },
   ];
   addText(slide, runs, box(140, 305, 1600, 330), { size: 420, bold: true, lineSpacingMultiple: 0.8 });
   addText(slide, content.heading ?? 'Primary Performance Variable Title.', box(140, 630, 1600, 100), {
@@ -1119,7 +1253,10 @@ async function buildExit(slide: pptxgen.Slide, content: SlideInstance['content']
 
   const contacts = content.contacts?.length ? content.contacts : DEFAULT_CONTACTS;
   const runs: pptxgen.TextProps[] = contacts.flatMap((c, i) => [
-    { text: c + (i < contacts.length - 1 ? '   ' : ''), options: { ...runOpts(`contacts.${i}`) } },
+    {
+      text: runText(`contacts.${i}`, c + (i < contacts.length - 1 ? '   ' : '')),
+      options: { ...runOpts(`contacts.${i}`, 16) },
+    },
   ]);
   addText(slide, runs, box(140, 920, 1600, 40), { fontFace: FONT_MONO(), size: 16, color: EMERALD_400() });
 }
@@ -1297,6 +1434,11 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
 
     if (s.kind === 'image') {
       if (s.imageUrl) await addImageContain(slide, s.imageUrl, b);
+      continue;
+    }
+
+    if (s.kind === 'video') {
+      await addVideo(slide, s, b);
       continue;
     }
 

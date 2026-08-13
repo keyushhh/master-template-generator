@@ -2,11 +2,13 @@ import html2canvas from 'html2canvas';
 import pptxgen from 'pptxgenjs';
 import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
-import { addNativeSlide, clearExportTheme, setExportTheme } from './pptxNative';
+import { addNativeSlide, clearExportTheme, setExportTheme, takeMediaNotes } from './pptxNative';
 import { embedPptxFonts, type FontEmbedReport } from './pptxFontEmbed';
 import { familiesInDeck } from '../fonts/deckFonts';
 import type { SlideInstance } from '../deck/types';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
+import { getVideo } from '../deck/mediaStore';
+import { embedWithOptions, parseVideoSource } from '../formatting/videoSource';
 
 /**
  * html2canvas's CSS parser doesn't understand `color-mix()` (or the `color()`
@@ -161,7 +163,7 @@ export async function exportPptxBuffer(
   logoUrl: string | undefined,
   logoScale = 1,
   theme: DeckTheme = WOZKU_THEME
-): Promise<{ buffer: ArrayBuffer; report: FontEmbedReport } | null> {
+): Promise<{ buffer: ArrayBuffer; report: FontEmbedReport; mediaNotes: string[] } | null> {
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_WIDE';
 
@@ -169,6 +171,7 @@ export async function exportPptxBuffer(
   if (total === 0) return null;
 
   setExportTheme(theme);
+  takeMediaNotes();
   try {
     for (let i = 0; i < total; i++) {
       const num = String(i + 1).padStart(2, '0');
@@ -178,6 +181,7 @@ export async function exportPptxBuffer(
   } finally {
     clearExportTheme();
   }
+  const mediaNotes = takeMediaNotes();
 
   const rawBuffer = (await pptx.write({ outputType: 'arraybuffer' })) as ArrayBuffer;
   let finalBuffer = rawBuffer;
@@ -193,7 +197,7 @@ export async function exportPptxBuffer(
   } catch (err) {
     console.error('Font embedding failed, exporting without embedded fonts:', err);
   }
-  return { buffer: finalBuffer, report };
+  return { buffer: finalBuffer, report, mediaNotes };
 }
 
 /**
@@ -226,7 +230,7 @@ export async function exportToPPTX(
   URL.revokeObjectURL(url);
   // Handed back so the caller can say which typefaces travelled and which will be
   // substituted. Silence here is what let the old body-face bug live for months.
-  return built.report;
+  return { ...built.report, mediaNotes: built.mediaNotes };
 }
 
 /**
@@ -299,24 +303,29 @@ export async function exportSlidesAsPngZip(
  * every asset, placeholder, overlay, and layout quirk is captured pixel-for-pixel.
  */
 export async function exportToHTML(
-  slideIds: string[],
+  slides: SlideInstance[],
   title: string,
   onProgress?: (current: number, total: number) => void
-): Promise<void> {
-  const total = slideIds.length;
-  if (total === 0) return;
+): Promise<string[]> {
+  const total = slides.length;
+  if (total === 0) return [];
 
   const images: string[] = [];
+  // Videos ride along as live elements over each slide image: the capture is a
+  // flat JPEG, so a clip has to be layered back on at its own coordinates.
+  const videos: HtmlVideoPlacement[][] = [];
+  const notes: string[] = [];
   for (let i = 0; i < total; i++) {
     onProgress?.(i, total);
-    const canvas = await captureSlide(slideIds[i]);
+    const canvas = await captureSlide(slides[i].instanceId);
     if (canvas) {
       images.push(canvas.toDataURL('image/jpeg', 0.92));
+      videos.push(await htmlVideoPlacements(slides[i], notes));
     }
   }
   onProgress?.(total, total);
 
-  if (images.length === 0) return;
+  if (images.length === 0) return notes;
 
   const totalPad = String(images.length).padStart(2, '0');
   const safeTitle = title.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -333,6 +342,7 @@ export async function exportToHTML(
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #090a0f; }
     body { display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; }
+    #stage { position: relative; width: 100vw; height: 100vh; }
     #slide-img {
       max-width: 100vw;
       max-height: 100vh;
@@ -343,6 +353,11 @@ export async function exportToHTML(
       user-select: none;
       -webkit-user-drag: none;
     }
+    /* Tracks the letterboxed image rather than the viewport, so a clip stays
+       registered to the slide at any window aspect. */
+    #video-layer { position: absolute; pointer-events: none; }
+    #video-layer > div { position: absolute; pointer-events: auto; }
+    #video-layer video, #video-layer iframe { width: 100%; height: 100%; border: 0; display: block; background: #000; }
     .footer-bar {
       position: fixed;
       bottom: 20px;
@@ -387,7 +402,10 @@ export async function exportToHTML(
   </style>
 </head>
 <body>
-  <img id="slide-img" alt="Slide" />
+  <div id="stage">
+    <img id="slide-img" alt="Slide" />
+    <div id="video-layer"></div>
+  </div>
 
   <div class="footer-bar" id="footer">
     <button class="btn" id="prev-btn" title="Previous (←)">&#10094;</button>
@@ -398,6 +416,7 @@ export async function exportToHTML(
 
   <script>
     var images = ${JSON.stringify(images)};
+    var videos = ${JSON.stringify(videos)};
     var currentIdx = 0;
     var total = images.length;
     var img = document.getElementById('slide-img');
@@ -407,9 +426,59 @@ export async function exportToHTML(
 
     function pad(n) { return String(n).padStart(2, '0'); }
 
+    var layer = document.getElementById('video-layer');
+
+    /* The image is object-fit: contain, so its drawn box is not the viewport. */
+    function placeLayer() {
+      var rect = img.getBoundingClientRect();
+      var natural = 1920 / 1080;
+      var boxW = rect.width, boxH = rect.height;
+      var drawnW = boxW / boxH > natural ? boxH * natural : boxW;
+      var drawnH = boxW / boxH > natural ? boxH : boxW / natural;
+      layer.style.left = (rect.left + (boxW - drawnW) / 2) + 'px';
+      layer.style.top = (rect.top + (boxH - drawnH) / 2) + 'px';
+      layer.style.width = drawnW + 'px';
+      layer.style.height = drawnH + 'px';
+      Array.prototype.forEach.call(layer.children, function (el) {
+        el.style.left = (el.dataset.x * drawnW) + 'px';
+        el.style.top = (el.dataset.y * drawnH) + 'px';
+        el.style.width = (el.dataset.w * drawnW) + 'px';
+        el.style.height = (el.dataset.h * drawnH) + 'px';
+      });
+    }
+
+    function renderVideos() {
+      layer.innerHTML = '';
+      (videos[currentIdx] || []).forEach(function (v) {
+        var holder = document.createElement('div');
+        holder.dataset.x = v.x; holder.dataset.y = v.y;
+        holder.dataset.w = v.w; holder.dataset.h = v.h;
+        if (v.embed) {
+          var frame = document.createElement('iframe');
+          frame.src = v.embed;
+          frame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+          frame.allowFullscreen = true;
+          holder.appendChild(frame);
+        } else {
+          var vid = document.createElement('video');
+          vid.src = v.src;
+          if (v.poster) vid.poster = v.poster;
+          vid.controls = true;
+          vid.playsInline = true;
+          if (v.autoplay) vid.autoplay = true;
+          if (v.loop) vid.loop = true;
+          if (v.muted || v.autoplay) vid.muted = true;
+          holder.appendChild(vid);
+        }
+        layer.appendChild(holder);
+      });
+      placeLayer();
+    }
+
     function show() {
       img.src = images[currentIdx];
       counter.textContent = pad(currentIdx + 1) + ' / ' + pad(total);
+      renderVideos();
     }
 
     function go(delta) {
@@ -432,6 +501,10 @@ export async function exportToHTML(
       if (!document.fullscreenElement) document.documentElement.requestFullscreen();
       else document.exitFullscreen();
     };
+
+    img.addEventListener('load', placeLayer);
+    window.addEventListener('resize', placeLayer);
+    document.addEventListener('fullscreenchange', placeLayer);
 
     document.addEventListener('mousemove', resetIdle);
 
@@ -460,6 +533,66 @@ export async function exportToHTML(
   a.download = `${sanitize(title)}.html`;
   a.click();
   URL.revokeObjectURL(url);
+  return notes;
+}
+
+/** One video positioned in slide fractions, so the viewer can place it over the letterboxed image. */
+interface HtmlVideoPlacement {
+  x: number; y: number; w: number; h: number;
+  /** Set for YouTube/Vimeo - the viewer builds an iframe. */
+  embed?: string;
+  /** Set for a file - inlined data URL, or a direct link. */
+  src?: string;
+  poster?: string;
+  autoplay?: boolean;
+  loop?: boolean;
+  muted?: boolean;
+}
+
+/** A single .html file has nowhere to put a sidecar, so an uploaded clip has to be inlined. */
+const HTML_INLINE_LIMIT_BYTES = 64 * 1024 * 1024;
+
+async function htmlVideoPlacements(slide: SlideInstance, notes: string[]): Promise<HtmlVideoPlacement[]> {
+  const out: HtmlVideoPlacement[] = [];
+  for (const shape of slide.content.overlay ?? []) {
+    if (shape.kind !== 'video') continue;
+    const at = { x: shape.x / 1920, y: shape.y / 1080, w: shape.w / 1920, h: shape.h / 1080 };
+    const flags = { autoplay: shape.autoplay, loop: shape.loop, muted: shape.muted };
+    const src = parseVideoSource(shape.videoUrl);
+
+    if (src && src.kind !== 'file') {
+      out.push({ ...at, ...flags, embed: embedWithOptions(src, flags) });
+      continue;
+    }
+    if (src?.kind === 'file') {
+      out.push({ ...at, ...flags, src: src.embedUrl, poster: shape.posterUrl });
+      continue;
+    }
+    if (!shape.videoAssetId) continue;
+
+    const asset = await getVideo(shape.videoAssetId);
+    if (!asset) {
+      notes.push(`“${shape.videoName ?? 'A video'}” is not stored in this browser, so the HTML file has only its poster frame.`);
+      continue;
+    }
+    if (asset.size > HTML_INLINE_LIMIT_BYTES) {
+      notes.push(
+        `“${asset.name}” is ${(asset.size / (1024 * 1024)).toFixed(0)}MB, too large to inline into a single HTML file - the slide shows its poster frame instead.`
+      );
+      continue;
+    }
+    out.push({ ...at, ...flags, src: await blobToDataUrl(asset.blob), poster: shape.posterUrl });
+  }
+  return out;
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(r.error ?? new Error('read failed'));
+    r.readAsDataURL(blob);
+  });
 }
 
 /**

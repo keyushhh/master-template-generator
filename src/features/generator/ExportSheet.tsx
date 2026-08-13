@@ -56,7 +56,7 @@ const FORMATS: {
     ext: '.html',
     headline: 'Standalone interactive HTML presentation.',
     detail:
-      'A self-contained single HTML file with embedded slide transitions, keyboard controls, and theme styling. Runs offline in any browser.',
+      'A self-contained single HTML file with embedded slide transitions, keyboard controls, and theme styling. Uploaded videos are inlined and play offline; a YouTube or Vimeo embed needs a connection.',
   },
   {
     kind: 'png',
@@ -184,10 +184,10 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
     try {
       if (kind === 'html') {
         const mod = await import('./exportHelper');
-        const ids = visible.map((s) => s.instanceId);
         const onProgress = (current: number, total: number) => setProgress({ current, total });
-        await mod.exportToHTML(ids, projectName, onProgress);
+        const notes = await mod.exportToHTML(visible, projectName, onProgress);
         showToast(`Exported ${filename}`, 'success');
+        if (notes.length) showToast(notes.join(' '), 'info');
       } else {
         const mod = await import('./exportHelper');
         const ids = visible.map((s) => s.instanceId);
@@ -203,6 +203,9 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
           // and a substitution nobody mentioned is how you find out about it in
           // front of a client. Google Slides resolves these by name regardless,
           // which is why this is a note rather than a failure.
+          // Same reasoning for video: a clip that degraded to a still has to be
+          // said out loud, not discovered mid-presentation.
+          if (report?.mediaNotes.length) showToast(report.mediaNotes.join(' '), 'info');
           if (report?.named.length) {
             showToast(
               `Exported. ${report.named.join(', ')} could not be embedded, so desktop PowerPoint will substitute ${report.named.length === 1 ? 'it' : 'them'}. Google Slides will still show ${report.named.length === 1 ? 'it' : 'them'} correctly.`,

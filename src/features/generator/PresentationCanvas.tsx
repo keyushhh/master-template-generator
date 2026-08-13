@@ -3,7 +3,7 @@ import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, ImportedShape, OverlayShape, SlideContent, SlideInstance, SlotOffset, SlotStyle } from '../deck/types';
 import { applyToCss, offsetFor, shiftOffsets, styleFor } from '../formatting/resolve';
 import { clampToSlide, FINE, guidesFromSiblings, SLIDE_W, snapMove, snapResize, snapValue, type ExtraGuides, type Handle, type Rect } from '../formatting/snap';
-import { shapeIdsOf, slotsOf, type Selection } from '../formatting/selection';
+import { shapeIdsOf, slotsOf, textMetrics, type Selection, type TextMetrics } from '../formatting/selection';
 import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
 import { ShapeOverlay } from '../formatting/ShapeOverlay';
 import { createOverlayShape, overlayOf, withOverlay } from '../formatting/overlayModel';
@@ -62,6 +62,8 @@ interface PresentationCanvasProps {
   /** The slide on the stage. The canvas shows exactly one at a time. */
   currentId?: string | null;
   onNavigate?: (instanceId: string) => void;
+  /** Double-clicking a video shape asks for the source picker. */
+  onPickVideo?: (shapeId: string) => void;
 }
 
 /** Props every slide renderer receives: parsed document (for the logo), the
@@ -138,12 +140,7 @@ interface SlotContextValue {
   dragDelta?: SlotOffset | null;
   /** Reports that a slot became the formatting target. `additive` (shift-click)
    *  adds it to the current group instead of replacing it. */
-  onSelectSlot?: (
-    slot: string,
-    effectiveSizePx?: number,
-    effectiveFont?: string,
-    additive?: boolean
-  ) => void;
+  onSelectSlot?: (slot: string, metrics: TextMetrics, additive?: boolean) => void;
   /** Starts dragging the whole selection. Owned by the provider, not by the
    *  slot that was grabbed, because every member has to move together. */
   onBeginDrag?: (e: React.PointerEvent) => void;
@@ -297,11 +294,7 @@ function SlideSlots({
         onBeginDrag,
         revision,
         onSelectSlot: onSelect
-          ? (slot, effectiveSizePx, effectiveFont, additive) =>
-              onSelect(
-                { kind: 'slot', instanceId, slot, effectiveSizePx, effectiveFont },
-                additive
-              )
+          ? (slot, metrics, additive) => onSelect({ kind: 'slot', instanceId, slot, ...metrics }, additive)
           : undefined,
       }}
     >
@@ -408,17 +401,10 @@ function E({ value, editing, onCommit, multiline, dataField, onActivate, slot }:
   const selected = !!slot && !!selectedSlots?.includes(slot);
   const grouped = (selectedSlots?.length ?? 0) > 1;
 
-  /** Tell the toolbar what it is pointing at, including the size this slot is
-   *  actually rendering at. Read from the DOM rather than from the override,
-   *  because with no override the effective size is whatever the template
-   *  computed - and the stepper has to start from the visible value. The CSS
-   *  transform that scales the slide does not affect computed styles, so this
-   *  is already in design px. */
+  /** Tell the toolbar what it points at, with the metrics this slot is actually rendering at. */
   const select = (el: HTMLElement, additive = false) => {
     if (!slot || !onSelectSlot) return;
-    const cs = window.getComputedStyle(el);
-    const px = parseFloat(cs.fontSize);
-    onSelectSlot(slot, Number.isFinite(px) ? Math.round(px) : undefined, cs.fontFamily, additive);
+    onSelectSlot(slot, textMetrics(el), additive);
   };
 
   return (
@@ -3181,17 +3167,7 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
    *  the run span reports its own selection instead. */
   const selectRun = (shapeId: string, p: number, r: number, el: HTMLElement, additive = false) => {
     if (!onSelect || !instanceId) return;
-    const cs = window.getComputedStyle(el);
-    const px = parseFloat(cs.fontSize);
-    onSelect({
-      kind: 'run',
-      instanceId,
-      shapeId,
-      paragraph: p,
-      run: r,
-      effectiveSizePx: Number.isFinite(px) ? Math.round(px) : undefined,
-      effectiveFont: cs.fontFamily,
-    }, additive);
+    onSelect({ kind: 'run', instanceId, shapeId, paragraph: p, run: r, ...textMetrics(el) }, additive);
   };
 
   const patchRun = (shapeId: string, p: number, r: number, text: string) =>
@@ -3578,7 +3554,7 @@ export function SlideStage({
 export function PresentationCanvas({
   ast, deck, editing, onEditSlide, onLogoChange, onLogoScaleChange, onRequestEdit,
   selection, onSelect, onDeselect, onActiveSlideChange, onRenameSlide, revision,
-  currentId, onNavigate, theme = WOZKU_THEME,
+  currentId, onNavigate, onPickVideo, theme = WOZKU_THEME,
 }: PresentationCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(0.5);
@@ -3834,6 +3810,7 @@ export function PresentationCanvas({
                     )
                   )
                 }
+                onPickVideo={onPickVideo}
               />
 
               {!slide.content.hideFooter && (

@@ -45,6 +45,59 @@ export function clampSize(px: number): number {
   return Math.min(SIZE_MAX, Math.max(SIZE_MIN, Math.round(px)));
 }
 
+/** Leading steps as multiples of the font size - the values the 14 templates already use. */
+export const LINE_HEIGHTS = [0.8, 0.9, 0.95, 1, 1.05, 1.15, 1.25, 1.4, 1.5, 1.6, 1.8, 2] as const;
+export const LINE_HEIGHT_MIN = 0.6;
+export const LINE_HEIGHT_MAX = 3;
+
+/** Tracking steps in em - negative closes up display sizes, 0.12-0.2 is where the mono labels sit. */
+export const LETTER_SPACINGS = [-0.04, -0.02, -0.01, 0, 0.02, 0.04, 0.08, 0.12, 0.16, 0.2, 0.3] as const;
+export const LETTER_SPACING_MIN = -0.1;
+export const LETTER_SPACING_MAX = 0.6;
+
+/** Paragraph space before/after, in design px. */
+export const PARA_SPACES = [0, 4, 8, 12, 16, 24, 32, 48] as const;
+export const PARA_SPACE_MAX = 200;
+
+/** One indent step in design px; four steps stay inside the narrowest template column. */
+export const INDENT_STEP_PX = 40;
+export const INDENT_MAX_LEVEL = 4;
+
+/** Steps to the neighbouring value on an ascending scale, since a template's own value may sit between two steps. */
+export function stepScale(
+  scale: readonly number[],
+  current: number,
+  direction: 1 | -1,
+  min: number,
+  max: number
+): number {
+  const EPS = 1e-6;
+  const next = direction === 1
+    ? scale.find((v) => v > current + EPS)
+    : [...scale].reverse().find((v) => v < current - EPS);
+  if (next !== undefined) return next;
+  return direction === 1 ? max : min;
+}
+
+export const clampLineHeight = (v: number) =>
+  Math.min(LINE_HEIGHT_MAX, Math.max(LINE_HEIGHT_MIN, Math.round(v * 100) / 100));
+
+export const clampLetterSpacing = (v: number) =>
+  Math.min(LETTER_SPACING_MAX, Math.max(LETTER_SPACING_MIN, Math.round(v * 1000) / 1000));
+
+export const clampParaSpace = (v: number) =>
+  Math.min(PARA_SPACE_MAX, Math.max(0, Math.round(v)));
+
+export const clampIndent = (v: number) =>
+  Math.min(INDENT_MAX_LEVEL, Math.max(0, Math.round(v)));
+
+export const TEXT_CASES = [
+  { key: 'upper', label: 'UPPERCASE' },
+  { key: 'lower', label: 'lowercase' },
+  { key: 'title', label: 'Title Case' },
+] as const;
+export type TextCase = (typeof TEXT_CASES)[number]['key'];
+
 export interface Swatch {
   /** Hex, no '#'. */
   hex: string;

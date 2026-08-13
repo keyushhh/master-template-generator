@@ -16,7 +16,7 @@
 
 import { useState } from 'react';
 import type { OverlayShape } from '../deck/types';
-import { DocumentTextIcon, EllipseIcon, ImageIcon, ListIcon, PieChartIcon, RectIcon, TextIcon } from '../ui/icons';
+import { DocumentTextIcon, EllipseIcon, ImageIcon, ListIcon, PieChartIcon, RectIcon, TextIcon, VideoIcon } from '../ui/icons';
 
 interface StageRailProps {
   onInsert: (kind: OverlayShape['kind']) => void;
@@ -31,6 +31,7 @@ const TOOLS: { kind: OverlayShape['kind']; label: string; icon: React.ReactNode 
   { kind: 'rect', label: 'Rectangle', icon: <RectIcon size={19} /> },
   { kind: 'ellipse', label: 'Ellipse', icon: <EllipseIcon size={19} /> },
   { kind: 'image', label: 'Image', icon: <ImageIcon size={19} /> },
+  { kind: 'video', label: 'Video', icon: <VideoIcon size={19} /> },
   { kind: 'table', label: 'Table', icon: <ListIcon size={19} /> },
   { kind: 'chart', label: 'Chart', icon: <PieChartIcon size={19} /> },
 ];

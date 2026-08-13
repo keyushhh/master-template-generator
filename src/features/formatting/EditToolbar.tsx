@@ -26,21 +26,37 @@ import { createPortal } from 'react-dom';
 import type { ImportedShape, OverlayChartType, OverlayShape, SlotStyle } from '../deck/types';
 import {
   ACCENT_SWATCHES,
-  fontStack,
+  INDENT_STEP_PX,
+  LETTER_SPACINGS,
+  LETTER_SPACING_MAX,
+  LETTER_SPACING_MIN,
+  LINE_HEIGHTS,
+  LINE_HEIGHT_MAX,
+  LINE_HEIGHT_MIN,
   NEUTRAL_SWATCHES,
+  PARA_SPACES,
+  PARA_SPACE_MAX,
   SIZE_MAX,
   SIZE_MIN,
+  TEXT_CASES,
+  clampIndent,
+  clampLetterSpacing,
+  clampLineHeight,
+  clampParaSpace,
   clampSize,
+  fontStack,
   isBrandColor,
   normalizeHex,
+  stepScale,
   stepSize,
 } from './rails';
 import { layerBounds, type LayerMove } from './overlayModel';
 import { GROUP_ALIGNMENTS, type GroupAlign } from './group';
-import { TrashIcon } from '../ui/icons';
+import { TrashIcon, VideoIcon } from '../ui/icons';
 import { FontPicker } from '../fonts/FontPicker';
 import { EyedropIcon, RefreshIcon } from '../ui/icons';
 import { ConfirmModal, cannotBeUndone } from '../ui/ConfirmModal';
+import { parseVideoSource, sourceLabel } from './videoSource';
 
 const BAR_H = 44;
 
@@ -275,6 +291,189 @@ function SizeStepper({
   );
 }
 
+/** A −/value/+ row inside a menu, with a reset when the value is overridden. */
+function StepRow({
+  label, hint, shown, format, onStep, onType, onClear, overridden,
+}: {
+  label: string;
+  hint?: string;
+  shown?: number;
+  format: (v: number) => string;
+  onStep: (dir: 1 | -1) => void;
+  onType: (raw: string) => void;
+  onClear: () => void;
+  overridden: boolean;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => { setDraft(null); }, [shown]);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 4px' }}>
+      <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--neutral-700)' }}>
+        {label}
+        {hint && <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', marginLeft: 6 }}>{hint}</span>}
+      </span>
+      <button title={`Less ${label.toLowerCase()}`} onClick={() => onStep(-1)} style={{ ...ctl, padding: '0 6px' }}>−</button>
+      <input
+        aria-label={label}
+        value={draft ?? (shown !== undefined ? format(shown) : '')}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => { setDraft(null); onType(e.target.value); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'ArrowUp') { e.preventDefault(); onStep(1); }
+          if (e.key === 'ArrowDown') { e.preventDefault(); onStep(-1); }
+        }}
+        style={{
+          width: 46, height: 26, textAlign: 'center',
+          fontFamily: 'var(--font-mono)', fontSize: 11.5, fontWeight: 600,
+          color: overridden ? 'var(--emerald-700)' : 'var(--neutral-900)',
+          background: '#fff',
+          border: `1px solid ${overridden ? 'var(--emerald-500)' : 'var(--neutral-200)'}`,
+          borderRadius: 'var(--radius-sharp)',
+        }}
+      />
+      <button title={`More ${label.toLowerCase()}`} onClick={() => onStep(1)} style={{ ...ctl, padding: '0 6px' }}>+</button>
+      <button
+        title={`Reset ${label.toLowerCase()} to the template`}
+        aria-label={`Reset ${label}`}
+        onClick={onClear}
+        disabled={!overridden}
+        style={{ ...ctl, padding: '0 4px', color: overridden ? 'var(--neutral-500)' : 'var(--neutral-300)' }}
+      >
+        <RefreshIcon size={11} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Leading, tracking, paragraph space, indent and bullets.
+ *
+ * One menu rather than five bar buttons: they're all "how the text sits" and none
+ * is reached often enough to earn permanent width in a single-row bar.
+ */
+function SpacingMenu({
+  style, effectiveLineHeight, effectiveTrackingEm, onPatch,
+}: {
+  style?: SlotStyle;
+  effectiveLineHeight?: number;
+  effectiveTrackingEm?: number;
+  onPatch: (patch: Partial<SlotStyle>) => void;
+}) {
+  const lh = style?.lineHeight ?? effectiveLineHeight;
+  const tr = style?.letterSpacing ?? effectiveTrackingEm;
+  const indent = style?.indentLevel ?? 0;
+  const touched =
+    style?.lineHeight !== undefined || style?.letterSpacing !== undefined ||
+    style?.spaceBefore !== undefined || style?.spaceAfter !== undefined ||
+    style?.indentLevel !== undefined || style?.bullet !== undefined;
+
+  return (
+    <Menu title="Line height, tracking, paragraph space and bullets" label="Spacing" width={266} badge={touched}>
+      {() => (
+        <>
+          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 4px' }}>Line</div>
+          <StepRow
+            label="Line height"
+            shown={lh}
+            format={(v) => v.toFixed(2).replace(/0$/, '')}
+            overridden={style?.lineHeight !== undefined}
+            onStep={(dir) => onPatch({ lineHeight: clampLineHeight(stepScale(LINE_HEIGHTS, lh ?? 1.2, dir, LINE_HEIGHT_MIN, LINE_HEIGHT_MAX)) })}
+            onType={(raw) => { const n = parseFloat(raw); if (Number.isFinite(n)) onPatch({ lineHeight: clampLineHeight(n) }); }}
+            onClear={() => onPatch({ lineHeight: undefined })}
+          />
+          <StepRow
+            label="Letter spacing"
+            hint="em"
+            shown={tr}
+            format={(v) => (v === 0 ? '0' : v.toFixed(3).replace(/0+$/, ''))}
+            overridden={style?.letterSpacing !== undefined}
+            onStep={(dir) => onPatch({ letterSpacing: clampLetterSpacing(stepScale(LETTER_SPACINGS, tr ?? 0, dir, LETTER_SPACING_MIN, LETTER_SPACING_MAX)) })}
+            onType={(raw) => { const n = parseFloat(raw); if (Number.isFinite(n)) onPatch({ letterSpacing: clampLetterSpacing(n) }); }}
+            onClear={() => onPatch({ letterSpacing: undefined })}
+          />
+
+          <div style={{ height: 1, background: 'var(--neutral-200)', margin: '8px 4px' }} />
+          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 4px' }}>Paragraph</div>
+          <StepRow
+            label="Space before"
+            hint="px"
+            shown={style?.spaceBefore ?? 0}
+            format={(v) => String(v)}
+            overridden={style?.spaceBefore !== undefined}
+            onStep={(dir) => onPatch({ spaceBefore: clampParaSpace(stepScale(PARA_SPACES, style?.spaceBefore ?? 0, dir, 0, PARA_SPACE_MAX)) })}
+            onType={(raw) => { const n = parseFloat(raw); if (Number.isFinite(n)) onPatch({ spaceBefore: clampParaSpace(n) }); }}
+            onClear={() => onPatch({ spaceBefore: undefined })}
+          />
+          <StepRow
+            label="Space after"
+            hint="px"
+            shown={style?.spaceAfter ?? 0}
+            format={(v) => String(v)}
+            overridden={style?.spaceAfter !== undefined}
+            onStep={(dir) => onPatch({ spaceAfter: clampParaSpace(stepScale(PARA_SPACES, style?.spaceAfter ?? 0, dir, 0, PARA_SPACE_MAX)) })}
+            onType={(raw) => { const n = parseFloat(raw); if (Number.isFinite(n)) onPatch({ spaceAfter: clampParaSpace(n) }); }}
+            onClear={() => onPatch({ spaceAfter: undefined })}
+          />
+
+          <div style={{ height: 1, background: 'var(--neutral-200)', margin: '8px 4px' }} />
+          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 4px' }}>List</div>
+          <StepRow
+            label="Indent"
+            hint={`${INDENT_STEP_PX}px steps`}
+            shown={indent}
+            format={(v) => String(v)}
+            overridden={style?.indentLevel !== undefined}
+            onStep={(dir) => {
+              const next = clampIndent(indent + dir);
+              onPatch({ indentLevel: next === 0 ? undefined : next });
+            }}
+            onType={(raw) => { const n = parseFloat(raw); if (Number.isFinite(n)) { const v = clampIndent(n); onPatch({ indentLevel: v === 0 ? undefined : v }); } }}
+            onClear={() => onPatch({ indentLevel: undefined })}
+          />
+          <Row
+            label="Bulleted"
+            hint={style?.bullet ? 'on' : undefined}
+            active={!!style?.bullet}
+            onClick={() => onPatch({ bullet: style?.bullet ? undefined : true })}
+          />
+        </>
+      )}
+    </Menu>
+  );
+}
+
+/** Case shown, without changing what was typed. */
+function CaseMenu({
+  style, onPatch,
+}: { style?: SlotStyle; onPatch: (patch: Partial<SlotStyle>) => void }) {
+  return (
+    <Menu
+      title="Letter case"
+      label=""
+      width={186}
+      active={!!style?.textCase}
+      icon={<span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '-0.02em' }}>Aa</span>}
+    >
+      {(close) => (
+        <>
+          {TEXT_CASES.map((c) => (
+            <Row
+              key={c.key}
+              label={c.label}
+              active={style?.textCase === c.key}
+              onClick={() => { onPatch({ textCase: style?.textCase === c.key ? undefined : c.key }); close(); }}
+            />
+          ))}
+          <div style={{ height: 1, background: 'var(--neutral-200)', margin: '6px 4px' }} />
+          <Row label="As typed" active={!style?.textCase} onClick={() => { onPatch({ textCase: undefined }); close(); }} />
+        </>
+      )}
+    </Menu>
+  );
+}
+
 function ColorMenu({
   value, onDark, onPick, title = 'Text colour', noneLabel = 'Template colour',
   paletteLabel = 'Brand palette', noneSwatch, emptySwatch,
@@ -489,6 +688,8 @@ interface EditToolbarProps {
   /** Text formatting target, when the selection carries text. */
   textStyle?: SlotStyle;
   effectiveSizePx?: number;
+  effectiveLineHeight?: number;
+  effectiveTrackingEm?: number;
   fontName?: string;
   fieldLabel?: string;
   hasTextSelection: boolean;
@@ -520,6 +721,10 @@ interface EditToolbarProps {
   onSetChartType: (t: OverlayChartType) => void;
   onOpenChartData: () => void;
 
+  /** Video-specific controls, when the selected shape is kind==='video'. */
+  onPickVideo?: (id: string) => void;
+  onPatchShape?: (patch: Partial<OverlayShape>) => void;
+
   /** The imported shape a 'run' selection points at, when it has one - the
    *  shape itself, not the particular run, since fill/stroke/delete are
    *  shape-level. */
@@ -541,6 +746,8 @@ interface EditToolbarProps {
 export function EditToolbar({
   textStyle,
   effectiveSizePx,
+  effectiveLineHeight,
+  effectiveTrackingEm,
   fontName,
   fieldLabel,
   hasTextSelection,
@@ -562,6 +769,8 @@ export function EditToolbar({
   onTableDeleteCol,
   onSetChartType,
   onOpenChartData,
+  onPickVideo,
+  onPatchShape,
   importedShape,
   isImportedSelection,
   importedShapeGroupCount,
@@ -699,6 +908,15 @@ export function EditToolbar({
 
           <ColorMenu value={textStyle?.color} onDark={onDark} onPick={(hex) => onPatch({ color: hex })} />
 
+          <CaseMenu style={textStyle} onPatch={onPatch} />
+
+          <SpacingMenu
+            style={textStyle}
+            effectiveLineHeight={effectiveLineHeight}
+            effectiveTrackingEm={effectiveTrackingEm}
+            onPatch={onPatch}
+          />
+
           {/* One "align" at a time. On a single field the icons set text
               alignment inside that field; on a group the meaningful operation is
               moving the block onto the slide's own margins, and offering both
@@ -815,6 +1033,38 @@ export function EditToolbar({
                   </>
                 )}
               </Menu>
+              <Sep />
+            </>
+          )}
+
+          {selectedShape.kind === 'video' && (
+            <>
+              <button
+                title="Choose the video: a link, or a file from disk"
+                onClick={() => onPickVideo?.(selectedShape.id)}
+                style={{ ...ctl, padding: '0 8px' }}
+              >
+                <VideoIcon size={14} />
+                {selectedShape.videoUrl || selectedShape.videoAssetId ? 'Replace' : 'Add video'}
+              </button>
+              <span style={{ ...mono, fontSize: 9.5, color: 'var(--neutral-400)', maxWidth: 132, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedShape.videoName ?? sourceLabel(parseVideoSource(selectedShape.videoUrl))}
+              </span>
+              {([
+                ['autoplay', 'Autoplay', 'Play as soon as the slide appears'],
+                ['loop', 'Loop', 'Restart when it ends'],
+                ['muted', 'Mute', 'Play without sound'],
+              ] as const).map(([key, label, title]) => (
+                <button
+                  key={key}
+                  title={title}
+                  aria-pressed={!!selectedShape[key]}
+                  onClick={() => onPatchShape?.({ [key]: selectedShape[key] ? undefined : true })}
+                  style={{ ...ctl, padding: '0 8px', ...(selectedShape[key] ? ctlOn : {}) }}
+                >
+                  {label}
+                </button>
+              ))}
               <Sep />
             </>
           )}

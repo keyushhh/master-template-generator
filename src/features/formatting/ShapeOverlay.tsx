@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { OverlayShape } from '../deck/types';
 import { ChartVisual } from './chartRender';
 import { applyToCss } from './resolve';
+import { VideoShapeVisual } from './VideoShapeVisual';
 import { MIN_SIZE, clampToSlide, guidesFromSiblings, snapMove, snapResize, type ExtraGuides, type Handle, type Rect } from './snap';
 
 /** z-index bands. The slide's grid sits at 0 and its template content at 10,
@@ -40,6 +41,8 @@ interface ShapeOverlayProps {
   selectedCell?: { row: number; col: number };
   /** Geometry/content patch for one shape. */
   onPatch: (id: string, patch: Partial<OverlayShape>) => void;
+  /** Asks the owner to open the video source picker for this shape. */
+  onPickVideo?: (id: string) => void;
 }
 
 /** Reads the live scale of the slide this overlay sits in.
@@ -80,7 +83,9 @@ function slideScale(el: HTMLElement | null): number {
   return rect.width ? rect.width / 1920 : 1;
 }
 
-export function ShapeOverlay({ shapes, editing, selectedId, onSelect, selectedCell, onPatch }: ShapeOverlayProps) {
+export function ShapeOverlay({
+  shapes, editing, selectedId, onSelect, selectedCell, onPatch, onPickVideo,
+}: ShapeOverlayProps) {
   /** Which text box is in text-entry mode. Kept separate from selection so a
    *  selected text box can still be dragged - only an actively-edited one
    *  surrenders pointer drags to the caret. */
@@ -257,6 +262,7 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, selectedCe
               if (!editing) return;
               e.stopPropagation();
               if (shape.kind === 'text') { setTextEditId(shape.id); return; }
+              if (shape.kind === 'video') { onPickVideo?.(shape.id); return; }
               if (shape.kind === 'image') {
                 pickingFor.current = shape.id;
                 fileRef.current?.click();
@@ -286,6 +292,10 @@ export function ShapeOverlay({ shapes, editing, selectedId, onSelect, selectedCe
               >
                 Double-click to add image
               </div>
+            )}
+
+            {shape.kind === 'video' && (
+              <VideoShapeVisual shape={shape} editing={editing} />
             )}
 
             {shape.kind === 'table' && shape.rows && (

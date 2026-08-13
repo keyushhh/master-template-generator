@@ -4,7 +4,7 @@
  * between: the back panel (+ any papers), the front flap, and the badge that sits
  * on top of the flap.
  *
- * Only the resting exports are split — the hover state is reached by squashing the
+ * Only the resting exports are split; the hover state is reached by squashing the
  * flap layer vertically from the bottom edge, which is exactly what Figma's resize
  * interpolation does between the two frames.
  *
@@ -83,7 +83,7 @@ for (const name of ['folder-empty', 'folder-filled']) {
 
   const layers = {
     // The back panel, then the papers as their own layer so they can lift a hair
-    // while the flap drops — the folder-filled hover frame moves them 2.7 units up
+    // while the flap drops: the folder-filled hover frame moves them 2.7 units up
     // relative to the folder.
     back: chunks.slice(0, 1),
     papers: chunks.slice(1, flapStart),

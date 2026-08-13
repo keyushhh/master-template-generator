@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     // Pinned (not just default) because the PDF backend's headless Chrome
-    // navigates to this exact port — a silent fallback to another port would
+    // navigates to this exact port; a silent fallback to another port would
     // desync the two and break PDF export.
     port: 5173,
     strictPort: true,

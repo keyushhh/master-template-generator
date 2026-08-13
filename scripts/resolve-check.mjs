@@ -51,6 +51,13 @@ const SAMPLE = {
   color: 'FF0000',
   align: 'center',
   fontFamily: 'Roboto',
+  lineHeight: 1.5,
+  letterSpacing: 0.12,
+  spaceBefore: 12,
+  spaceAfter: 24,
+  textCase: 'upper',
+  indentLevel: 2,
+  bullet: true,
 };
 
 const unsampled = fields.filter((f) => SAMPLE[f] === undefined);

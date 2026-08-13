@@ -16,7 +16,39 @@
  *    so the toolbar edits the run directly instead of layering an override.
  */
 
-export interface SlotSelection {
+/** What the selected text is actually rendering at, read from the live DOM - a template may compute these at runtime. */
+export interface TextMetrics {
+  effectiveSizePx?: number;
+  effectiveFont?: string;
+  /** Leading as a multiple of the font size. */
+  effectiveLineHeight?: number;
+  /** Tracking in em. */
+  effectiveTrackingEm?: number;
+}
+
+export function textMetrics(el: HTMLElement): TextMetrics {
+  const cs = window.getComputedStyle(el);
+  const px = parseFloat(cs.fontSize);
+  const size = Number.isFinite(px) && px > 0 ? px : undefined;
+  const lh = parseFloat(cs.lineHeight);
+  const tr = parseFloat(cs.letterSpacing);
+  return {
+    effectiveSizePx: size ? Math.round(size) : undefined,
+    effectiveFont: cs.fontFamily,
+    effectiveLineHeight: size && Number.isFinite(lh) ? Math.round((lh / size) * 100) / 100 : undefined,
+    effectiveTrackingEm: size && Number.isFinite(tr) ? Math.round((tr / size) * 1000) / 1000 : undefined,
+  };
+}
+
+/** Fields to drop when the anchor changes, so a stepper re-reads from the DOM instead of showing a stale number. */
+const NO_METRICS: TextMetrics = {
+  effectiveSizePx: undefined,
+  effectiveFont: undefined,
+  effectiveLineHeight: undefined,
+  effectiveTrackingEm: undefined,
+};
+
+export interface SlotSelection extends TextMetrics {
   kind: 'slot';
   instanceId: string;
   /** Stable slot name, e.g. 'heading' or 'bars.0.label'. The anchor of the
@@ -31,19 +63,9 @@ export interface SlotSelection {
    *  every existing consumer keeps working unchanged: a group is a slot
    *  selection that happens to include more than one slot. */
   extra?: string[];
-  /** The size this slot is currently rendering at, in design px, read from
-   *  the live DOM when it was selected. Needed because a template may compute
-   *  its size at runtime (the cover fits its hero font to the title length),
-   *  so there is no static number the toolbar could look up - and the size
-   *  stepper has to start from what the user can actually see. */
-  effectiveSizePx?: number;
-  /** The font this text is actually rendering in, read from the live DOM at
-   *  selection time. Shown in the toolbar in place of the internal slot name:
-   *  "JetBrains Mono" tells you what you're looking at, "hudLabel" doesn't. */
-  effectiveFont?: string;
 }
 
-export interface RunSelection {
+export interface RunSelection extends TextMetrics {
   kind: 'run';
   instanceId: string;
   shapeId: string;
@@ -56,16 +78,11 @@ export interface RunSelection {
    *  only reads `shapeId` keeps working, a group is just a run selection that
    *  happens to include more shapes. */
   extra?: string[];
-  effectiveSizePx?: number;
-  /** The font this text is actually rendering in, read from the live DOM at
-   *  selection time. Shown in the toolbar in place of the internal slot name:
-   *  "JetBrains Mono" tells you what you're looking at, "hudLabel" doesn't. */
-  effectiveFont?: string;
 }
 
 /** A user-inserted overlay shape. Its text formatting is stored as a SlotStyle
  *  on the shape itself, so the same toolbar drives it. */
-export interface OverlaySelection {
+export interface OverlaySelection extends TextMetrics {
   kind: 'overlay';
   instanceId: string;
   shapeId: string;
@@ -74,11 +91,6 @@ export interface OverlaySelection {
    *  its body need to look different from each other. Absent for every other
    *  overlay kind, and for a table selected as a whole (no cell picked). */
   cell?: { row: number; col: number };
-  effectiveSizePx?: number;
-  /** The font this text is actually rendering in, read from the live DOM at
-   *  selection time. Shown in the toolbar in place of the internal slot name:
-   *  "JetBrains Mono" tells you what you're looking at, "hudLabel" doesn't. */
-  effectiveFont?: string;
 }
 
 export type Selection = SlotSelection | RunSelection | OverlaySelection;
@@ -120,10 +132,7 @@ export function toggleSlot(
     ...prev,
     slot: anchor,
     extra: extra.length ? extra : undefined,
-    // The anchor changed, so the size and font it reported no longer describe
-    // the slot the toolbar is now reading. Dropping them makes the stepper
-    // re-read from the DOM instead of showing a stale number.
-    ...(anchor === prev.slot ? {} : { effectiveSizePx: undefined, effectiveFont: undefined }),
+    ...(anchor === prev.slot ? {} : NO_METRICS),
   };
 }
 
@@ -153,9 +162,8 @@ export function toggleShape(prev: Selection | null, next: RunSelection): RunSele
     ...prev,
     shapeId: anchor,
     extra: extra.length ? extra : undefined,
-    // A different anchor has its own paragraph/run/text metrics - the old
-    // ones would point at text that may not even exist on the new anchor.
-    ...(anchor === prev.shapeId ? {} : { paragraph: 0, run: 0, effectiveSizePx: undefined, effectiveFont: undefined }),
+    // A different anchor's paragraph/run may not even exist on the new one.
+    ...(anchor === prev.shapeId ? {} : { paragraph: 0, run: 0, ...NO_METRICS }),
   };
 }
 

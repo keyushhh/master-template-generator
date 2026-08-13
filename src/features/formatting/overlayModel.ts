@@ -35,6 +35,8 @@ const DEFAULTS: Record<OverlayShape['kind'], Rect> = {
   image: { x: 240, y: 360, w: 600, h: 360 },
   table: { x: 240, y: 360, w: 900, h: 300 },
   chart: { x: 240, y: 300, w: 800, h: 480 },
+  // 16:9, the aspect every source we accept actually is.
+  video: { x: 240, y: 300, w: 960, h: 540 },
 };
 
 const TABLE_ROWS = 3;
@@ -82,6 +84,9 @@ export function createOverlayShape(
       heightPx: rowH,
       cells: Array.from({ length: TABLE_COLS }, () => ({})),
     }));
+  } else if (kind === 'video') {
+    // Muted by default: a slide that starts talking the moment it appears is never what was wanted.
+    shape.muted = true;
   } else if (kind === 'chart') {
     // Sample data so the chart is legible the instant it lands, rather than an
     // empty axis the user has to populate before it means anything.
@@ -140,6 +145,7 @@ export function shapeLabel(s: OverlayShape): string {
     return t ? (t.length > 24 ? `${t.slice(0, 24)}…` : t) : 'Text box';
   }
   if (s.kind === 'image') return 'Image';
+  if (s.kind === 'video') return s.videoName ?? 'Video';
   if (s.kind === 'table') return 'Table';
   if (s.kind === 'chart') return 'Chart';
   return s.kind === 'ellipse' ? 'Ellipse' : 'Rectangle';

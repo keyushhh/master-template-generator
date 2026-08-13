@@ -34,7 +34,7 @@ const COLOR_FILTERS: Record<FolderColor, string> = {
 const TRANSITION = 'transform 300ms linear';
 
 /** The flap in the hover frame is the resting flap squashed to 82/110.01 of its
- *  height with its bottom edge pinned — measured off the two Figma exports. */
+ *  height with its bottom edge pinned, measured off the two Figma exports. */
 const FLAP_OPEN_SCALE = 0.7454;
 
 /** The papers ride 2.68 units (of the 161-unit canvas) higher once it opens. */
@@ -42,7 +42,7 @@ const PAPERS_LIFT = '-1.66%';
 
 /**
  * High-fidelity SVG macOS folder icon. Hovering replays the Figma interaction:
- * the front flap drops open while the papers inside lift, linearly over 300ms —
+ * the front flap drops open while the papers inside lift, linearly over 300ms,
  * the same layer-for-layer interpolation smart animate does, rather than a
  * cross-fade between two flattened states.
  */
@@ -72,7 +72,7 @@ export function MacFolderIcon({
       className={`relative shrink-0 ${sizePx ? '' : dims} select-none flex items-center justify-center isolate ${className}`}
       style={sizePx ? { width: sizePx, height: sizePx } : undefined}
     >
-      {/* Back panel — fixed in both frames. */}
+      {/* Back panel, fixed in both frames. */}
       <img src={back} alt="Folder" className={layer} style={{ filter }} />
 
       {/* Papers, lifting a hair as the flap clears them. */}
@@ -90,7 +90,7 @@ export function MacFolderIcon({
         />
       )}
 
-      {/* Front flap — squashed from its bottom edge, which is what Figma's
+      {/* Front flap, squashed from its bottom edge, which is what Figma's
           resize interpolation between the two frames amounts to. */}
       <img
         src={flap}
@@ -105,7 +105,7 @@ export function MacFolderIcon({
         }}
       />
 
-      {/* Multiply-blended badge sitting on the flap — fixed in both frames. */}
+      {/* Multiply-blended badge sitting on the flap, fixed in both frames. */}
       <img
         src={badge}
         alt=""

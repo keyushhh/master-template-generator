@@ -94,6 +94,20 @@ export interface SlotStyle {
    *  the exporter passes to PowerPoint as `fontFace`, so the canvas and the
    *  .pptx cannot disagree about which font a slot is in. */
   fontFamily?: string;
+
+  /** Leading, as a multiple of the font size - what CSS line-height and pptx lineSpacingMultiple both take. */
+  lineHeight?: number;
+  /** Tracking in em, so it stays correct when the slot is resized. */
+  letterSpacing?: number;
+  /** Space above / below the paragraph, in design px. */
+  spaceBefore?: number;
+  spaceAfter?: number;
+  /** Case shown, without changing what was typed. Absent means as-typed. */
+  textCase?: 'upper' | 'lower' | 'title';
+  /** Indent depth, 0-4 steps of INDENT_STEP_PX. */
+  indentLevel?: number;
+  /** Bulleted paragraph - one bullet per paragraph, in both renderers. */
+  bullet?: boolean;
 }
 
 /** One cell of a freshly-inserted (not imported) table: a single string
@@ -134,7 +148,7 @@ export interface OverlayChartSeries {
  */
 export interface OverlayShape {
   id: string;
-  kind: 'rect' | 'ellipse' | 'text' | 'image' | 'table' | 'chart';
+  kind: 'rect' | 'ellipse' | 'text' | 'image' | 'table' | 'chart' | 'video';
   /** Geometry in the 1920x1080 design space, matching every other coordinate
    *  in the deck model. */
   x: number;
@@ -164,6 +178,18 @@ export interface OverlayShape {
   chartType?: OverlayChartType;
   chartCategories?: string[];
   chartSeries?: OverlayChartSeries[];
+  /** kind === 'video' - a YouTube/Vimeo page link or a direct file URL. */
+  videoUrl?: string;
+  /** kind === 'video' - id of an uploaded file in the IndexedDB media store, since the bytes can't live in a deck. */
+  videoAssetId?: string;
+  /** kind === 'video' - the uploaded file's name, so the UI can name a source whose blob it hasn't loaded yet. */
+  videoName?: string;
+  /** kind === 'video' - poster frame (data URL or provider thumbnail), shown before playback and used by the .pptx. */
+  posterUrl?: string;
+  /** kind === 'video' */
+  autoplay?: boolean;
+  loop?: boolean;
+  muted?: boolean;
   /** Ties this shape to one of the 'blank' template's layouts (see
    *  `SlideContent.blankLayout`) - it renders and exports only while the
    *  slide is on that layout. Undefined (the default, and the only value

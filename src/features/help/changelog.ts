@@ -27,20 +27,34 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.4.0',
+    date: '2026-08-13',
+    summary: 'Full control of text spacing, and videos you can put on a slide and actually play.',
+    added: [
+      'Spacing controls in the format bar: line height, letter spacing, space before and after a paragraph, indent, and bullets. Each one starts from the value the slide is really using, steps through the sizes the templates already use, and can be reset to the template on its own.',
+      'Text case as formatting (UPPERCASE, lowercase or Title Case) without changing a word of what you typed, so you can take it off again.',
+      'Video on a slide. Insert a video from the rail, then paste a YouTube or Vimeo link, or upload a file from your machine. It plays in Present mode, travels into the HTML export, and lands in the .pptx as a real PowerPoint video.',
+    ],
+    improved: [
+      'Everything in the spacing and case controls survives the PowerPoint export, so what you set on the canvas is what the client opens.',
+      'Folder icons open the way the design does: the front flap slides down over 300ms rather than one icon cross-fading into another.',
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-08-12',
     summary: 'Save a deck as a template, a working laser pointer, and a folder shelf that scales.',
     added: [
       'Save deck as template. From the command palette, snapshot the current deck’s slides as a starter you can pick from the New deck screen next time, without touching its brand colour.',
-      'The changelog can be filtered by Added, Improved or Fixed — click a tag to see just that kind of change, click Clear to see everything again.',
+      'The changelog can be filtered by Added, Improved or Fixed. Click a tag to see just that kind of change, click Clear to see everything again.',
       'Present mode’s annotation pen and laser pointer actually draw now, and the laser has a colour picker (red, green, blue, yellow, purple).',
-      'Pinch (or Ctrl/Cmd+scroll, or the new zoom buttons) resizes the folder shelf’s icons, up to a ceiling sized so two full rows always fit before the shelf would need to scroll. Past the smallest useful size it switches to a list instead of shrinking into something unreadable, and the list is a real table — name, date created, deck count, and the same actions as icons.',
+      'Pinch (or Ctrl/Cmd+scroll, or the new zoom buttons) resizes the folder shelf’s icons, up to a ceiling sized so two full rows always fit before the shelf would need to scroll. Past the smallest useful size it switches to a list instead of shrinking into something unreadable, and the list is a real table: name, date created, deck count, and the same actions as icons.',
       'The library’s search covers folders as well as decks now, so there is one search box rather than a second one just for the shelf.',
     ],
     improved: [
       'Folders sit inside one shared container instead of each getting its own boxed card, and wrap into more rows as the shelf grows rather than spreading further sideways. The shelf itself is capped at two rows at its largest icon size and scrolls internally past that, rather than pushing the decks below it further down every time a folder is added.',
       'The folder “...” menu has icons now, highlights while open, and closes when you click anywhere else on the shelf.',
-      'Every delete — a deck, a slide, a shape, a table, a saved template, single or bulk — asks first and says plainly that it can’t be undone. Deleting a folder that has decks in it asks whether to keep them (moved to Uncategorised) or delete them too, instead of only ever moving them.',
+      'Every delete (a deck, a slide, a shape, a table, a saved template, single or bulk) asks first and says plainly that it can’t be undone. Deleting a folder that has decks in it asks whether to keep them (moved to Uncategorised) or delete them too, instead of only ever moving them.',
     ],
     fixed: [
       'The annotation pen and laser pointer toggled a state nothing read: clicking them changed nothing on screen. Neither drew anything, and "Clear Ink" rendered its label outside its own button.',

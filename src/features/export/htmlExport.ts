@@ -7,7 +7,7 @@ const PLACEHOLDER =
 
 /**
  * Apply the same fallback defaults that the canvas renderers use, so the HTML
- * export shows the same content as the live editor — even on a brand-new deck
+ * export shows the same content as the live editor, even on a brand-new deck
  * where `content` fields are mostly undefined.
  */
 function resolveDefaults(slide: SlideInstance): SlideContent {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SlideStage } from './PresentationCanvas';
 import { FitStage } from './FitStage';
+import { PresentVideoLayer } from '../formatting/PresentVideoLayer';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, SlideInstance } from '../deck/types';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
@@ -450,6 +451,8 @@ export function PresentMode({
         }}
         aria-hidden
       />
+      {/* Live players sit above the click-catcher, or their controls could never be reached. */}
+      <PresentVideoLayer content={slide.content} scale={scale} />
       <svg
         viewBox="0 0 100 100"
         preserveAspectRatio="none"

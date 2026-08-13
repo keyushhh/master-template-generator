@@ -29,6 +29,7 @@ import { EditToolbar } from '../features/formatting/EditToolbar';
 import { StageRail } from '../features/formatting/StageRail';
 import { NotesPanel } from '../features/formatting/NotesPanel';
 import { ChartDataEditor } from '../features/formatting/ChartDataEditor';
+import { VideoSourceModal } from '../features/formatting/VideoSourceModal';
 import { themeById, type KitFonts } from '../features/theme/deckTheme';
 import { BrandKitModal } from '../features/theme/BrandKitModal';
 import {
@@ -682,6 +683,19 @@ export function MasterTemplatePage() {
     [selection, handleEditSlide]
   );
 
+  /** Patches an overlay shape by id, wherever it is - the video picker is opened
+   *  by double-click, which need not have left the shape selected. */
+  const patchShapeById = useCallback(
+    (shapeId: string, patch: Partial<OverlayShape>) => {
+      const slide = displayDeck.slides.find((s) => overlayOf(s.content).some((o) => o.id === shapeId));
+      if (!slide) return;
+      handleEditSlide(slide.instanceId, (c) =>
+        withOverlay(c, overlayOf(c).map((o) => (o.id === shapeId ? { ...o, ...patch } : o)))
+      );
+    },
+    [displayDeck.slides, handleEditSlide]
+  );
+
   const handleLayerMove = useCallback(
     (move: LayerMove) => {
       if (selection?.kind !== 'overlay') return;
@@ -771,6 +785,11 @@ export function MasterTemplatePage() {
   );
 
   const [chartEditorOpen, setChartEditorOpen] = useState(false);
+  /** Shape id whose video source is being chosen, if the picker is open. */
+  const [videoPickerFor, setVideoPickerFor] = useState<string | null>(null);
+  const videoTargetShape = videoPickerFor
+    ? displayDeck.slides.flatMap((s) => overlayOf(s.content)).find((o) => o.id === videoPickerFor)
+    : undefined;
   /** Speaker-notes panel. Slide-level, so it follows the stage cursor rather
    *  than the selection. */
   const [notesOpen, setNotesOpen] = useState(false);
@@ -1793,6 +1812,7 @@ export function MasterTemplatePage() {
         revision={textRevision}
         currentId={currentSlideId}
         onNavigate={setCurrentSlideId}
+        onPickVideo={setVideoPickerFor}
       />
 
       {/* One editing toolbar. This used to be three stacked bars (insert,
@@ -1816,6 +1836,8 @@ export function MasterTemplatePage() {
           <EditToolbar
             textStyle={selectedStyle}
             effectiveSizePx={selection?.effectiveSizePx}
+            effectiveLineHeight={selection?.effectiveLineHeight}
+            effectiveTrackingEm={selection?.effectiveTrackingEm}
             fontName={fontLabel(selection?.effectiveFont)}
             fieldLabel={selection?.kind === 'slot' ? slotLabel(selection.slot) : 'Text'}
             hasTextSelection={hasTextSelection}
@@ -1852,6 +1874,8 @@ export function MasterTemplatePage() {
             onTableDeleteCol={handleTableDeleteCol}
             onSetChartType={handleSetChartType}
             onOpenChartData={() => setChartEditorOpen(true)}
+            onPickVideo={setVideoPickerFor}
+            onPatchShape={patchSelectedShape}
             importedShape={selectedImportedShape}
             isImportedSelection={selection?.kind === 'run'}
             importedShapeGroupCount={importedShapeIds.length}
@@ -1893,6 +1917,13 @@ export function MasterTemplatePage() {
           onClose={() => setChartEditorOpen(false)}
         />
       )}
+
+      <VideoSourceModal
+        open={editing && !!videoPickerFor}
+        shape={videoTargetShape}
+        onApply={(patch) => { if (videoPickerFor) patchShapeById(videoPickerFor, patch); }}
+        onClose={() => setVideoPickerFor(null)}
+      />
 
       <TemplateSwitchModal
         open={!!switchTargetId}
