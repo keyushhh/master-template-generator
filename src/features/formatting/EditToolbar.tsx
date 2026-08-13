@@ -58,9 +58,8 @@ import {
 } from './rails';
 import { layerBounds, type LayerMove } from './overlayModel';
 import { GROUP_ALIGNMENTS, type GroupAlign } from './group';
-import { TrashIcon, VideoIcon } from '../ui/icons';
 import { FontPicker } from '../fonts/FontPicker';
-import { EyedropIcon, RefreshIcon } from '../ui/icons';
+import { CopyIcon, DuplicateIcon, EyedropIcon, RefreshIcon, TrashIcon, VideoIcon } from '../ui/icons';
 import { ConfirmModal, cannotBeUndone } from '../ui/ConfirmModal';
 import { parseVideoSource, sourceLabel } from './videoSource';
 
@@ -836,7 +835,8 @@ interface EditToolbarProps {
   onDeleteImportedShape: () => void;
   onSetImportedFill: (hex: string | undefined) => void;
   onSetImportedLine: (line: { color: string; widthPx: number } | undefined) => void;
-
+  onCopyShape?: () => void;
+  onDuplicateShape?: () => void;
 }
 
 export function EditToolbar({
@@ -874,6 +874,8 @@ export function EditToolbar({
   onDeleteImportedShape,
   onSetImportedFill,
   onSetImportedLine,
+  onCopyShape,
+  onDuplicateShape,
 }: EditToolbarProps) {
   // A pending shape/text-box deletion awaiting confirmation. Five delete
   // buttons in this bar share one modal - each just stashes its own label and
@@ -1239,6 +1241,30 @@ export function EditToolbar({
               </>
             )}
           </Menu>
+
+          {onCopyShape && (
+            <button
+              title="Copy shape (⌘C)"
+              aria-label="Copy shape"
+              onClick={onCopyShape}
+              style={{ ...ctl, padding: '0 8px', gap: 4 }}
+            >
+              <CopyIcon size={13} />
+              Copy
+            </button>
+          )}
+
+          {onDuplicateShape && (
+            <button
+              title="Duplicate shape (⌘D)"
+              aria-label="Duplicate shape"
+              onClick={onDuplicateShape}
+              style={{ ...ctl, padding: '0 8px', gap: 4 }}
+            >
+              <DuplicateIcon size={13} />
+              Duplicate
+            </button>
+          )}
 
           <button
             title="Delete this shape"

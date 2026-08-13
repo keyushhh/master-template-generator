@@ -9,6 +9,15 @@ import { ExportSheet } from '../features/generator/ExportSheet';
 import { SlideSorter } from '../features/generator/SlideSorter';
 import { PresentMode } from '../features/generator/PresentMode';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
+import { FindReplaceModal } from '../features/search/FindReplaceModal';
+import {
+  duplicateShape,
+  duplicateSlide,
+  getCopiedShape,
+  getCopiedSlide,
+  setCopiedShape,
+  setCopiedSlide,
+} from '../features/formatting/clipStore';
 import { BorrowSlideModal } from '../features/generator/BorrowSlideModal';
 import { NewDeckModal } from '../features/deck/NewDeckModal';
 import { SaveAsTemplateModal } from '../features/deck/SaveAsTemplateModal';
@@ -20,6 +29,7 @@ import { planAutoFitForSlides } from '../features/fit/autoFit';
 import { clippedSlideIds } from '../features/fit/fitStore';
 import { familiesInDeck } from '../features/fonts/deckFonts';
 import { StudioHeader } from '../features/generator/StudioHeader';
+import { ShareModal } from '../features/share/ShareModal';
 import { useToast } from '../features/toast/Toast';
 import type { DocumentNode } from '../features/business-record/parser/ast';
 import type { Deck, OverlayChartSeries, OverlayChartType, OverlayShape, SlideContent, SlideInstance, SlideTemplateId, SlotStyle } from '../features/deck/types';
@@ -258,6 +268,8 @@ export function MasterTemplatePage() {
   const projectName = projects.find((p) => p.id === activeId)?.name ?? 'Untitled deck';
   const [presentOpen, setPresentOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [borrowOpen, setBorrowOpen] = useState(false);
   const [newDeckOpen, setNewDeckOpen] = useState(false);
@@ -723,6 +735,22 @@ export function MasterTemplatePage() {
     );
     setSelection(null);
   }, [selection, handleEditSlide]);
+
+  const handleCopyCurrentShape = useCallback(() => {
+    if (selectedOverlayShape) {
+      setCopiedShape(selectedOverlayShape);
+      showToast('Copied shape to clipboard', 'info');
+    }
+  }, [selectedOverlayShape, showToast]);
+
+  const handleDuplicateCurrentShape = useCallback(() => {
+    if (selectedOverlayShape && targetSlide) {
+      const dup = duplicateShape(selectedOverlayShape);
+      handleEditSlide(targetSlide.instanceId, (c) => withOverlay(c, [...overlayOf(c), dup]));
+      setSelection({ kind: 'overlay', instanceId: targetSlide.instanceId, shapeId: dup.id });
+      showToast('Duplicated shape', 'success');
+    }
+  }, [selectedOverlayShape, targetSlide, handleEditSlide, setSelection, showToast]);
 
   /** Sets a shape's fill, and pairs the emerald tint with its emerald border so
    *  the house treatment lands in one click rather than two. */
@@ -1275,7 +1303,9 @@ export function MasterTemplatePage() {
     borrowOpen ||
     shortcutsOpen ||
     newDeckOpen ||
-    saveTemplateOpen;
+    saveTemplateOpen ||
+    findReplaceOpen ||
+    shareOpen;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1291,6 +1321,347 @@ export function MasterTemplatePage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [paletteOpen, overlayUp]);
+
+  /** Add a blank slide at `index` (default: the end of the deck). */
+  const handleAddBlank = useCallback((index?: number) => {
+    const blank = createBlankSlide();
+    mutateDeck((prev) => {
+      const at = index === undefined ? prev.slides.length : Math.max(0, Math.min(index, prev.slides.length));
+      const slides = [...prev.slides];
+      slides.splice(at, 0, blank);
+      return { ...prev, slides };
+    });
+    setCurrentSlideId(blank.instanceId);
+  }, [mutateDeck]);
+
+  const handleInsertAfter = useCallback((instanceId: string) => {
+    const blank = createBlankSlide();
+    mutateDeck((prev) => {
+      const idx = prev.slides.findIndex((s) => s.instanceId === instanceId);
+      const next = idx === -1
+        ? [...prev.slides, blank]
+        : [...prev.slides.slice(0, idx + 1), blank, ...prev.slides.slice(idx + 1)];
+      return { ...prev, slides: next };
+    });
+    setCurrentSlideId(blank.instanceId);
+  }, [mutateDeck]);
+
+  // ── Find & Replace Handlers ──────────────────────────────────────────────
+  const handleReplaceCurrent = useCallback(
+    (slideId: string, findText: string, replaceText: string, caseSensitive: boolean) => {
+      if (!findText) return;
+      mutateDeck((prev) => {
+        const regex = new RegExp(
+          findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+          caseSensitive ? '' : 'i'
+        );
+        const replaceMatch = (t?: string) => (t ? t.replace(regex, replaceText) : t);
+        const slides = prev.slides.map((s) => {
+          if (s.instanceId !== slideId) return s;
+          const c = { ...s.content };
+          if (c.heading) c.heading = replaceMatch(c.heading);
+          if (c.eyebrow) c.eyebrow = replaceMatch(c.eyebrow);
+          if (c.body) c.body = replaceMatch(c.body);
+          if (c.subtitle) c.subtitle = replaceMatch(c.subtitle);
+          if (c.quote) c.quote = replaceMatch(c.quote);
+          if (c.author) c.author = replaceMatch(c.author);
+          if (c.role) c.role = replaceMatch(c.role);
+          if (c.leftHeading) c.leftHeading = replaceMatch(c.leftHeading);
+          if (c.leftBody) c.leftBody = replaceMatch(c.leftBody);
+          if (c.rightHeading) c.rightHeading = replaceMatch(c.rightHeading);
+          if (c.rightBody) c.rightBody = replaceMatch(c.rightBody);
+          if (c.secondHeading) c.secondHeading = replaceMatch(c.secondHeading);
+          if (c.secondBody) c.secondBody = replaceMatch(c.secondBody);
+          if (c.metricLabel) c.metricLabel = replaceMatch(c.metricLabel);
+          if (c.metricText) c.metricText = replaceMatch(c.metricText);
+          if (c.tagline) c.tagline = replaceMatch(c.tagline);
+          if (c.projectLabel) c.projectLabel = replaceMatch(c.projectLabel);
+          if (c.confidentialLabel) c.confidentialLabel = replaceMatch(c.confidentialLabel);
+          if (c.value) c.value = replaceMatch(c.value);
+          if (c.unit) c.unit = replaceMatch(c.unit);
+
+          if (c.parts) {
+            c.parts = c.parts.map((p) => ({
+              ...p,
+              title: replaceMatch(p.title) || '',
+              description: replaceMatch(p.description) || '',
+            }));
+          }
+          if (c.bars) {
+            c.bars = c.bars.map((b) => ({
+              ...b,
+              label: replaceMatch(b.label) || '',
+            }));
+          }
+          if (c.kpis) {
+            c.kpis = c.kpis.map((k) => ({
+              ...k,
+              label: replaceMatch(k.label) || '',
+              value: replaceMatch(k.value) || '',
+            }));
+          }
+          if (c.phases) {
+            c.phases = c.phases.map((p) => ({
+              ...p,
+              title: replaceMatch(p.title) || '',
+              description: replaceMatch(p.description) || '',
+            }));
+          }
+          if (c.steps) {
+            c.steps = c.steps.map((st) => ({
+              ...st,
+              title: replaceMatch(st.title) || '',
+              description: replaceMatch(st.description) || '',
+            }));
+          }
+          if (c.overlay) {
+            c.overlay = c.overlay.map((sh) => {
+              if (sh.kind === 'text' && sh.text) {
+                return { ...sh, text: replaceMatch(sh.text) };
+              }
+              if (sh.kind === 'table' && sh.rows) {
+                return {
+                  ...sh,
+                  rows: sh.rows.map((r) => ({
+                    ...r,
+                    cells: r.cells.map((cell) => ({
+                      ...cell,
+                      text: replaceMatch(cell.text),
+                    })),
+                  })),
+                };
+              }
+              return sh;
+            });
+          }
+          return { ...s, content: c };
+        });
+        return { ...prev, slides };
+      });
+      bumpTextRevision();
+      showToast('Replaced text on slide.', 'success');
+    },
+    [mutateDeck, bumpTextRevision, showToast]
+  );
+
+  const handleReplaceAll = useCallback(
+    (findText: string, replaceText: string, caseSensitive: boolean) => {
+      if (!findText) return;
+      let totalCount = 0;
+      mutateDeck((prev) => {
+        const regex = new RegExp(
+          findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+          caseSensitive ? 'g' : 'gi'
+        );
+        const replaceMatch = (t?: string) => {
+          if (!t) return t;
+          const matches = t.match(regex);
+          if (matches) totalCount += matches.length;
+          return t.replace(regex, replaceText);
+        };
+        const slides = prev.slides.map((s) => {
+          const c = { ...s.content };
+          if (c.heading) c.heading = replaceMatch(c.heading);
+          if (c.eyebrow) c.eyebrow = replaceMatch(c.eyebrow);
+          if (c.body) c.body = replaceMatch(c.body);
+          if (c.subtitle) c.subtitle = replaceMatch(c.subtitle);
+          if (c.quote) c.quote = replaceMatch(c.quote);
+          if (c.author) c.author = replaceMatch(c.author);
+          if (c.role) c.role = replaceMatch(c.role);
+          if (c.leftHeading) c.leftHeading = replaceMatch(c.leftHeading);
+          if (c.leftBody) c.leftBody = replaceMatch(c.leftBody);
+          if (c.rightHeading) c.rightHeading = replaceMatch(c.rightHeading);
+          if (c.rightBody) c.rightBody = replaceMatch(c.rightBody);
+          if (c.secondHeading) c.secondHeading = replaceMatch(c.secondHeading);
+          if (c.secondBody) c.secondBody = replaceMatch(c.secondBody);
+          if (c.metricLabel) c.metricLabel = replaceMatch(c.metricLabel);
+          if (c.metricText) c.metricText = replaceMatch(c.metricText);
+          if (c.tagline) c.tagline = replaceMatch(c.tagline);
+          if (c.projectLabel) c.projectLabel = replaceMatch(c.projectLabel);
+          if (c.confidentialLabel) c.confidentialLabel = replaceMatch(c.confidentialLabel);
+          if (c.value) c.value = replaceMatch(c.value);
+          if (c.unit) c.unit = replaceMatch(c.unit);
+
+          if (c.parts) {
+            c.parts = c.parts.map((p) => ({
+              ...p,
+              title: replaceMatch(p.title) || '',
+              description: replaceMatch(p.description) || '',
+            }));
+          }
+          if (c.bars) {
+            c.bars = c.bars.map((b) => ({
+              ...b,
+              label: replaceMatch(b.label) || '',
+            }));
+          }
+          if (c.kpis) {
+            c.kpis = c.kpis.map((k) => ({
+              ...k,
+              label: replaceMatch(k.label) || '',
+              value: replaceMatch(k.value) || '',
+            }));
+          }
+          if (c.phases) {
+            c.phases = c.phases.map((p) => ({
+              ...p,
+              title: replaceMatch(p.title) || '',
+              description: replaceMatch(p.description) || '',
+            }));
+          }
+          if (c.steps) {
+            c.steps = c.steps.map((st) => ({
+              ...st,
+              title: replaceMatch(st.title) || '',
+              description: replaceMatch(st.description) || '',
+            }));
+          }
+          if (c.overlay) {
+            c.overlay = c.overlay.map((sh) => {
+              if (sh.kind === 'text' && sh.text) {
+                return { ...sh, text: replaceMatch(sh.text) };
+              }
+              if (sh.kind === 'table' && sh.rows) {
+                return {
+                  ...sh,
+                  rows: sh.rows.map((r) => ({
+                    ...r,
+                    cells: r.cells.map((cell) => ({
+                      ...cell,
+                      text: replaceMatch(cell.text),
+                    })),
+                  })),
+                };
+              }
+              return sh;
+            });
+          }
+          return { ...s, content: c };
+        });
+        return { ...prev, slides };
+      });
+      bumpTextRevision();
+      showToast(`Replaced ${totalCount} occurrence${totalCount === 1 ? '' : 's'} across deck.`, 'success');
+    },
+    [mutateDeck, bumpTextRevision, showToast]
+  );
+
+  // ── Keyboard shortcuts: Cmd+F, Cmd+Enter, N, Cmd+C, Cmd+V, Cmd+D ─────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const isInput = el && (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+
+      // Cmd+F (Find & Replace)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+        if (!findReplaceOpen && overlayUp) return;
+        e.preventDefault();
+        setFindReplaceOpen((v) => !v);
+        return;
+      }
+
+      // Cmd+Enter (Present mode)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        setPresentOpen(true);
+        return;
+      }
+
+      // N for new slide outside text inputs
+      if (!isInput && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'n') {
+        if (overlayUp) return;
+        e.preventDefault();
+        if (currentSlideId) handleInsertAfter(currentSlideId);
+        else handleAddBlank();
+        return;
+      }
+
+      // Cmd+C (Copy)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') {
+        if (isInput) return;
+        if (selectedOverlayShape) {
+          e.preventDefault();
+          setCopiedShape(selectedOverlayShape);
+          showToast('Copied shape to clipboard', 'info');
+        } else if (targetSlide) {
+          e.preventDefault();
+          setCopiedSlide(targetSlide);
+          showToast('Copied slide to clipboard', 'info');
+        }
+        return;
+      }
+
+      // Cmd+V (Paste)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') {
+        if (isInput) return;
+        const cShape = getCopiedShape();
+        if (cShape && targetSlide) {
+          e.preventDefault();
+          const dup = duplicateShape(cShape);
+          handleEditSlide(targetSlide.instanceId, (c) => withOverlay(c, [...overlayOf(c), dup]));
+          setSelection({ kind: 'overlay', instanceId: targetSlide.instanceId, shapeId: dup.id });
+          showToast('Pasted shape', 'success');
+          return;
+        }
+        const cSlide = getCopiedSlide();
+        if (cSlide && currentSlideId) {
+          e.preventDefault();
+          const dup = duplicateSlide(cSlide);
+          mutateDeck((prev) => {
+            const idx = prev.slides.findIndex((s) => s.instanceId === currentSlideId);
+            const at = idx === -1 ? prev.slides.length : idx + 1;
+            const slides = [...prev.slides];
+            slides.splice(at, 0, dup);
+            return { ...prev, slides };
+          });
+          setCurrentSlideId(dup.instanceId);
+          showToast('Pasted slide', 'success');
+          return;
+        }
+      }
+
+      // Cmd+D (Duplicate)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
+        if (isInput) return;
+        if (selectedOverlayShape && targetSlide) {
+          e.preventDefault();
+          const dup = duplicateShape(selectedOverlayShape);
+          handleEditSlide(targetSlide.instanceId, (c) => withOverlay(c, [...overlayOf(c), dup]));
+          setSelection({ kind: 'overlay', instanceId: targetSlide.instanceId, shapeId: dup.id });
+          showToast('Duplicated shape', 'success');
+          return;
+        }
+        if (targetSlide) {
+          e.preventDefault();
+          const dup = duplicateSlide(targetSlide);
+          mutateDeck((prev) => {
+            const idx = prev.slides.findIndex((s) => s.instanceId === targetSlide.instanceId);
+            const at = idx === -1 ? prev.slides.length : idx + 1;
+            const slides = [...prev.slides];
+            slides.splice(at, 0, dup);
+            return { ...prev, slides };
+          });
+          setCurrentSlideId(dup.instanceId);
+          showToast('Duplicated slide', 'success');
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [
+    findReplaceOpen,
+    overlayUp,
+    currentSlideId,
+    targetSlide,
+    selectedOverlayShape,
+    handleInsertAfter,
+    handleAddBlank,
+    handleEditSlide,
+    mutateDeck,
+    showToast,
+  ]);
 
   // ── Brand kits ──────────────────────────────────────────────────────────
   /**
@@ -1422,20 +1793,6 @@ export function MasterTemplatePage() {
     mutateDeck((prev) => (prev.themeId === id ? { ...prev, themeId: undefined } : prev));
   }, [mutateDeck]);
 
-  /** Add a blank slide at `index` (default: the end of the deck). The rail picks
-   *  the index from its scroll position, so the new slide appears where the user
-   *  is looking rather than always below the fold. */
-  const handleAddBlank = useCallback((index?: number) => {
-    const blank = createBlankSlide();
-    mutateDeck((prev) => {
-      const at = index === undefined ? prev.slides.length : Math.max(0, Math.min(index, prev.slides.length));
-      const slides = [...prev.slides];
-      slides.splice(at, 0, blank);
-      return { ...prev, slides };
-    });
-    setCurrentSlideId(blank.instanceId);
-  }, [mutateDeck]);
-
   /**
    * Drop slides borrowed from another deck in after the current one.
    *
@@ -1461,18 +1818,6 @@ export function MasterTemplatePage() {
     },
     [mutateDeck, currentSlideId, showToast]
   );
-
-  const handleInsertAfter = useCallback((instanceId: string) => {
-    const blank = createBlankSlide();
-    mutateDeck((prev) => {
-      const idx = prev.slides.findIndex((s) => s.instanceId === instanceId);
-      const next = idx === -1
-        ? [...prev.slides, blank]
-        : [...prev.slides.slice(0, idx + 1), blank, ...prev.slides.slice(idx + 1)];
-      return { ...prev, slides: next };
-    });
-    setCurrentSlideId(blank.instanceId);
-  }, [mutateDeck]);
 
   // ── Multiple saved decks ────────────────────────────────────────────────
   /** Replace all in-memory state (including undo/redo history) from a stored session. */
@@ -1585,6 +1930,37 @@ export function MasterTemplatePage() {
         keywords: 'download pptx powerpoint pdf png save',
         disabled: visible.length === 0,
         run: () => setReviewOpen(true),
+      },
+      {
+        id: 'find_replace',
+        group: 'Deck',
+        label: 'Find and replace…',
+        hint: `${MOD_KEY}F`,
+        keywords: 'search find replace text deck',
+        run: () => setFindReplaceOpen(true),
+      },
+      {
+        id: 'duplicate_slide',
+        group: 'Deck',
+        label: 'Duplicate slide',
+        hint: `${MOD_KEY}D`,
+        keywords: 'duplicate copy slide clone',
+        disabled: !currentId,
+        run: () => {
+          const s = displayDeck.slides.find((sl) => sl.instanceId === currentId);
+          if (s) {
+            const dup = duplicateSlide(s);
+            mutateDeck((prev) => {
+              const idx = prev.slides.findIndex((sl) => sl.instanceId === currentId);
+              const at = idx === -1 ? prev.slides.length : idx + 1;
+              const slides = [...prev.slides];
+              slides.splice(at, 0, dup);
+              return { ...prev, slides };
+            });
+            setCurrentSlideId(dup.instanceId);
+            showToast('Duplicated slide', 'success');
+          }
+        },
       },
       {
         id: 'organize',
@@ -1794,6 +2170,7 @@ export function MasterTemplatePage() {
         onResetClick={handleResetClick}
         onOpenReview={() => setReviewOpen(true)}
         canExport={displayDeck.slides.some((s) => !s.hidden)}
+        onOpenShare={() => setShareOpen(true)}
         projects={projects}
         activeId={activeId}
         onSwitchDeck={handleSwitchDeck}
@@ -1891,6 +2268,8 @@ export function MasterTemplatePage() {
             onDeleteImportedShape={handleDeleteImportedShape}
             onSetImportedFill={handleSetImportedShapeFill}
             onSetImportedLine={handleSetImportedShapeLine}
+            onCopyShape={handleCopyCurrentShape}
+            onDuplicateShape={handleDuplicateCurrentShape}
           />
         </div>
       )}
@@ -1903,6 +2282,8 @@ export function MasterTemplatePage() {
           hasNotes={!!targetSlide.notes?.trim()}
           notesOpen={notesOpen}
           onToggleNotes={() => setNotesOpen((o) => !o)}
+          findReplaceOpen={findReplaceOpen}
+          onToggleFindReplace={() => setFindReplaceOpen((o) => !o)}
         />
       )}
 
@@ -1993,6 +2374,15 @@ export function MasterTemplatePage() {
         onDeleteKit={handleDeleteKit}
       />
       <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <FindReplaceModal
+        open={findReplaceOpen}
+        onClose={() => setFindReplaceOpen(false)}
+        slides={displayDeck.slides}
+        activeSlideId={currentSlideId || ''}
+        onJumpToSlide={(slideId) => setCurrentSlideId(slideId)}
+        onReplaceCurrent={handleReplaceCurrent}
+        onReplaceAll={handleReplaceAll}
+      />
       <BorrowSlideModal
         open={borrowOpen}
         onClose={() => setBorrowOpen(false)}

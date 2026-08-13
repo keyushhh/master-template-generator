@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { SlideInstance } from '../deck/types';
 import type { DocumentNode } from '../business-record/parser/ast';
 import { SlideStage } from './PresentationCanvas';
-import { CopyIcon, CreateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, GripIcon, LayersIcon, TrashIcon, WarningIcon } from '../ui/icons';
+import { CopyIcon, CreateIcon, DuplicateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, GripIcon, LayersIcon, TrashIcon, WarningIcon } from '../ui/icons';
 import type { DeckTheme } from '../theme/deckTheme';
 import { describeIssue, SEVERE_BY } from '../fit/fitScan';
 import { pruneFit, useSlideFit } from '../fit/fitStore';
@@ -133,18 +133,23 @@ const MENU_GAP = 6;
 /** Smallest gap the overflow menu keeps from the window edge. */
 const MENU_EDGE_GAP = 8;
 
+import { MOD_KEY } from '../help/platform';
+
 /** One row of a thumbnail's overflow menu. */
-function MenuRow({ label, icon, onClick, danger }: { label: string; icon: React.ReactNode; onClick: () => void; danger?: boolean }) {
+function MenuRow({ label, icon, onClick, danger, hint }: { label: string; icon: React.ReactNode; onClick: () => void; danger?: boolean; hint?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-[7px] text-[12.5px] font-medium transition-colors cursor-pointer ${
+      className={`w-full flex items-center justify-between gap-2.5 px-3 py-[7px] text-[12.5px] font-medium transition-colors cursor-pointer ${
         danger ? 'text-red-600 hover:bg-red-50' : 'text-neutral-700 hover:bg-neutral-100'
       }`}
     >
-      <span className="shrink-0 flex items-center">{icon}</span>
-      {label}
+      <div className="flex items-center gap-2.5">
+        <span className="shrink-0 flex items-center">{icon}</span>
+        {label}
+      </div>
+      {hint && <span className="font-mono text-[10px] text-neutral-400 font-normal">{hint}</span>}
     </button>
   );
 }
@@ -566,7 +571,7 @@ export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDu
             }}
           >
             <MenuRow icon={<LayersIcon size={15} />} label="Change layout" onClick={() => { onChangeLayout(menu.id); setMenu(null); }} />
-            <MenuRow icon={<CopyIcon size={15} />} label="Duplicate" onClick={() => { onDuplicate(menu.id); setMenu(null); }} />
+            <MenuRow icon={<DuplicateIcon size={15} />} label="Duplicate" hint={`${MOD_KEY}D`} onClick={() => { onDuplicate(menu.id); setMenu(null); }} />
             <MenuRow icon={<InsertAfterIcon />} label="Insert after" onClick={() => { onInsertAfter(menu.id); setMenu(null); }} />
             <MenuRow
               icon={<CreateIcon size={15} />}

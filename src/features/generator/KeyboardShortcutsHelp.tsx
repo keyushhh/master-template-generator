@@ -12,9 +12,12 @@ interface Shortcut {
 const GLOBAL_SHORTCUTS: Shortcut[] = [
   { keys: [MOD_KEY, 'Z'], description: 'Undo last committed change' },
   { keys: [MOD_KEY, 'Shift', 'Z'], description: 'Redo' },
+  { keys: [MOD_KEY, 'F'], description: 'Find and replace across the deck' },
+  { keys: [MOD_KEY, 'Enter'], description: 'Start presentation mode' },
   // Same key in both places, because it means the same thing in both: type what
   // you want rather than go and find it.
   { keys: [MOD_KEY, 'K'], description: 'Command palette here, deck search in the library' },
+  { keys: ['N'], description: 'Add a new slide' },
   { keys: ['Esc'], description: 'Close the open dialog' },
   { keys: ['?'], description: 'Show this shortcuts overlay' },
   { keys: ['G'], description: 'Organize the whole deck at once' },
@@ -25,6 +28,9 @@ const GLOBAL_SHORTCUTS: Shortcut[] = [
  *  build a group, Alt to escape snapping) are otherwise invisible - discoverable
  *  only from a tooltip you have to already be hovering to see. */
 const EDIT_SHORTCUTS: Shortcut[] = [
+  { keys: [MOD_KEY, 'C'], description: 'Copy selected shape or slide' },
+  { keys: [MOD_KEY, 'V'], description: 'Paste copied shape or slide' },
+  { keys: [MOD_KEY, 'D'], description: 'Duplicate selected shape or slide' },
   { keys: ['Shift', 'Click'], description: 'Add another text field to the selection' },
   { keys: ['↑', '↓', '←', '→'], description: 'Nudge the selection' },
   { keys: ['Shift', 'Arrows'], description: 'Nudge by a full grid cell' },

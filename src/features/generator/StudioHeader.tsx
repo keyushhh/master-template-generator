@@ -26,7 +26,7 @@ import { Link } from 'react-router-dom';
 import type { ProjectMeta } from '../deck/deckStore';
 import { DeckSwitcher } from './DeckSwitcher';
 import logoBlack from '../../assets/Logo_Black_Transparent.png';
-import { DownloadIcon, RedoIcon, RefreshIcon, UndoIcon } from '../ui/icons';
+import { DownloadIcon, RedoIcon, RefreshIcon, ShareIcon, UndoIcon } from '../ui/icons';
 
 export type StudioMode = 'view' | 'edit';
 
@@ -57,6 +57,7 @@ interface StudioHeaderProps {
    *  output action, and Present - the other one - is already here. */
   onOpenReview: () => void;
   canExport: boolean;
+  onOpenShare?: () => void;
   /** Deck management, moved here from under the sidebar logo so the deck you
    *  have open and its name live in the same place. */
   projects: ProjectMeta[];
@@ -142,6 +143,7 @@ export function StudioHeader({
   onResetClick,
   onOpenReview,
   canExport,
+  onOpenShare,
   projects,
   activeId,
   onSwitchDeck,
@@ -437,7 +439,7 @@ export function StudioHeader({
         <button
           onClick={() => canExport && onOpenReview()}
           disabled={!canExport}
-          title="Preview every slide, then export PPTX / PDF / PNG"
+          title="Preview every slide, then export PPTX / PDF / PNG / Wozku deck"
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             height: 30, padding: '0 13px',

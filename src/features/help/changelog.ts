@@ -27,6 +27,21 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.6.0',
+    date: '2026-08-13',
+    summary: 'Identity profile model, workspace switcher confirmation modal, and toolbar clipboard actions.',
+    added: [
+      'Identity profile model with LocalStorage persistence for user display name, email, and workspace settings.',
+      'Workspace switcher with explicit confirmation modal when switching between Personal and Shared Team workspaces.',
+      'Find & Replace button (⌘F) added to the right stage rail toolbar.',
+      'Copy (⌘C) and Duplicate (⌘D) quick actions added to the floating shape selection bar, slide thumbnail menus, and command palette.',
+      'Dedicated Canva-style Duplicate icon featuring overlapping shapes with a plus badge to distinguish duplication from copying.',
+    ],
+    improved: [
+      'Studio header decluttered by consolidating export workflows and removing profile settings from the presentation editor.',
+    ],
+  },
+  {
     version: '1.5.0',
     date: '2026-08-13',
     summary: 'Rotation and opacity controls for shapes, deck rename affordances, and library present resumption.',

@@ -5,7 +5,7 @@ import { useToast } from '../toast/Toast';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
-import { AlertIcon, ArrowForwardIcon, CheckIcon, CloseIcon, LayersIcon, WarningIcon } from '../ui/icons';
+import { AlertIcon, ArrowForwardIcon, CheckIcon, CloseIcon, CopyIcon, LayersIcon, WarningIcon } from '../ui/icons';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 import { useFitReport } from '../fit/fitStore';
 import { placeholderReport } from '../preflight/placeholders';
@@ -593,9 +593,22 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
           )}
           <div className="flex items-center gap-2.5 px-5 py-3.5 bg-white">
             <button
+              onClick={() => {
+                const link = `${window.location.origin}${window.location.pathname}#/present`;
+                void navigator.clipboard.writeText(link);
+                showToast('Presentation link copied to clipboard', 'success');
+              }}
+              disabled={busy}
+              className="h-[42px] px-3.5 flex items-center justify-center gap-1.5 text-[12.5px] font-bold text-neutral-800 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-[var(--radius-sharp)] transition-colors cursor-pointer disabled:opacity-40"
+              title="Copy public presentation view mode link"
+            >
+              <CopyIcon size={14} />
+              Copy Share Link
+            </button>
+            <button
               onClick={() => !busy && onClose()}
               disabled={busy}
-              className="flex-1 h-[42px] flex items-center justify-center text-[13px] font-bold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 hover:border-neutral-300 rounded-[var(--radius-sharp)] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-[42px] px-4 flex items-center justify-center text-[13px] font-bold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 hover:border-neutral-300 rounded-[var(--radius-sharp)] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Cancel
             </button>

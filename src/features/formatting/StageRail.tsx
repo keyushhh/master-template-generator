@@ -16,7 +16,7 @@
 
 import { useState } from 'react';
 import type { OverlayShape } from '../deck/types';
-import { DocumentTextIcon, EllipseIcon, ImageIcon, ListIcon, PieChartIcon, RectIcon, TextIcon, VideoIcon } from '../ui/icons';
+import { DocumentTextIcon, EllipseIcon, ImageIcon, ListIcon, PieChartIcon, RectIcon, SearchIcon, TextIcon, VideoIcon } from '../ui/icons';
 
 interface StageRailProps {
   onInsert: (kind: OverlayShape['kind']) => void;
@@ -24,6 +24,8 @@ interface StageRailProps {
   hasNotes: boolean;
   notesOpen: boolean;
   onToggleNotes: () => void;
+  findReplaceOpen?: boolean;
+  onToggleFindReplace: () => void;
 }
 
 const TOOLS: { kind: OverlayShape['kind']; label: string; icon: React.ReactNode }[] = [
@@ -102,7 +104,7 @@ function RailButton({
   );
 }
 
-export function StageRail({ onInsert, hasNotes, notesOpen, onToggleNotes }: StageRailProps) {
+export function StageRail({ onInsert, hasNotes, notesOpen, onToggleNotes, findReplaceOpen, onToggleFindReplace }: StageRailProps) {
   return (
     <div
       // Same mousedown guard as the bottom bar: clicking a tool must not blur
@@ -134,6 +136,10 @@ export function StageRail({ onInsert, hasNotes, notesOpen, onToggleNotes }: Stag
 
       <RailButton label="Speaker notes" active={notesOpen} badge={hasNotes} onClick={onToggleNotes}>
         <DocumentTextIcon size={19} />
+      </RailButton>
+
+      <RailButton label="Find & Replace" active={findReplaceOpen} onClick={onToggleFindReplace}>
+        <SearchIcon size={19} />
       </RailButton>
     </div>
   );

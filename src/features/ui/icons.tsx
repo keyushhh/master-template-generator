@@ -414,6 +414,29 @@ export function CopyIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** ionicons: duplicate-outline (overlapping rects with plus sign) */
+export function DuplicateIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <rect width="272" height="272" x="160" y="160" rx="44" ry="44" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="32px"/>
+      <line x1="296" y1="232" x2="296" y2="360" stroke="currentColor" strokeLinecap="round" strokeWidth="32px"/>
+      <line x1="232" y1="296" x2="360" y2="296" stroke="currentColor" strokeLinecap="round" strokeWidth="32px"/>
+      <path d="M350 160v-48a48 48 0 0 0-48-48H112a48 48 0 0 0-48 48v190a48 48 0 0 0 48 48h48" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
+    </Ion>
+  );
+}
+
+/** ionicons: share-outline */
+export function ShareIcon({ size = 14 }: IconProps) {
+  return (
+    <Ion size={size}>
+      <path d="M336 192h40a40 40 0 0 1 40 40v192a40 40 0 0 1-40 40H136a40 40 0 0 1-40-40V232a40 40 0 0 1 40-40h40" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
+      <polyline points="336 128 256 48 176 128" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
+      <line x1="256" y1="48" x2="256" y2="304" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
+    </Ion>
+  );
+}
+
 /** ionicons: create-outline */
 export function CreateIcon({ size = 14 }: IconProps) {
   return (

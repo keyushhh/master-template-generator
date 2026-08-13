@@ -5,6 +5,8 @@ import { FitStage } from '../features/generator/FitStage';
 import { PresentMode } from '../features/generator/PresentMode';
 import { DevPanel } from '../features/dev/DevPanel';
 import { HelpMenu } from '../features/help/HelpMenu';
+import { ProfileMenu } from '../features/identity/ProfileMenu';
+import { AVAILABLE_WORKSPACES, loadUserProfile } from '../features/identity/profileStore';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
 import { hasModifier, MOD_KEY } from '../features/help/platform';
 import { createTemplateDeck } from '../features/deck/deckBuilder';
@@ -341,6 +343,18 @@ export function HomePage() {
   /** Whether this library is big enough that its covers are worth loading after
    *  the first paint rather than before it. Decided once, on mount. */
   const [deferCovers] = useState(() => listProjects().length > SKELETON_THRESHOLD);
+
+  const [userProfile, setUserProfile] = useState(loadUserProfile);
+  useEffect(() => {
+    const update = () => setUserProfile(loadUserProfile());
+    window.addEventListener('storage', update);
+    const timer = setInterval(update, 1000);
+    return () => {
+      window.removeEventListener('storage', update);
+      clearInterval(timer);
+    };
+  }, []);
+  const isPersonalWorkspace = userProfile.workspaceId === 'personal';
   const [projects, setProjects] = useState<ProjectSummary[]>(() =>
     deferCovers ? [] : listProjectSummaries()
   );
@@ -966,6 +980,15 @@ export function HomePage() {
             <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-neutral-400">
               Studio
             </span>
+            {isPersonalWorkspace ? (
+              <span className="font-mono text-[10.5px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-none flex items-center gap-1 select-none">
+                <span>🔒</span> Personal &amp; Local
+              </span>
+            ) : (
+              <span className="font-mono text-[10.5px] font-bold px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200/80 rounded-none flex items-center gap-1 select-none">
+                <span>👥</span> Shared Team
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -978,7 +1001,13 @@ export function HomePage() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={activeFolder ? `Search folder (${MOD_KEY}K)` : `Search decks (${MOD_KEY}K)`}
+                placeholder={
+                  activeFolder
+                    ? `Search folder (${MOD_KEY}K)`
+                    : isPersonalWorkspace
+                    ? `Search personal decks (${MOD_KEY}K)`
+                    : `Search team decks (${MOD_KEY}K)`
+                }
                 className="w-full h-[34px] pl-9 pr-3 text-[12.5px] bg-neutral-100/70 border border-neutral-200 rounded-[var(--radius-sharp)] focus:bg-white focus:border-emerald-500 outline-none transition-colors"
               />
               {query && (
@@ -1008,11 +1037,68 @@ export function HomePage() {
               <AddIcon size={14} />
               New deck
             </button>
+
+            <div className="pl-1 border-l border-neutral-200/80 flex items-center">
+              <ProfileMenu />
+            </div>
           </div>
         </div>
       </header>
 
       <main className="relative z-[1] mx-auto max-w-[1220px] px-8 pt-6">
+        {/* ── Workspace Context Header (Root Library View) ── */}
+        {!activeFolder && (
+          <div className="flex items-center justify-between pb-4 mb-5 border-b border-neutral-200/70">
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <h2 className="text-[20px] font-bold text-neutral-900 tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
+                  {isPersonalWorkspace ? 'Personal Library' : userProfile.workspaceName}
+                </h2>
+                {isPersonalWorkspace ? (
+                  <span className="px-2 py-0.5 text-[10.5px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-none">
+                    🔒 Private &amp; Local
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 text-[10.5px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200/80 rounded-none">
+                    👥 Shared Team
+                  </span>
+                )}
+              </div>
+              {isPersonalWorkspace ? (
+                <p className="text-[12px] text-neutral-500">
+                  Decks saved on this computer &middot; 100% private, on-device local storage
+                </p>
+              ) : (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center -space-x-1.5 overflow-hidden">
+                    <span className="inline-block h-5 w-5 rounded-none ring-1 ring-white bg-emerald-500 text-white text-[9px] font-mono font-bold flex items-center justify-center">SU</span>
+                    <span className="inline-block h-5 w-5 rounded-none ring-1 ring-white bg-indigo-500 text-white text-[9px] font-mono font-bold flex items-center justify-center">AB</span>
+                    <span className="inline-block h-5 w-5 rounded-none ring-1 ring-white bg-amber-500 text-white text-[9px] font-mono font-bold flex items-center justify-center">CD</span>
+                  </div>
+                  <span className="text-[12px] text-neutral-500">
+                    6 team collaborators &middot; Shared brand kits &amp; assets active
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="hidden sm:flex items-center gap-2 text-[11.5px] font-mono font-semibold text-neutral-500">
+              {isPersonalWorkspace ? (
+                <>
+                  <span>💾 {projects.length} Local Decks</span>
+                  <span>&middot;</span>
+                  <span>0 Cloud Syncing</span>
+                </>
+              ) : (
+                <>
+                  <span>👥 {projects.length} Team Decks</span>
+                  <span>&middot;</span>
+                  <span>Synced Team Access</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
         {/* ── Active Folder Directory Banner & Navigation ── */}
         {activeFolder && (
           <div className="mb-8">
