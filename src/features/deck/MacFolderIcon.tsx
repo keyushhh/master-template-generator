@@ -1,8 +1,11 @@
 import type { FolderColor } from './deckStore';
-import folderEmpty from '../../assets/folder-empty.svg';
-import folderFilled from '../../assets/folder-filled.svg';
-import folderEmptyHover from '../../assets/folder-empty-hover.svg';
-import folderFilledHover from '../../assets/folder-filled-hover.svg';
+import folderEmptyBack from '../../assets/folder-empty-back.svg';
+import folderEmptyFlap from '../../assets/folder-empty-flap.svg';
+import folderEmptyBadge from '../../assets/folder-empty-badge.svg';
+import folderFilledBack from '../../assets/folder-filled-back.svg';
+import folderFilledPapers from '../../assets/folder-filled-papers.svg';
+import folderFilledFlap from '../../assets/folder-filled-flap.svg';
+import folderFilledBadge from '../../assets/folder-filled-badge.svg';
 
 interface MacFolderIconProps {
   color?: FolderColor;
@@ -27,9 +30,21 @@ const COLOR_FILTERS: Record<FolderColor, string> = {
   slate: 'grayscale(0.85) brightness(0.85)',
 };
 
+/** Figma's transition on this interaction: smart animate, linear, 300ms. */
+const TRANSITION = 'transform 300ms linear';
+
+/** The flap in the hover frame is the resting flap squashed to 82/110.01 of its
+ *  height with its bottom edge pinned — measured off the two Figma exports. */
+const FLAP_OPEN_SCALE = 0.7454;
+
+/** The papers ride 2.68 units (of the 161-unit canvas) higher once it opens. */
+const PAPERS_LIFT = '-1.66%';
+
 /**
- * High-fidelity SVG macOS Folder Icon with silky-smooth cross-fade hover state transition
- * and dynamic color swapping.
+ * High-fidelity SVG macOS folder icon. Hovering replays the Figma interaction:
+ * the front flap drops open while the papers inside lift, linearly over 300ms —
+ * the same layer-for-layer interpolation smart animate does, rather than a
+ * cross-fade between two flattened states.
  */
 export function MacFolderIcon({
   color = 'blue',
@@ -39,8 +54,6 @@ export function MacFolderIcon({
   size = 'md',
   sizePx,
 }: MacFolderIconProps) {
-  const defaultSrc = isEmpty ? folderEmpty : folderFilled;
-  const hoverSrc = isEmpty ? folderEmptyHover : folderFilledHover;
   const filter = COLOR_FILTERS[color] ?? COLOR_FILTERS.blue;
 
   const dims = {
@@ -49,33 +62,56 @@ export function MacFolderIcon({
     lg: 'w-32 h-32',
   }[size];
 
+  const layer = 'absolute inset-0 w-full h-full object-contain';
+  const back = isEmpty ? folderEmptyBack : folderFilledBack;
+  const flap = isEmpty ? folderEmptyFlap : folderFilledFlap;
+  const badge = isEmpty ? folderEmptyBadge : folderFilledBadge;
+
   return (
     <div
-      className={`relative shrink-0 ${sizePx ? '' : dims} select-none flex items-center justify-center ${className}`}
+      className={`relative shrink-0 ${sizePx ? '' : dims} select-none flex items-center justify-center isolate ${className}`}
       style={sizePx ? { width: sizePx, height: sizePx } : undefined}
     >
-      {/* Base Resting SVG. Linear pacing, and the open state trails it by a
-          beat, so it still reads as one thing leaving before the other
-          arrives rather than a flat simultaneous crossfade. */}
+      {/* Back panel — fixed in both frames. */}
+      <img src={back} alt="Folder" className={layer} style={{ filter }} />
+
+      {/* Papers, lifting a hair as the flap clears them. */}
+      {!isEmpty && (
+        <img
+          src={folderFilledPapers}
+          alt=""
+          aria-hidden
+          className={layer}
+          style={{
+            filter,
+            transform: isHovered ? `translateY(${PAPERS_LIFT})` : 'none',
+            transition: TRANSITION,
+          }}
+        />
+      )}
+
+      {/* Front flap — squashed from its bottom edge, which is what Figma's
+          resize interpolation between the two frames amounts to. */}
       <img
-        src={defaultSrc}
-        alt="Folder"
-        className={`absolute inset-0 w-full h-full object-contain ${
-          isHovered ? 'opacity-0 scale-[0.97] -translate-y-[1.5%]' : 'opacity-100 scale-100 translate-y-0'
-        }`}
-        style={{ filter, transition: 'opacity 260ms linear, transform 260ms linear' }}
-      />
-      {/* Hover Animated SVG - rises in a touch after the resting one starts leaving. */}
-      <img
-        src={hoverSrc}
-        alt="Folder Open"
-        className={`absolute inset-0 w-full h-full object-contain ${
-          isHovered ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-[0.94] translate-y-[2%]'
-        }`}
+        src={flap}
+        alt=""
+        aria-hidden
+        className={layer}
         style={{
           filter,
-          transition: 'opacity 460ms linear 40ms, transform 460ms linear 40ms',
+          transformOrigin: '50% 100%',
+          transform: isHovered ? `scaleY(${FLAP_OPEN_SCALE})` : 'scaleY(1)',
+          transition: TRANSITION,
         }}
+      />
+
+      {/* Multiply-blended badge sitting on the flap — fixed in both frames. */}
+      <img
+        src={badge}
+        alt=""
+        aria-hidden
+        className={layer}
+        style={{ filter, mixBlendMode: 'multiply' }}
       />
     </div>
   );
