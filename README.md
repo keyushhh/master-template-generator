@@ -26,46 +26,52 @@ editing, persistence or export.
   across reloads.
 * Insert text boxes, rectangles, ellipses, images, tables, charts and video.
   Drag, resize, rotate, set opacity, snap to the brand grid, and reorder layers.
-* Formatting runs on brand rails: the type scale, line heights, letter spacings
-  and palette the templates already use, each with a typed escape hatch one
-  interaction deeper.
+* Typography controls: Access to all 1,932 Google Fonts. Adjust line heights, 
+  letter spacing, paragraph spacing, indents, bullets, and text case. All formatting
+  survives the PowerPoint export.
 * Change any slide's layout without losing content. Parked content returns if
   you switch back.
+* Save as Template: Snapshot any deck's slides as a starter template you can 
+  pick from the New Deck screen next time.
 * Reset reverts a deck to the state it was in right after import or generation.
 
 ### Deck operations
 
+* **Team Repository vs. Quick Sandbox**: Choose to save decks to the shared 
+  team workspace or keep them strictly local for quick, emergency edits.
 * Multiple named decks side by side, each with its own source, slides and edit
   history.
-* Folders, with drag and drop filing, colour, and export of a whole folder as a
-  ZIP.
+* **3D Folders**: Organize decks into folders with drag-and-drop filing, bulk move
+  operations, color coding, and one-click ZIP export of entire folders.
 * A slide sorter for reordering, hiding and bulk operations.
 * Borrow slides from another deck.
 * Speaker notes per slide, which travel into PowerPoint's own notes pane.
-* Brand kits: a client's accent colour and typefaces, applied everywhere the
-  deck is drawn and embedded into the export.
+* Brand kits: A client's accent colour and specific typefaces (display, body, mono), 
+  applied everywhere the deck is drawn and embedded into the export.
 
 ### Preflight
 
 * The fit scanner finds text that is cut off and reports it per slide. "Fit all"
-  shrinks the type on every clipped slide as a single undo.
+  shrinks the type on every clipped slide instantly as a single undo.
 * The export sheet reports unfilled placeholders and any typeface that cannot
   be embedded, before you export rather than after.
 
 ### Present mode
 
-* Fullscreen presenter with a laser pointer, an annotation pen, a blank-screen
-  key and a jump-to-slide grid.
+* Fullscreen presenter with an annotation pen, a multi-colored laser pointer, a 
+  blank-screen key and a jump-to-slide grid.
 * A presenter view with the next slide, a rehearsal timer and speaker notes at a
   readable size, on a second window over `BroadcastChannel`.
 * A teleprompter with adjustable speed and type size.
-* Video on a slide plays in present mode.
+* Video on a slide plays natively in present mode.
+* Presenting directly from the library remembers and resumes from your last 
+  viewed slide position.
 
 ### Export
 
 * **PPTX** is built natively through `pptxgenjs`, one build function per
   template. Real, editable text boxes, shapes, tables and charts, with the brand
-  fonts embedded. Only genuine raster content (photos, logos, maps) is embedded
+  fonts embedded. Video plays natively. Only genuine raster content (photos, logos, maps) is embedded
   as an image, and decorative backgrounds are baked into the slide's background
   fill. It is not a screenshot.
 * **PDF** captures each slide's live DOM at 1920x1080 and assembles a landscape
