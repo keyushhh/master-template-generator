@@ -35,7 +35,7 @@ export function DeckTypeModal({
         ref={panelRef}
         role="dialog"
         aria-label="Select deck type"
-        className="wg-modal relative flex flex-col w-full max-w-[640px] overflow-hidden my-auto bg-white"
+        className="wg-modal relative flex flex-col w-full max-w-[640px] overflow-hidden my-auto bg-white rounded-[var(--radius-sharp)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-5 border-b border-neutral-150">
@@ -55,7 +55,7 @@ export function DeckTypeModal({
           {/* Card 1: Team Repository */}
           <button
             onClick={() => onSelect(false)}
-            className="group relative flex-1 flex flex-col text-left bg-white border border-neutral-200 hover:border-emerald-500 p-6 transition-all shadow-sm hover:shadow-md cursor-pointer"
+            className="group relative flex-1 flex flex-col text-left bg-white border border-neutral-200 hover:border-emerald-500 p-6 transition-all shadow-sm hover:shadow-md cursor-pointer rounded-[var(--radius-sharp)]"
           >
             <div className="absolute -top-3 -right-2 bg-emerald-600 text-white text-[10.5px] font-bold px-2.5 py-1 rounded-[var(--radius-sharp)] shadow-sm transform -rotate-1 group-hover:rotate-0 transition-transform">
               Recommended
@@ -87,7 +87,7 @@ export function DeckTypeModal({
           {/* Card 2: Quick Sandbox */}
           <button
             onClick={() => onSelect(true)}
-            className="group flex-1 flex flex-col text-left bg-white border border-neutral-200 hover:border-blue-500 p-6 transition-all shadow-sm hover:shadow-md cursor-pointer"
+            className="group flex-1 flex flex-col text-left bg-white border border-neutral-200 hover:border-blue-500 p-6 transition-all shadow-sm hover:shadow-md cursor-pointer rounded-[var(--radius-sharp)]"
           >
             <span className="font-mono text-[10px] font-bold tracking-[0.1em] text-neutral-400 uppercase mb-1">
               Option 2
