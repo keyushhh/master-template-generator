@@ -45,9 +45,13 @@ import { css as themeCss, themeById, WOZKU_THEME, type DeckTheme } from '../feat
 import logoBlack from '../assets/Logo_Black_Transparent.png';
 import {
   AddIcon,
+  AlbumsIcon,
   ArrowBackNavIcon,
   ArrowForwardNavIcon,
   ArrowUpIcon,
+  DatabaseIcon,
+  LockIcon,
+  PeopleIcon,
   CopyIcon,
   CreateIcon,
   DownloadIcon,
@@ -335,6 +339,21 @@ function LibrarySkeleton() {
       </div>
     </div>
   );
+}
+
+function getLocalStorageUsage() {
+  let total = 0;
+  for (const x in localStorage) {
+    if (Object.prototype.hasOwnProperty.call(localStorage, x)) {
+      total += (localStorage[x].length + x.length) * 2;
+    }
+  }
+  const sizeMb = total / (1024 * 1024);
+  const percent = Math.min(100, Math.max(2, (sizeMb / 5.0) * 100));
+  return {
+    readable: `${sizeMb.toFixed(2)} MB`,
+    percent,
+  };
 }
 
 export function HomePage() {
@@ -971,27 +990,138 @@ export function HomePage() {
     );
 
   return (
-    <div className="min-h-screen bg-[var(--stage-bg)] text-neutral-900 selection:bg-emerald-500 selection:text-white pb-24">
-      {/* ── App Header ─────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-20 border-b border-neutral-200/80 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex h-[56px] max-w-[1220px] items-center justify-between px-8">
-          <div className="flex items-center gap-3">
-            <img src={logoBlack} alt="Wozku Studio" className="h-6 w-auto" />
-            <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-neutral-400">
-              Studio
-            </span>
-            {isPersonalWorkspace ? (
-              <span className="font-mono text-[10.5px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-none flex items-center gap-1 select-none">
-                <span>🔒</span> Personal &amp; Local
-              </span>
-            ) : (
-              <span className="font-mono text-[10.5px] font-bold px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200/80 rounded-none flex items-center gap-1 select-none">
-                <span>👥</span> Shared Team
-              </span>
-            )}
+    <div className={`min-h-screen bg-[var(--stage-bg)] text-neutral-900 selection:bg-emerald-500 selection:text-white transition-colors duration-300 relative overflow-hidden ${isPersonalWorkspace ? 'flex' : 'pb-24'}`}>
+      {/* Left Sidebar Navigation */}
+      {isPersonalWorkspace && (
+        <aside className="w-64 bg-white border-r border-neutral-200/80 flex flex-col justify-between fixed top-0 left-0 h-screen z-20 select-none">
+          <div className="p-6 flex flex-col gap-6 overflow-hidden">
+            {/* Logo Header */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <img src={logoBlack} alt="Wozku Studio" className="h-6 w-auto" />
+                <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+                  Studio
+                </span>
+              </div>
+              <div className="mt-1 flex items-center">
+                <span className="font-mono text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-none flex items-center gap-1.5">
+                  <LockIcon size={11} /> Private (Local)
+                </span>
+              </div>
+            </div>
+
+            {/* Sidebar navigation items */}
+            <nav className="flex flex-col gap-5 mt-2">
+              <div className="flex flex-col gap-1">
+                <span className="font-mono text-[9.5px] font-bold tracking-[0.12em] uppercase text-neutral-400 px-1 mb-1">
+                  Library
+                </span>
+                <button
+                  onClick={() => navigateToFolder(null)}
+                  className={`flex items-center gap-2.5 px-3 py-2 text-[12.5px] font-semibold transition-all duration-150 cursor-pointer ${
+                    activeFolderId === null
+                      ? 'bg-neutral-100/85 text-neutral-900 font-bold border-l-2 border-emerald-500 pl-[10px]'
+                      : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+                  }`}
+                >
+                  <span className="text-neutral-500"><AlbumsIcon size={13} /></span>
+                  All Decks
+                </button>
+              </div>
+
+              {/* Folders directly listed in sidebar */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between px-1 mb-1">
+                  <span className="font-mono text-[9.5px] font-bold tracking-[0.12em] uppercase text-neutral-400">
+                    Folders
+                  </span>
+                  <button
+                    onClick={() => { setEditingFolder(null); setFolderModalOpen(true); }}
+                    className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer transition-colors"
+                  >
+                    + New
+                  </button>
+                </div>
+                {folders.length === 0 ? (
+                  <span className="text-[11px] text-neutral-400 px-3 py-2 italic">
+                    No folders created
+                  </span>
+                ) : (
+                  <div className="flex flex-col gap-0.5 max-h-[220px] overflow-y-auto pr-1">
+                    {folders.map((f) => {
+                      const isSelected = activeFolderId === f.id;
+                      const count = projects.filter((p) => p.folderId === f.id).length;
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => navigateToFolder(f.id)}
+                          className={`flex items-center justify-between px-3 py-1.5 text-[12px] font-medium transition-all duration-150 cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-50 text-emerald-900 font-bold'
+                              : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="w-2.5 h-2.5 shrink-0"
+                              style={{ backgroundColor: FOLDER_COLOR_HEX[f.color] }}
+                            />
+                            <span className="truncate">{f.name}</span>
+                          </span>
+                          <span className="font-mono text-[10px] text-neutral-400">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </nav>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Local Storage details & switcher */}
+          <div className="p-4 border-t border-neutral-100 flex flex-col gap-4">
+            <div className="p-3 bg-neutral-50 border border-neutral-200/60 rounded-none flex flex-col gap-2">
+              <div className="flex justify-between items-center text-[10.5px]">
+                <span className="font-bold text-neutral-600 uppercase tracking-wider font-mono text-[9px]">Local Storage</span>
+                <span className="font-mono font-bold text-neutral-700">{getLocalStorageUsage().readable}</span>
+              </div>
+              <div className="w-full bg-neutral-200/80 h-1.5 rounded-none overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full transition-all duration-300"
+                  style={{ width: `${getLocalStorageUsage().percent}%` }}
+                />
+              </div>
+              <span className="text-[9.5px] leading-relaxed text-neutral-400">
+                Decks saved on-device. Zero cloud syncing active.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between pl-1">
+              <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-400 font-mono">Workspace</span>
+              <ProfileMenu />
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {/* Main Content Area Wrapper */}
+      <div className={isPersonalWorkspace ? 'flex-1 min-w-0 flex flex-col pl-64 pb-24' : ''}>
+        {/* ── App Header ─────────────────────────────────────────────────── */}
+      <header className={`z-20 border-b border-neutral-200/80 bg-white/80 backdrop-blur-md ${isPersonalWorkspace ? 'fixed top-0 right-0 left-64' : 'sticky top-0'}`}>
+        <div className={`mx-auto flex h-[56px] items-center justify-between px-8 ${isPersonalWorkspace ? 'w-full' : 'max-w-[1220px]'}`}>
+          {!isPersonalWorkspace && (
+            <div className="flex items-center gap-3">
+              <img src={logoBlack} alt="Wozku Studio" className="h-6 w-auto" />
+              <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+                Studio
+              </span>
+              <span className="font-mono text-[10.5px] font-bold px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200/80 rounded-none flex items-center gap-1.5 select-none">
+                <PeopleIcon size={12} /> Shared Team
+              </span>
+            </div>
+          )}
+
+          <div className={`flex items-center gap-3 ${isPersonalWorkspace ? 'w-full justify-between' : ''}`}>
             <div className="relative w-64 sm:w-72">
               <span className="absolute inset-y-0 left-3 flex items-center text-neutral-400">
                 <SearchIcon size={14} />
@@ -1013,39 +1143,43 @@ export function HomePage() {
               {query && (
                 <button
                   onClick={() => setQuery('')}
-                  className="absolute inset-y-0 right-2 flex items-center text-neutral-400 hover:text-neutral-700"
+                  className="absolute inset-y-0 right-2 flex items-center text-neutral-400 hover:text-neutral-700 cursor-pointer"
                 >
                   &times;
                 </button>
               )}
             </div>
 
-            <HelpMenu onOpenShortcuts={() => setShortcutsOpen(true)} />
+            <div className="flex items-center gap-3">
+              <HelpMenu onOpenShortcuts={() => setShortcutsOpen(true)} />
 
-            <button
-              onClick={() => { setEditingFolder(null); setFolderModalOpen(true); }}
-              className="flex items-center gap-1.5 h-[34px] px-3.5 text-[12.5px] font-bold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer whitespace-nowrap"
-            >
-              <FolderIcon size={14} />
-              New Folder
-            </button>
+              <button
+                onClick={() => { setEditingFolder(null); setFolderModalOpen(true); }}
+                className="flex items-center gap-1.5 h-[34px] px-3.5 text-[12.5px] font-bold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <FolderIcon size={14} />
+                New Folder
+              </button>
 
-            <button
-              onClick={() => setNewDeckOpen(true)}
-              className="flex items-center gap-2 h-[34px] px-4 text-[12.5px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer whitespace-nowrap"
-            >
-              <AddIcon size={14} />
-              New deck
-            </button>
+              <button
+                onClick={() => setNewDeckOpen(true)}
+                className="flex items-center gap-2 h-[34px] px-4 text-[12.5px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <AddIcon size={14} />
+                New deck
+              </button>
 
-            <div className="pl-1 border-l border-neutral-200/80 flex items-center">
-              <ProfileMenu />
+              {!isPersonalWorkspace && (
+                <div className="pl-1 border-l border-neutral-200/80 flex items-center">
+                  <ProfileMenu />
+                </div>
+              )}
             </div>
           </div>
         </div>
       </header>
 
-      <main className="relative z-[1] mx-auto max-w-[1220px] px-8 pt-6">
+      <main className={`relative z-[1] mx-auto w-full px-8 ${isPersonalWorkspace ? 'pt-20' : 'pt-6 max-w-[1220px]'}`}>
         {/* ── Workspace Context Header (Root Library View) ── */}
         {!activeFolder && (
           <div className="flex items-center justify-between pb-4 mb-5 border-b border-neutral-200/70">
@@ -1055,12 +1189,12 @@ export function HomePage() {
                   {isPersonalWorkspace ? 'Personal Library' : userProfile.workspaceName}
                 </h2>
                 {isPersonalWorkspace ? (
-                  <span className="px-2 py-0.5 text-[10.5px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-none">
-                    🔒 Private &amp; Local
+                  <span className="px-2 py-0.5 text-[10.5px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-none flex items-center gap-1.5">
+                    <LockIcon size={11} /> Private &amp; Local
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 text-[10.5px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200/80 rounded-none">
-                    👥 Shared Team
+                  <span className="px-2 py-0.5 text-[10.5px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200/80 rounded-none flex items-center gap-1.5">
+                    <PeopleIcon size={11} /> Shared Team
                   </span>
                 )}
               </div>
@@ -1085,13 +1219,13 @@ export function HomePage() {
             <div className="hidden sm:flex items-center gap-2 text-[11.5px] font-mono font-semibold text-neutral-500">
               {isPersonalWorkspace ? (
                 <>
-                  <span>💾 {projects.length} Local Decks</span>
+                  <span className="flex items-center gap-1"><DatabaseIcon size={11} /> {projects.length} Local Decks</span>
                   <span>&middot;</span>
                   <span>0 Cloud Syncing</span>
                 </>
               ) : (
                 <>
-                  <span>👥 {projects.length} Team Decks</span>
+                  <span className="flex items-center gap-1"><PeopleIcon size={11} /> {projects.length} Team Decks</span>
                   <span>&middot;</span>
                   <span>Synced Team Access</span>
                 </>
@@ -1405,15 +1539,12 @@ export function HomePage() {
                 )}
 
                 {/* ── High-Fidelity SVG Folders Section (below Hero deck, above Everything Else) ── */}
-                {activeFolderId === null && visibleFolders.length > 0 && (
+                {!isPersonalWorkspace && activeFolderId === null && visibleFolders.length > 0 && (
                   <section className="mb-10 pt-4 border-t border-neutral-200/60">
                     <div className="flex items-center justify-between mb-4">
                       <Eyebrow>Folders ({visibleFolders.length})</Eyebrow>
                       <div className="flex items-center gap-2">
-                        {/* Pinch (Ctrl/Cmd+scroll on a trackpad reaches the DOM as a
-                            wheel event with ctrlKey set) resizes the icons directly
-                            on the shelf; these are the same control for anyone
-                            without a trackpad, and the only way to discover it at all. */}
+                        {/* Zoom control for folder icons. */}
                         <div className="flex items-center h-8 border border-neutral-200 bg-white">
                           <button
                             onClick={() => adjustFolderZoom(-16)}
@@ -1436,19 +1567,11 @@ export function HomePage() {
                             <ZoomInIcon size={13} />
                           </button>
                         </div>
-                        {/* No New Folder button here. The one in the app header
-                            is beside New deck, where the two creation verbs
-                            belong together, and it is reachable with no folders
-                            on the shelf at all - which this section, only
-                            rendered once a folder exists, is not. */}
+                        {/* Creation buttons are handled in header. */}
                       </div>
                     </div>
 
-                    {/* Capped rather than left to grow with the folder count: past a
-                        couple of rows the shelf would start pushing the actual decks
-                        further down the page every time someone made a new folder,
-                        which is the one thing a shelf of folders should never do to
-                        the thing it's sitting on top of. Scrolls internally instead. */}
+                    {/* Scrollable folders shelf. */}
                     <div
                       ref={folderShelfRef}
                       className="bg-white border border-neutral-200 rounded-[var(--radius-sharp)] p-5 overflow-y-auto"
@@ -1832,6 +1955,7 @@ export function HomePage() {
           </>
         )}
       </main>
+      </div>
 
       {/* Modals */}
       <NewDeckModal

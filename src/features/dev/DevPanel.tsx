@@ -1,20 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { clearFolders, clearLibrary, seedFolders, seedLibrary } from './seedLibrary';
 import { CloseIcon, FlashIcon } from '../ui/icons';
 import { setFitOutline, useFitOutline } from '../fit/fitStore';
 
-/**
- * Floating state simulator.
- *
- * Exists because the states that matter most were the hardest to reach. A library
- * with forty decks across five clients, or one still loading, or one that is
- * genuinely empty, each need a different layout - and none of them could be seen
- * without an hour of manual setup, so none of them were being designed against.
- *
- * Compiled out of production entirely: the whole component returns null unless
- * `import.meta.env.DEV`, so the bundler drops it and there is no way for it to
- * appear in front of a client.
- */
+/** Floating state simulator, compiled out in production. */
 
 interface DevPanelProps {
   /** Forces the host page into its loading treatment. */
@@ -33,8 +22,66 @@ export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: De
   const [open, setOpen] = useState(false);
   const outline = useFitOutline();
 
-  // Cmd/Ctrl + Shift + D, so the panel can be summoned without a mouse trip to
-  // the corner while comparing states.
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ startX: number; startY: number; posX: number; posY: number } | null>(null);
+  const hasDraggedRef = useRef(false);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const currentX = position?.x ?? rect.left;
+    const currentY = position?.y ?? rect.top;
+
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      posX: currentX,
+      posY: currentY,
+    };
+    hasDraggedRef.current = false;
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragRef.current) return;
+      const dx = e.clientX - dragRef.current.startX;
+      const dy = e.clientY - dragRef.current.startY;
+      
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        hasDraggedRef.current = true;
+      }
+
+      let newX = dragRef.current.posX + dx;
+      let newY = dragRef.current.posY + dy;
+
+      const maxX = window.innerWidth - 280;
+      const maxY = window.innerHeight - 50;
+      newX = Math.max(0, Math.min(newX, maxX));
+      newY = Math.max(0, Math.min(newY, maxY));
+
+      setPosition({ x: newX, y: newY });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
+  // Toggle panel with Cmd/Ctrl + Shift + D.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
@@ -51,9 +98,7 @@ export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: De
   const apply = (fn: () => void) => {
     fn();
     onDataChanged();
-    // Without this, clearing the library while scrolled halfway down a long list
-    // leaves the viewport below the end of a now-short page: the new state is
-    // on screen but nowhere near the eye.
+    // Reset scroll position to top.
     window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
@@ -61,13 +106,19 @@ export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: De
     'h-[30px] px-2.5 text-[11.5px] font-bold border transition-colors cursor-pointer whitespace-nowrap';
 
   return (
-    <div className="fixed bottom-4 left-4 z-[300] flex flex-col items-start gap-2 print:hidden">
+    <div
+      className="fixed z-[300] flex flex-col items-start gap-2 print:hidden"
+      style={position ? { left: `${position.x}px`, top: `${position.y}px`, bottom: 'auto' } : { bottom: '16px', left: '16px' }}
+    >
       {open && (
         <div
           className="w-[268px] bg-neutral-900 text-white shadow-2xl"
           style={{ boxShadow: '0 20px 50px -12px rgba(0,0,0,0.55)' }}
         >
-          <div className="flex items-center justify-between gap-2 px-3 h-[38px] border-b border-white/10">
+          <div
+            onMouseDown={handleMouseDown}
+            className="flex items-center justify-between gap-2 px-3 h-[38px] border-b border-white/10 cursor-move select-none"
+          >
             <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-white/45">
               State simulator
             </span>
@@ -151,8 +202,7 @@ export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: De
                 >
                   No decks
                 </button>
-                {/* A plain on/off toggle. It stays on until switched off, so the
-                    skeleton can actually be looked at. */}
+                {/* Loading skeleton toggle. */}
                 <button
                   onClick={() => onSetLoading(!loading)}
                   aria-pressed={loading}
@@ -199,10 +249,17 @@ export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: De
       )}
 
       <button
-        onClick={() => setOpen((v) => !v)}
+        onMouseDown={handleMouseDown}
+        onClick={(e) => {
+          if (hasDraggedRef.current) {
+            hasDraggedRef.current = false;
+            return;
+          }
+          setOpen((v) => !v);
+        }}
         title="State simulator (⌘⇧D)"
         aria-label="State simulator"
-        className="flex items-center gap-2 h-[34px] px-3 bg-neutral-900 text-white text-[11.5px] font-bold hover:bg-neutral-800 transition-colors cursor-pointer"
+        className="flex items-center gap-2 h-[34px] px-3 bg-neutral-900 text-white text-[11.5px] font-bold hover:bg-neutral-800 transition-colors cursor-pointer cursor-move select-none"
         style={{ boxShadow: '0 8px 24px -8px rgba(0,0,0,0.45)' }}
       >
         <FlashIcon size={13} />

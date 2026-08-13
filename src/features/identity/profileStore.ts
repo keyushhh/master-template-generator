@@ -1,9 +1,4 @@
-/**
- * User Identity and Privacy profile store.
- *
- * Manages local user identity, workspace preferences, and privacy status
- * stored in browser LocalStorage.
- */
+/** User Identity and Privacy profile store. */
 
 export interface WorkspaceOption {
   id: string;
@@ -52,6 +47,7 @@ export function saveUserProfile(profile: Partial<UserProfile>): UserProfile {
   const next = { ...current, ...profile };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event('storage'));
   } catch {
     // quota error fallback
   }

@@ -8,7 +8,7 @@ import {
   type WorkspaceOption,
 } from './profileStore';
 import { WorkspaceSwitchModal } from './WorkspaceSwitchModal';
-import { CloseIcon } from '../ui/icons';
+import { CloseIcon, LockIcon, PeopleIcon } from '../ui/icons';
 
 export function ProfileMenu() {
   const [profile, setProfile] = useState<UserProfile>(loadUserProfile);
@@ -85,7 +85,11 @@ export function ProfileMenu() {
 
       {/* Popover Menu - 0px sharp corners */}
       {open && (
-        <div className="absolute right-0 mt-2 w-84 bg-white border border-neutral-200 shadow-2xl rounded-none overflow-hidden z-[200] animate-in fade-in zoom-in-95 duration-100">
+        <div
+          className={`absolute w-84 bg-white border border-neutral-200 shadow-2xl rounded-none overflow-hidden z-[200] animate-in fade-in zoom-in-95 duration-100 ${
+            profile.workspaceId === 'personal' ? 'left-0 bottom-full mb-2' : 'right-0 mt-2'
+          }`}
+        >
           {/* Header & Identity */}
           <div className="p-4 border-b border-neutral-200 bg-neutral-50/80 flex items-start justify-between">
             <div className="flex items-center gap-3">
@@ -152,7 +156,7 @@ export function ProfileMenu() {
             {/* Privacy & Workspace Status Badge */}
             {activeWorkspace.kind === 'personal' ? (
               <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-none flex items-start gap-2.5">
-                <span className="text-[15px] select-none">🔒</span>
+                <span className="text-emerald-700 shrink-0 mt-0.5"><LockIcon size={14} /></span>
                 <div className="text-[11.5px] leading-relaxed text-emerald-950">
                   <strong className="font-bold block text-emerald-900">Personal & 100% Local</strong>
                   Decks are stored locally in this browser. No cloud syncing or third-party servers.
@@ -160,7 +164,7 @@ export function ProfileMenu() {
               </div>
             ) : (
               <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-none flex items-start gap-2.5">
-                <span className="text-[15px] select-none">👥</span>
+                <span className="text-blue-700 shrink-0 mt-0.5"><PeopleIcon size={14} /></span>
                 <div className="text-[11.5px] leading-relaxed text-blue-950">
                   <strong className="font-bold block text-blue-900">Shared Team Workspace</strong>
                   Synchronized with {activeWorkspace.membersCount} team members in {activeWorkspace.name}. Shared brand kits & team templates active.

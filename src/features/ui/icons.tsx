@@ -1,22 +1,4 @@
-/**
- * The app's icon set: Ionicons (ionic.io/ionicons), inlined.
- *
- * Generated from the `ionicons` package rather than redrawn, so each glyph is
- * the real thing, and inlined rather than loaded through the `<ion-icon>` web
- * component, which fetches every icon from a CDN at runtime.
- *
- * Each path keeps its own stroke/fill attributes exactly as Ionicons ships
- * them. That matters: several outline icons mix stroked and filled paths (the
- * pencil nib in create-outline is filled), so a blanket fill="none" on the
- * wrapper would quietly drop parts of them.
- *
- * Drawn at the native 512 viewBox and scaled by the <svg> box - re-plotting
- * onto a 24 grid throws the stroke weight off against the rest of the set.
- *
- * Slide *content* deliberately does not use these. A slide has to look
- * identical in the editor, in Present mode and in the exported .pptx, so its
- * marks live in the renderers and the exporter, not here.
- */
+/** Ionicons (ionic.io/ionicons) set, inlined for performance. */
 
 function Ion({ size, children }: { size: number; children: React.ReactNode }) {
   return (
@@ -32,11 +14,7 @@ function Ion({ size, children }: { size: number; children: React.ReactNode }) {
   );
 }
 
-/**
- * Lucide (lucide.dev), for the handful of glyphs Ionicons doesn't have.
- * Native 24 viewBox, stroke-only - do not mix its children into `Ion`, whose
- * 512 grid and fill-aware styling belong to a different icon set entirely.
- */
+/** Lucide (lucide.dev) set, native 24 viewBox. */
 function Lucide({ size, children }: { size: number; children: React.ReactNode }) {
   return (
     <svg
@@ -360,9 +338,7 @@ export function VideoIcon({ size = 14 }: IconProps) {
 }
 
 /** ionicons: list-outline */
-/** A table: an outer frame, a header row, and a column division. Distinct from
- *  ListIcon's bullets, which read as a list of items rather than a grid of
- *  fields - and the library's list view is a real table now. */
+/** ionicons: list-outline (Table view representation) */
 export function TableIcon({ size = 14 }: IconProps) {
   return (
     <Ion size={size}>
@@ -639,6 +615,39 @@ export function ZoomOutIcon({ size = 14 }: IconProps) {
       <circle cx="11" cy="11" r="8" />
       <line x1="21" y1="21" x2="16.65" y2="16.65" />
       <line x1="8" y1="11" x2="14" y2="11" />
+    </Lucide>
+  );
+}
+
+/** Lucide: lock */
+export function LockIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </Lucide>
+  );
+}
+
+/** Lucide: users */
+export function PeopleIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </Lucide>
+  );
+}
+
+/** Lucide: database */
+export function DatabaseIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+      <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
     </Lucide>
   );
 }

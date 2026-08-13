@@ -1,17 +1,4 @@
-/**
- * The changelog.
- *
- * ── How to add a release ───────────────────────────────────────────────────
- * Put the new entry at the TOP of `CHANGELOG` and bump its `version`. The app
- * reads `CHANGELOG[0]` as "latest", and shows an unread dot on the help button
- * until someone opens the changelog at that version, so shipping a release is
- * this file plus nothing else.
- *
- * Keep `date` as `YYYY-MM-DD`. Group changes under `added` / `improved` /
- * `fixed`; omit a group rather than leaving it empty. Write each line as what a
- * reader gets, not what was refactored: "the slide counter is readable on white
- * slides" rather than "moved chrome out of SlideStage".
- */
+/** The app changelog. */
 
 export type ChangeKind = 'added' | 'improved' | 'fixed';
 
@@ -29,16 +16,12 @@ export const CHANGELOG: Release[] = [
   {
     version: '1.6.0',
     date: '2026-08-13',
-    summary: 'Identity profile model, workspace switcher confirmation modal, and toolbar clipboard actions.',
+    summary: 'Redesigned Private Workspace layout featuring a fixed desktop sidebar, with the Shared Team Workspace remaining unchanged.',
     added: [
-      'Identity profile model with LocalStorage persistence for user display name, email, and workspace settings.',
-      'Workspace switcher with explicit confirmation modal when switching between Personal and Shared Team workspaces.',
-      'Find & Replace button (⌘F) added to the right stage rail toolbar.',
-      'Copy (⌘C) and Duplicate (⌘D) quick actions added to the floating shape selection bar, slide thumbnail menus, and command palette.',
-      'Dedicated Canva-style Duplicate icon featuring overlapping shapes with a plus badge to distinguish duplication from copying.',
+      'Personal Workspace visual layout featuring a viewport-locked sidebar navigation panel, local storage allocation bar, and custom profile switch menu.',
     ],
     improved: [
-      'Studio header decluttered by consolidating export workflows and removing profile settings from the presentation editor.',
+      'Locked Private Workspace header toolbar to the top of the viewport during page scroll to match the fixed sidebar placement.',
     ],
   },
   {
@@ -313,8 +296,7 @@ export const LATEST_VERSION = CHANGELOG[0].version;
 
 const SEEN_KEY = 'wozku-changelog-seen-v1';
 
-/** True when the newest release has not been opened yet, which is what puts the
- *  dot on the help button. */
+/** True when the newest release has not been opened yet. */
 export function hasUnreadChangelog(): boolean {
   try {
     return localStorage.getItem(SEEN_KEY) !== LATEST_VERSION;
@@ -332,8 +314,7 @@ export function markChangelogSeen(): void {
   }
 }
 
-/** "12 Aug 2026" from the stored `YYYY-MM-DD`, without pulling in a date lib.
- *  Parsed as UTC so a date never slips a day west of Greenwich. */
+/** Formats YYYY-MM-DD release date representation. */
 export function formatReleaseDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
