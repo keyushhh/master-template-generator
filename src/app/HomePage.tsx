@@ -1182,52 +1182,69 @@ export function HomePage() {
       <main className={`relative z-[1] mx-auto w-full px-8 ${isPersonalWorkspace ? 'pt-20' : 'pt-6 max-w-[1220px]'}`}>
         {/* ── Workspace Context Header (Root Library View) ── */}
         {!activeFolder && (
-          <div className="flex items-center justify-between pb-4 mb-5 border-b border-neutral-200/70">
-            <div className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-2">
-                <h2 className="text-[20px] font-bold text-neutral-900 tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
+          <div className="flex flex-col gap-3 pb-5 mb-6 border-b border-neutral-200/60">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              {/* Title & Badge */}
+              <div className="flex items-center gap-3">
+                <h2 className="text-[22px] font-bold text-neutral-900 tracking-[-0.02em]" style={{ fontFamily: 'var(--font-display)' }}>
                   {isPersonalWorkspace ? 'Personal Library' : userProfile.workspaceName}
                 </h2>
+
                 {isPersonalWorkspace ? (
-                  <span className="px-2 py-0.5 text-[10.5px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-none flex items-center gap-1.5">
+                  <span className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10.5px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-none select-none">
                     <LockIcon size={11} /> Private &amp; Local
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 text-[10.5px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200/80 rounded-none flex items-center gap-1.5">
+                  <span className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10.5px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200/80 rounded-none select-none">
                     <PeopleIcon size={11} /> Shared Team
                   </span>
                 )}
               </div>
-              {isPersonalWorkspace ? (
-                <p className="text-[12px] text-neutral-500">
-                  Decks saved on this computer &middot; 100% private, on-device local storage
-                </p>
-              ) : (
-                <div className="flex items-center gap-2 mt-0.5">
-                  <div className="flex items-center -space-x-1.5 overflow-hidden">
-                    <span className="inline-block h-5 w-5 rounded-none ring-1 ring-white bg-emerald-500 text-white text-[9px] font-mono font-bold flex items-center justify-center">SU</span>
-                    <span className="inline-block h-5 w-5 rounded-none ring-1 ring-white bg-indigo-500 text-white text-[9px] font-mono font-bold flex items-center justify-center">AB</span>
-                    <span className="inline-block h-5 w-5 rounded-none ring-1 ring-white bg-amber-500 text-white text-[9px] font-mono font-bold flex items-center justify-center">CD</span>
+
+              {/* Team avatars on the right (Shared only) */}
+              {!isPersonalWorkspace && (
+                <div className="flex items-center gap-2.5 self-start sm:self-auto select-none">
+                  <div className="flex items-center gap-1">
+                    <span className="w-6 h-6 bg-emerald-600 text-white text-[9px] font-mono font-bold flex items-center justify-center">SU</span>
+                    <span className="w-6 h-6 bg-indigo-600 text-white text-[9px] font-mono font-bold flex items-center justify-center">AB</span>
+                    <span className="w-6 h-6 bg-amber-600 text-white text-[9px] font-mono font-bold flex items-center justify-center">CD</span>
                   </div>
-                  <span className="text-[12px] text-neutral-500">
-                    6 team collaborators &middot; Shared brand kits &amp; assets active
+                  <span className="text-[11px] text-neutral-400 font-medium">
+                    +3 others
                   </span>
                 </div>
               )}
             </div>
 
-            <div className="hidden sm:flex items-center gap-2 text-[11.5px] font-mono font-semibold text-neutral-500">
+            {/* Sub-header Metadata row */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-neutral-500 font-medium">
               {isPersonalWorkspace ? (
                 <>
-                  <span className="flex items-center gap-1"><DatabaseIcon size={11} /> {projects.length} Local Decks</span>
-                  <span>&middot;</span>
-                  <span>0 Cloud Syncing</span>
+                  <span className="flex items-center gap-1.5 text-neutral-700">
+                    <span className="text-neutral-400"><DatabaseIcon size={13} /></span>
+                    <strong>{projects.length}</strong> {projects.length === 1 ? 'deck' : 'decks'} saved on-device
+                  </span>
+                  <span className="text-neutral-300 select-none">|</span>
+                  <span className="text-neutral-500">100% private local sandbox</span>
+                  <span className="text-neutral-300 select-none">|</span>
+                  <span className="flex items-center gap-1.5 text-emerald-600">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-none animate-pulse" />
+                    Offline mode active
+                  </span>
                 </>
               ) : (
                 <>
-                  <span className="flex items-center gap-1"><PeopleIcon size={11} /> {projects.length} Team Decks</span>
-                  <span>&middot;</span>
-                  <span>Synced Team Access</span>
+                  <span className="flex items-center gap-1.5 text-neutral-700">
+                    <span className="text-neutral-400"><AlbumsIcon size={13} /></span>
+                    <strong>{projects.length}</strong> team decks active
+                  </span>
+                  <span className="text-neutral-300 select-none">|</span>
+                  <span className="text-neutral-500">Shared brand kits &amp; assets synced</span>
+                  <span className="text-neutral-300 select-none">|</span>
+                  <span className="flex items-center gap-1.5 text-blue-600">
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-none animate-pulse" />
+                    Synced with cloud
+                  </span>
                 </>
               )}
             </div>
