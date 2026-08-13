@@ -31,6 +31,9 @@ interface PresentModeProps {
   ast: DocumentNode | null;
   /** Slide index (within visible slides) to open on. */
   startIndex?: number;
+  /** Fires as the presentation moves, so a caller can remember where it got to.
+   *  Only the library uses this: see features/deck/presentPosition.ts. */
+  onIndexChange?: (index: number) => void;
   /** The deck's resolved theme. */
   theme?: DeckTheme;
 }
@@ -140,6 +143,7 @@ export function PresentMode({
   deck,
   ast,
   startIndex = 0,
+  onIndexChange,
   theme = WOZKU_THEME,
 }: PresentModeProps) {
   const visible = useMemo(() => deck.slides.filter((s) => !s.hidden), [deck.slides]);
@@ -302,6 +306,14 @@ export function PresentMode({
     setSidebarHover(false);
     setAutoPlay(false);
   }, [open, startIndex, total]);
+
+  // Report the position while presenting, so it can be resumed. Only while open:
+  // the reset-on-open effect above writes `index` back to the start, and
+  // reporting that would erase the position the moment a presentation ends.
+  useEffect(() => {
+    if (!open) return;
+    onIndexChange?.(index);
+  }, [open, index, onIndexChange]);
 
   // Auto-play slideshow (5s interval)
   useEffect(() => {

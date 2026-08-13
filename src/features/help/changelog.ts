@@ -27,6 +27,24 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.5.0',
+    date: '2026-08-13',
+    summary: 'Rotation and opacity controls for shapes, deck rename affordances, and library present resumption.',
+    added: [
+      'Rotation and opacity controls for inserted shapes, image containers, and text boxes, with full native export to PowerPoint.',
+      'Explicit hover affordance for renaming decks in library grid and hero cards.',
+      'Presenting from the library now remembers and resumes from your last viewed slide position.',
+    ],
+    improved: [
+      'Updated tab title to "Wozku Studio", added favicon, and aligned browser theme-color with app ground (#F1F2F4).',
+      'Cleaned up README and added build outputs (dist/) to .gitignore.',
+    ],
+    fixed: [
+      'Fixed library skeleton loading state so it renders correctly on deferred cover load paths.',
+      'Removed duplicate "New Folder" action from the folder shelf.',
+    ],
+  },
+  {
     version: '1.4.0',
     date: '2026-08-13',
     summary: 'Full control of text spacing, and videos you can put on a slide and actually play.',

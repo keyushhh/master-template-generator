@@ -34,15 +34,21 @@ import {
   LINE_HEIGHT_MAX,
   LINE_HEIGHT_MIN,
   NEUTRAL_SWATCHES,
+  OPACITIES,
+  OPACITY_MAX,
+  OPACITY_MIN,
   PARA_SPACES,
   PARA_SPACE_MAX,
+  ROTATIONS,
   SIZE_MAX,
   SIZE_MIN,
   TEXT_CASES,
   clampIndent,
   clampLetterSpacing,
   clampLineHeight,
+  clampOpacity,
   clampParaSpace,
+  clampRotation,
   clampSize,
   fontStack,
   isBrandColor,
@@ -218,6 +224,96 @@ function Menu({
         )}
     </div>
   );
+}
+
+/**
+ * Rotation and opacity for an inserted shape.
+ *
+ * One menu rather than two bar buttons, for the same reason spacing is one: both
+ * are "how this shape sits" and neither is reached often enough to hold width in
+ * a single-row bar. Angles are offered as the ones that read as deliberate, with
+ * the typed box as the escape hatch; opacity steps coarsely, because the values
+ * between the steps do not survive a projector.
+ */
+function TransformMenu({
+  shape, onPatchShape,
+}: {
+  shape: OverlayShape;
+  onPatchShape: (patch: Partial<OverlayShape>) => void;
+}) {
+  const rotation = shape.rotation ?? 0;
+  const opacity = shape.opacity ?? 1;
+  const touched = rotation !== 0 || opacity !== 1;
+
+  return (
+    <Menu title="Rotation and opacity" label="Transform" width={252} badge={touched}>
+      {() => (
+        <>
+          <div style={{ display: 'flex', gap: 4, padding: '2px 4px 6px' }}>
+            {([0, 90, 180, 270] as const).map((deg) => (
+              <button
+                key={deg}
+                title={deg === 0 ? 'Square to the grid' : `Rotate to ${deg} degrees`}
+                aria-pressed={rotation === deg}
+                onClick={() => onPatchShape({ rotation: deg === 0 ? undefined : deg })}
+                style={{
+                  ...ctl, flex: 1, padding: 0, ...mono, fontSize: 10,
+                  ...(rotation === deg ? ctlOn : { border: '1px solid var(--neutral-200)' }),
+                }}
+              >
+                {deg}°
+              </button>
+            ))}
+          </div>
+          <StepRow
+            label="Rotation"
+            hint="deg"
+            shown={rotation}
+            format={(v) => String(Math.round(v))}
+            onStep={(dir) =>
+              onPatchShape({ rotation: nextRotation(rotation, dir) || undefined })
+            }
+            onType={(raw) => {
+              const n = Number(raw.replace(/[^0-9.-]/g, ''));
+              if (!Number.isFinite(n)) return;
+              onPatchShape({ rotation: clampRotation(n) || undefined });
+            }}
+            onClear={() => onPatchShape({ rotation: undefined })}
+            overridden={rotation !== 0}
+          />
+          <StepRow
+            label="Opacity"
+            hint="%"
+            shown={Math.round(opacity * 100)}
+            format={(v) => String(Math.round(v))}
+            onStep={(dir) => {
+              const next = stepScale([...OPACITIES].sort((a, b) => a - b), opacity, dir, OPACITY_MIN, OPACITY_MAX);
+              onPatchShape({ opacity: next === 1 ? undefined : clampOpacity(next) });
+            }}
+            onType={(raw) => {
+              const n = Number(raw.replace(/[^0-9.]/g, ''));
+              if (!Number.isFinite(n) || n <= 0) return;
+              const frac = clampOpacity(n / 100);
+              onPatchShape({ opacity: frac === 1 ? undefined : frac });
+            }}
+            onClear={() => onPatchShape({ opacity: undefined })}
+            overridden={opacity !== 1}
+          />
+        </>
+      )}
+    </Menu>
+  );
+}
+
+/** Next angle along the preset list, wrapping. Kept beside the menu rather than
+ *  in rails.ts because the wrap is a control behaviour, not a brand rail. */
+function nextRotation(current: number, dir: 1 | -1): number {
+  const sorted = [...ROTATIONS].sort((a, b) => a - b);
+  const next = dir === 1
+    ? sorted.find((v) => v > current)
+    : [...sorted].reverse().find((v) => v < current);
+  if (next !== undefined) return clampRotation(next);
+  return dir === 1 ? sorted[0] : clampRotation(sorted[sorted.length - 1]);
 }
 
 /** A row inside a Menu: icon, label, and an optional right-hand hint. */
@@ -797,6 +893,15 @@ export function EditToolbar({
   const shownFont = textStyle?.fontFamily ?? fontName;
   const grouped = selectedSlotCount > 1;
   const isFillable = selectedShape && (selectedShape.kind === 'rect' || selectedShape.kind === 'ellipse');
+  /** The kinds PowerPoint can carry a rotation and a transparency on, which is
+   *  also the set worth rotating: a panel, an ellipse, a photo, a caption. */
+  const canTransform =
+    !!selectedShape &&
+    !!onPatchShape &&
+    (selectedShape.kind === 'rect' ||
+      selectedShape.kind === 'ellipse' ||
+      selectedShape.kind === 'image' ||
+      selectedShape.kind === 'text');
   const tableDims = selectedShape?.kind === 'table'
     ? { rows: selectedShape.rows?.length ?? 0, cols: selectedShape.colWidthsPx?.length ?? 0 }
     : null;
@@ -971,6 +1076,17 @@ export function EditToolbar({
             </button>
           )}
 
+          {/* An inserted text box is a shape as well as text, so it gets the
+              transform controls here - this branch is the only one it reaches.
+              A template slot has no rotation of its own (it is positioned by its
+              renderer), so `selectedShape` is undefined and this stays absent. */}
+          {canTransform && (
+            <>
+              <Sep />
+              <TransformMenu shape={selectedShape!} onPatchShape={onPatchShape!} />
+            </>
+          )}
+
           {isImportedSelection && (
             <button
               title="Delete this text box"
@@ -1089,6 +1205,13 @@ export function EditToolbar({
               <Sep />
             </>
           )}
+
+          {/* Rotation and opacity, for the kinds where they mean something. A
+              rotated table or chart is exotic enough that offering it would cost
+              every user width to serve almost none, and PowerPoint cannot carry
+              either one on a table anyway - so the control is absent there
+              rather than present and quietly lost on export. */}
+          {canTransform && <TransformMenu shape={selectedShape} onPatchShape={onPatchShape!} />}
 
           {/* Layer order behind one labelled menu. Four bare arrows in a row was
               unreadable - nobody can tell "back" from "backward" by arrowhead. */}

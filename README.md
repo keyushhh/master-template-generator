@@ -1,88 +1,107 @@
-# Master Template Generator
+# Wozku Studio (Master Template Generator)
 
+A deck studio. It turns a business record into branded slides, edits them on a
+1920x1080 canvas, and exports editable PowerPoint, PDF, images and standalone
+HTML. Everything runs in the browser: no server is involved in generation,
+editing, persistence or export.
 
+## Key features
 
-## Key Features
+### Automatic generation
 
-### ⚡ Automatic Generation
-* Upload structured Markdown documents (`.md` or `.markdown`) with YAML frontmatter.
-* The built-in parser validates required metadata keys (`title`, `version`, `type`, `client`) and constructs an Abstract Syntax Tree (AST).
-* The Presentation Compiler maps document sections (e.g. *Executive Summary*, *Key Metric*, *Comparative Table*, *Process*) to custom-designed slide layouts.
+* Upload a structured Markdown document (`.md` or `.markdown`) with YAML
+  frontmatter.
+* The parser validates the required metadata keys (`title`, `version`, `type`,
+  `client`) and builds an Abstract Syntax Tree.
+* The compiler maps document sections (Executive Summary, Key Metric,
+  Comparative Table, Process and so on) onto the 14 house slide layouts.
+* An existing `.pptx` can be uploaded instead. Its slides keep their own layout
+  and content, remapped onto the brand palette and type stack.
 
-### ✍️ Interactive Slide Editing
-feat/sidebar-polish-and-logo-slots
-* Click **Edit Content** to toggle editing mode; slide slots become directly editable inline.
-* A floating session bar lets you save or discard in-progress edits.
-* **Reset** (armed with a confirmation safeguard) reverts the deck to its generated state.
-* Undo/redo for committed changes, persisted across page reloads.
-* Image containers (uploaded photos, maps) can be deleted entirely, not just cleared - the layout falls back to a text-only variant.
+### Interactive editing
 
-### 📋 Slide Thumbnails & Deck Operations
-* Dim / hide slides to exclude them from export and present mode.
-* Duplicate, rename, reorder, or delete slides from the navigation sidebar.
-* Manage multiple named decks side by side, each with its own source, slides, and edit history.
+* Edit mode forks the deck: slide slots become editable in place, and a session
+  bar saves or discards the whole fork.
+* Undo and redo for both committed changes and in-progress edits, persisted
+  across reloads.
+* Insert text boxes, rectangles, ellipses, images, tables, charts and video.
+  Drag, resize, rotate, set opacity, snap to the brand grid, and reorder layers.
+* Formatting runs on brand rails: the type scale, line heights, letter spacings
+  and palette the templates already use, each with a typed escape hatch one
+  interaction deeper.
+* Change any slide's layout without losing content. Parked content returns if
+  you switch back.
+* Reset reverts a deck to the state it was in right after import or generation.
 
-### 💾 Export & Sharing
-* **Export PPTX:** Builds a native PowerPoint file via `pptxgenjs` - real, editable text boxes, shapes, and tables per template, not a flattened image. Only genuine raster content (photos, logos, maps) is embedded as an image; decorative backgrounds (grid/glow) are baked into the slide's actual (non-editable) background fill.
-* **Export PDF:** Captures each slide's live DOM at native 1920x1080 resolution and assembles a landscape PDF via `jsPDF`.
-* **Download PNGs:** Captures each slide as a PNG and bundles them into a zip via `jszip`.
-* **Copy Share Link:** Copies the active deck's URL to your clipboard.
+### Deck operations
 
-All exports run entirely in the browser - no server involved.
+* Multiple named decks side by side, each with its own source, slides and edit
+  history.
+* Folders, with drag and drop filing, colour, and export of a whole folder as a
+  ZIP.
+* A slide sorter for reordering, hiding and bulk operations.
+* Borrow slides from another deck.
+* Speaker notes per slide, which travel into PowerPoint's own notes pane.
+* Brand kits: a client's accent colour and typefaces, applied everywhere the
+  deck is drawn and embedded into the export.
 
+### Preflight
 
-* Click the **Edit Content** button to toggle editing mode.
-* Slide slots become directly editable inline (`contentEditable` spans).
-* A floating session bar lets you save or discard in-progress edits.
-* Click the **Reset** button (armed with a confirmation safeguard) to revert the deck back to its generated state.
+* The fit scanner finds text that is cut off and reports it per slide. "Fit all"
+  shrinks the type on every clipped slide as a single undo.
+* The export sheet reports unfilled placeholders and any typeface that cannot
+  be embedded, before you export rather than after.
 
-### 📋 Slide Thumbnails & Deck Operations
-* Dim / hide slides to exclude them from the presentation view.
-* Duplicate, rename, or delete slides directly from the navigation sidebar.
+### Present mode
 
-### 💾 Export & Sharing
-* **Export PDF:** Triggers a vector print layout tailored via print stylesheets to render slides at their exact 1920x1080 resolution, complete with slide-by-slide page breaks.
-* **Export PPTX:** Captures slides as high-definition images and compiles them into a standard 16:9 widescreen PowerPoint deck.
-* **Copy Share Link:** Instantly copies the active deck's URL to your clipboard.
+* Fullscreen presenter with a laser pointer, an annotation pen, a blank-screen
+  key and a jump-to-slide grid.
+* A presenter view with the next slide, a rehearsal timer and speaker notes at a
+  readable size, on a second window over `BroadcastChannel`.
+* A teleprompter with adjustable speed and type size.
+* Video on a slide plays in present mode.
 
+### Export
 
----
+* **PPTX** is built natively through `pptxgenjs`, one build function per
+  template. Real, editable text boxes, shapes, tables and charts, with the brand
+  fonts embedded. Only genuine raster content (photos, logos, maps) is embedded
+  as an image, and decorative backgrounds are baked into the slide's background
+  fill. It is not a screenshot.
+* **PDF** captures each slide's live DOM at 1920x1080 and assembles a landscape
+  document through `jsPDF`.
+* **PNG** captures each slide at 2x and bundles them into a ZIP through `jszip`.
+* **HTML** writes a single self-contained file with slide transitions and
+  keyboard controls. Uploaded video is inlined and plays offline.
 
-## Tech Stack
+## Tech stack
 
-* **Core Framework:** React, TypeScript, Vite
-* **Styling:** CSS variables + Tailwind CSS v4
-* **Motion & Interactions:** Framer Motion
-
+* React, TypeScript, Vite
+* CSS custom properties plus Tailwind CSS v4
+* Framer Motion for interaction
 
 ## Development
 
-Install dependencies:
 ```sh
 npm install
-
-
-Start the local development server:
-```sh
 npm run dev
 ```
 
-Build the application for production:
+Before calling anything done:
+
 ```sh
+npx tsc -p tsconfig.app.json --noEmit
+npm test
 npm run build
 ```
 
-No additional services are required - export, persistence, and editing are all client-side.
+`npm test` covers the theme, the brand kit, preflight, fonts, the formatting
+seam, the PowerPoint format seam and the writing-style check. Interaction
+changes cannot be proved by these and need clicking through in `npm run dev`.
 
-```
+## Storage
 
-Start the local development server:
-```sh
-npm run dev
-```
-
-Build the application for production:
-```sh
-npm run build
-```
-
+Decks live in `localStorage`, so they do not travel between browsers. Video
+bytes live in IndexedDB and the deck stores only an asset id. Images are
+downscaled to JPEG data URLs. See `CLAUDE.md` for the rules this places on the
+deck model.

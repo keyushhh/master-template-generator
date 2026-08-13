@@ -158,6 +158,15 @@ export interface OverlayShape {
   /** Hex, no '#'. Absent means no fill (an outlined shape, or a plain text box). */
   fill?: string;
   line?: { color: string; widthPx: number };
+  /** Clockwise rotation in degrees about the shape's own centre. Absent means 0,
+   *  i.e. exactly the unrotated behaviour every shape had before this field.
+   *  x/y/w/h stay the unrotated box, so geometry, snapping and the export all
+   *  keep reading the same numbers they always did. */
+  rotation?: number;
+  /** 0 (invisible) to 1 (solid). Absent means 1, so an untouched shape is opaque
+   *  exactly as before. Stored as a fraction to match CSS; the exporter converts
+   *  to PowerPoint's transparency percentage. */
+  opacity?: number;
   /** kind === 'image' - a downscaled data URL, as elsewhere in the deck. */
   imageUrl?: string;
   /** kind === 'text' - the text box's content. Newlines are honoured. */

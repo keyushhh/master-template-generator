@@ -24,6 +24,7 @@ import {
   deleteProject,
   duplicateProject,
   listFolders,
+  listProjects,
   listProjectSummaries,
   moveProjectToFolder,
   moveProjectsToFolder,
@@ -35,6 +36,7 @@ import {
   type FolderMeta,
   type ProjectSummary,
 } from '../features/deck/deckStore';
+import { getPresentPosition, setPresentPosition } from '../features/deck/presentPosition';
 import { brandKitThemes, listBrandKits } from '../features/theme/brandKitStore';
 import { ensureFonts } from '../features/fonts/loadFont';
 import { css as themeCss, themeById, WOZKU_THEME, type DeckTheme } from '../features/theme/deckTheme';
@@ -155,6 +157,19 @@ function groupByAge(items: ProjectSummary[]): { label: string; items: ProjectSum
   }
   return buckets.filter((b) => b.items.length > 0);
 }
+
+/**
+ * Above this many decks, reading every cover is slow enough to be worth
+ * covering with the skeleton.
+ *
+ * The covers read (`listProjectSummaries`) parses each deck's whole session,
+ * images included, so it scales with the library while the index read does not.
+ * Below the threshold it is imperceptible, and showing a skeleton for a frame
+ * would be a flash rather than a loading state - so a small library is read
+ * synchronously and never sees one. Above it, the page paints the skeleton
+ * first and fills in once the read lands, which is what the skeleton is for.
+ */
+const SKELETON_THRESHOLD = 8;
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
@@ -323,7 +338,12 @@ function LibrarySkeleton() {
 export function HomePage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const [projects, setProjects] = useState<ProjectSummary[]>(() => listProjectSummaries());
+  /** Whether this library is big enough that its covers are worth loading after
+   *  the first paint rather than before it. Decided once, on mount. */
+  const [deferCovers] = useState(() => listProjects().length > SKELETON_THRESHOLD);
+  const [projects, setProjects] = useState<ProjectSummary[]>(() =>
+    deferCovers ? [] : listProjectSummaries()
+  );
   const [folders, setFolders] = useState<FolderMeta[]>(() => listFolders());
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   
@@ -332,7 +352,7 @@ export function HomePage() {
   const [navIndex, setNavIndex] = useState(0);
 
   const [kits, setKits] = useState(() => listBrandKits());
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(deferCovers);
   const [query, setQuery] = useState('');
   const [kitFilter, setKitFilter] = useState<string | null>(null);
   /**
@@ -540,6 +560,14 @@ export function HomePage() {
     });
   }, []);
 
+  /** Fills in a big library's covers once the page has painted. Runs after the
+   *  first paint by definition, so the skeleton is on screen while it reads. */
+  useEffect(() => {
+    if (!deferCovers) return;
+    reload();
+    setLoading(false);
+  }, [deferCovers, reload]);
+
   const themeOf = useCallback(
     (p: ProjectSummary) => themeById(p.deck?.themeId, kitThemes),
     [kitThemes]
@@ -597,7 +625,7 @@ export function HomePage() {
       updateFolderColor(editingFolder.id, color);
       showToast(`Updated folder "${name}"`, 'success');
     } else {
-      const f = createFolder(name, color);
+      createFolder(name, color);
       showToast(`Created folder "${name}"`, 'success');
     }
     setEditingFolder(null);
@@ -897,16 +925,34 @@ export function HomePage() {
         className={`${className} w-full bg-white border border-emerald-400 px-1 -mx-1 outline-none`}
       />
     ) : (
-      <span
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          setRenamingId(p.id);
-          setDraftName(p.name);
-        }}
-        title="Double-click to rename"
-        className={`${className} block truncate`}
-      >
-        {p.name}
+      /* The pencil is the affordance; the double-click is the shortcut for
+         anyone who has found it. Named group rather than a bare `group` so it
+         reacts to hovering the name itself, not to hovering the whole card it
+         happens to sit in - the hero, the grid card and the table row each wrap
+         this in a different parent. */
+      <span className="group/name flex items-baseline gap-1.5 min-w-0 max-w-full">
+        <span
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            setRenamingId(p.id);
+            setDraftName(p.name);
+          }}
+          className={`${className} truncate`}
+        >
+          {p.name}
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setRenamingId(p.id);
+            setDraftName(p.name);
+          }}
+          title="Rename this deck"
+          aria-label={`Rename ${p.name}`}
+          className="shrink-0 self-center p-0.5 text-neutral-400 opacity-0 transition-opacity group-hover/name:opacity-100 focus-visible:opacity-100 hover:text-neutral-900 cursor-pointer"
+        >
+          <CreateIcon size={13} />
+        </button>
       </span>
     );
 
@@ -1304,13 +1350,11 @@ export function HomePage() {
                             <ZoomInIcon size={13} />
                           </button>
                         </div>
-                        <button
-                          onClick={() => { setEditingFolder(null); setFolderModalOpen(true); }}
-                          className="flex items-center gap-2 px-3.5 h-8 bg-white border border-neutral-200 hover:border-neutral-300 rounded-[var(--radius-sharp)] text-[12px] font-bold text-neutral-800 transition-all cursor-pointer"
-                        >
-                          <FolderIcon size={14} />
-                          New Folder
-                        </button>
+                        {/* No New Folder button here. The one in the app header
+                            is beside New deck, where the two creation verbs
+                            belong together, and it is reachable with no folders
+                            on the shelf at all - which this section, only
+                            rendered once a folder exists, is not. */}
                       </div>
                     </div>
 
@@ -1769,7 +1813,14 @@ export function HomePage() {
           deck={presenting.deck}
           ast={null}
           theme={themeOf(presenting)}
-          startIndex={0}
+          // Picks up where this deck's last presentation stopped. Presenting
+          // from the library has no slide on screen to start from, so the
+          // alternative is restarting at slide one every time.
+          startIndex={getPresentPosition(
+            presenting.id,
+            presenting.deck.slides.filter((s) => !s.hidden).length
+          )}
+          onIndexChange={(i) => setPresentPosition(presenting.id, i)}
         />
       )}
 

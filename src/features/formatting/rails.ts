@@ -91,6 +91,33 @@ export const clampParaSpace = (v: number) =>
 export const clampIndent = (v: number) =>
   Math.min(INDENT_MAX_LEVEL, Math.max(0, Math.round(v)));
 
+/**
+ * Rotation steps in degrees, for an inserted shape.
+ *
+ * Deliberately not a free dial. A deck's shapes are either square to the grid or
+ * on one of a few deliberate angles, and a tilt of 7 degrees reads as a mistake
+ * rather than a decision - so the fast path offers the angles that look intended
+ * and the typed box below them is the escape hatch for anything else.
+ */
+export const ROTATIONS = [0, 90, 180, 270, 45, 135, 225, 315, 15, 345] as const;
+
+/** Rotation is stored modulo a full turn, so stepping past 360 wraps rather
+ *  than accumulating a number nothing can read back. */
+export const clampRotation = (deg: number) => ((Math.round(deg) % 360) + 360) % 360;
+
+/** Opacity steps as fractions. Coarse on purpose: a tinted panel behind copy
+ *  wants roughly a tenth, a watermark roughly a fifth, and the values between
+ *  them are not distinguishable on a projector. */
+export const OPACITIES = [1, 0.9, 0.75, 0.6, 0.5, 0.4, 0.25, 0.15, 0.1] as const;
+
+/** Floor is above zero: a fully invisible shape is indistinguishable from a
+ *  deleted one, and someone who wants it gone has Delete. */
+export const OPACITY_MIN = 0.05;
+export const OPACITY_MAX = 1;
+
+export const clampOpacity = (v: number) =>
+  Math.min(OPACITY_MAX, Math.max(OPACITY_MIN, Math.round(v * 100) / 100));
+
 export const TEXT_CASES = [
   { key: 'upper', label: 'UPPERCASE' },
   { key: 'lower', label: 'lowercase' },

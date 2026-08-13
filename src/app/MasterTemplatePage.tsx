@@ -613,6 +613,14 @@ export function MasterTemplatePage() {
     return byFocus ?? onStage ?? displayDeck.slides.find((s) => !s.hidden);
   })();
 
+  /** Where Present opens: the stage's own slide, counted among the visible ones
+   *  since that is the sequence the presentation runs through. */
+  const presentStartIndex = (() => {
+    const visible = displayDeck.slides.filter((s) => !s.hidden);
+    const at = visible.findIndex((s) => s.instanceId === currentSlideId);
+    return at === -1 ? 0 : at;
+  })();
+
   const selectedOverlayShape =
     selection?.kind === 'overlay' && targetSlide
       ? targetSlide.content.overlay?.find((s) => s.id === selection.shapeId)
@@ -1967,6 +1975,10 @@ export function MasterTemplatePage() {
         deck={displayDeck}
         ast={ast}
         theme={deckTheme}
+        // Presents from the slide on the stage, not from slide one. Hitting
+        // Present while looking at slide nine to rehearse it should not mean
+        // arrowing back through eight slides first.
+        startIndex={presentStartIndex}
       />
       <BrandKitModal
         open={brandKitOpen}

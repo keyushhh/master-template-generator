@@ -112,6 +112,12 @@ export function ShapeOverlay({
     scale: number;
     moved: boolean;
     extras: ExtraGuides;
+    /** The shape's rotation at the moment the drag began, in radians. Resize
+     *  needs it: the handles rotate with the shape, so a pointer movement in
+     *  screen space has to be turned back into the shape's own axes before it
+     *  can be read as "wider" or "taller". Zero for an unrotated shape, where
+     *  the maths below reduces to exactly what it did before rotation existed. */
+    rotationRad: number;
   } | null>(null);
 
   useEffect(() => {
@@ -141,9 +147,28 @@ export function ShapeOverlay({
       if (!d.moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
       d.moved = true;
       const free = e.altKey;
-      const rect = d.handle
-        ? snapResize(d.startRect, d.handle, dx, dy, free, d.extras)
-        : clampToSlide(snapMove({ ...d.startRect, x: d.startRect.x + dx, y: d.startRect.y + dy }, free, d.extras));
+      // Moving is unaffected by rotation: the box travels with the pointer
+      // whichever way it happens to be facing. Resizing is not, so the delta is
+      // rotated back into the shape's own axes first - drag the handle on a
+      // 90-degree-rotated shape's visible right edge and it should get wider in
+      // its own terms, which is taller on screen.
+      let rect: Rect;
+      if (d.handle) {
+        const cos = Math.cos(-d.rotationRad);
+        const sin = Math.sin(-d.rotationRad);
+        rect = snapResize(
+          d.startRect,
+          d.handle,
+          dx * cos - dy * sin,
+          dx * sin + dy * cos,
+          free,
+          d.extras
+        );
+      } else {
+        rect = clampToSlide(
+          snapMove({ ...d.startRect, x: d.startRect.x + dx, y: d.startRect.y + dy }, free, d.extras)
+        );
+      }
       setLive({ id: d.id, rect });
     };
 
@@ -203,6 +228,7 @@ export function ShapeOverlay({
       scale: slideScale(e.currentTarget as HTMLElement),
       moved: false,
       extras: guidesFromSiblings(shapes.filter((s) => s.id !== shape.id)),
+      rotationRad: ((shape.rotation ?? 0) * Math.PI) / 180,
     };
     setLive({ id: shape.id, rect });
   };
@@ -250,6 +276,11 @@ export function ShapeOverlay({
           // border width (and therefore its layout) is untouched by selection.
           outline: isSel ? '2px solid var(--emerald-500)' : undefined,
           outlineOffset: 1,
+          // About the centre, so rotating never moves the shape - x/y stay the
+          // unrotated box, which is what snapping, nudging and the exporter read.
+          transform: shape.rotation ? `rotate(${shape.rotation}deg)` : undefined,
+          transformOrigin: 'center',
+          opacity: shape.opacity,
         };
 
         return (

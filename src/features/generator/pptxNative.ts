@@ -4,6 +4,7 @@ import { getVideo } from '../deck/mediaStore';
 import { parseVideoSource } from '../formatting/videoSource';
 import { applyToPptx, caseText, offsetFor, styleFor } from '../formatting/resolve';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
+import { clampOpacity, clampRotation } from '../formatting/rails';
 
 /**
  * Native (editable) pptxgenjs equivalent of PresentationCanvas.tsx's DOM
@@ -437,12 +438,14 @@ function addRect(
   b: Box,
   fill: string | undefined,
   line?: { color: string; widthPx: number },
-  transparency?: number
+  transparency?: number,
+  rotate?: number
 ) {
   slide.addShape('rect', {
     ...b,
     fill: fill ? { color: fill, transparency } : { type: 'none' },
     line: line ? { color: line.color, width: Math.max(0.25, pt(line.widthPx)) } : { type: 'none' },
+    rotate,
   });
 }
 
@@ -528,7 +531,12 @@ async function loadImage(dataUrl: string): Promise<HTMLImageElement> {
 }
 
 /** Places an image contained (aspect-preserved, letterboxed) inside a px box, centered. */
-async function addImageContain(slide: pptxgen.Slide, dataUrl: string, b: Box) {
+async function addImageContain(
+  slide: pptxgen.Slide,
+  dataUrl: string,
+  b: Box,
+  options?: { rotate?: number; transparency?: number }
+) {
   let ratio = 1;
   try {
     const img = await loadImage(dataUrl);
@@ -544,7 +552,15 @@ async function addImageContain(slide: pptxgen.Slide, dataUrl: string, b: Box) {
   } else {
     w = b.h * ratio;
   }
-  slide.addImage({ data: dataUrl, x: b.x + (b.w - w) / 2, y: b.y + (b.h - h) / 2, w, h });
+  slide.addImage({
+    data: dataUrl,
+    x: b.x + (b.w - w) / 2,
+    y: b.y + (b.h - h) / 2,
+    w,
+    h,
+    rotate: options?.rotate,
+    transparency: options?.transparency,
+  });
 }
 
 /**
@@ -1431,9 +1447,18 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
 
   for (const s of shapes) {
     const b = box(s.x, s.y, s.w, s.h);
+    // Rotation and opacity, translated into what OOXML calls them. PowerPoint
+    // rotates about the shape's centre and measures see-through as a percentage
+    // the other way up, which is exactly what the canvas does with `transform`
+    // and `opacity` - so the two agree without either side compromising.
+    const rotate = s.rotation ? clampRotation(s.rotation) : undefined;
+    const transparency =
+      s.opacity !== undefined && s.opacity < 1
+        ? Math.round((1 - clampOpacity(s.opacity)) * 100)
+        : undefined;
 
     if (s.kind === 'image') {
-      if (s.imageUrl) await addImageContain(slide, s.imageUrl, b);
+      if (s.imageUrl) await addImageContain(slide, s.imageUrl, b, { rotate, transparency });
       continue;
     }
 
@@ -1504,11 +1529,12 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
       // through the generic shape call with an explicit no-fill instead.
       slide.addShape('ellipse', {
         ...b,
-        fill: s.fill ? { color: s.fill } : { type: 'none' },
+        fill: s.fill ? { color: s.fill, transparency } : { type: 'none' },
         line: line ? { color: line.color, width: Math.max(0.25, pt(line.widthPx)) } : { type: 'none' },
+        rotate,
       });
     } else {
-      addRect(slide, b, s.fill, line);
+      addRect(slide, b, s.fill, line, transparency, rotate);
     }
   }
 }
