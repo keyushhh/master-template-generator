@@ -14,6 +14,20 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.7.0',
+    date: '2026-08-13',
+    summary: 'A cleaner header and a beautiful new modal for choosing where your decks are saved.',
+    added: [
+      'A new two-card "Deck Type" selection modal when creating a deck, clearly separating "Team Repository" from the "Quick Sandbox".',
+    ],
+    improved: [
+      'Decluttered the homepage header by moving the "Quick Sandbox" option into the new creation flow.',
+    ],
+    fixed: [
+      'Fixed a bug where decks promoted from the Quick Sandbox to the Team Repository wouldn\'t jump to the top of the "Recently Edited" list.',
+    ],
+  },
+  {
     version: '1.6.0',
     date: '2026-08-13',
     summary: 'Redesigned Private Workspace layout featuring a fixed desktop sidebar, with the Shared Team Workspace remaining unchanged.',

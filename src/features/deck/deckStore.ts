@@ -30,6 +30,7 @@ export interface ProjectMeta {
   name: string;
   updatedAt: number;
   folderId?: string | null;
+  isSandbox?: boolean;
 }
 
 export interface StoredSession {
@@ -122,9 +123,9 @@ export function saveProjectSession(id: string, session: StoredSession): boolean 
 }
 
 /** Add a new deck to the index, save its session, and make it active. */
-export function createProject(name: string, session: StoredSession): ProjectMeta {
+export function createProject(name: string, session: StoredSession, isSandbox?: boolean): ProjectMeta {
   const index = readIndex();
-  const meta: ProjectMeta = { id: newId(), name: name.trim() || 'Untitled deck', updatedAt: Date.now() };
+  const meta: ProjectMeta = { id: newId(), name: name.trim() || 'Untitled deck', updatedAt: Date.now(), isSandbox };
   writeIndex({ activeId: meta.id, projects: [...index.projects, meta] });
   saveProjectSession(meta.id, session);
   return meta;
@@ -145,6 +146,14 @@ export function duplicateProject(id: string, name?: string): ProjectMeta | null 
     ast: session.ast,
     deck: session.deck,
     baselineDeck: session.baselineDeck ?? session.deck,
+  });
+}
+
+export function promoteToRepository(id: string): void {
+  const index = readIndex();
+  writeIndex({
+    ...index,
+    projects: index.projects.map((p) => (p.id === id ? { ...p, isSandbox: false, updatedAt: Date.now() } : p)),
   });
 }
 

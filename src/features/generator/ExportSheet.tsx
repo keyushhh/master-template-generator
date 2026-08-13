@@ -21,9 +21,10 @@ interface ExportSheetProps {
   ast: DocumentNode | null;
   projectName: string;
   onOpenSorter: () => void;
-  /** Shrink the type on every clipped slide. Absent hides the offer. */
   onFitAll?: () => void;
   theme?: DeckTheme;
+  isSandbox?: boolean;
+  onPromoteToRepository?: () => void;
 }
 
 const FORMATS: {
@@ -106,7 +107,7 @@ function sanitize(name: string): string {
  * Present is intentionally absent: it is a different verb from export, and the
  * header's mode control already carries it one click away.
  */
-export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorter, onFitAll, theme = WOZKU_THEME }: ExportSheetProps) {
+export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorter, onFitAll, theme = WOZKU_THEME, isSandbox, onPromoteToRepository }: ExportSheetProps) {
   const { showToast } = useToast();
   const [kind, setKind] = useState<ExportKind>('pptx');
   const [busy, setBusy] = useState(false);
@@ -307,6 +308,33 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
         </div>
 
         <div className="flex-1 overflow-y-auto">
+          {/* Sandbox Notice */}
+          {isSandbox && (
+            <div className="bg-blue-50 border-b border-blue-200">
+              <div className="flex flex-col gap-3 p-5">
+                <div className="flex items-start gap-3">
+                  <span className="text-[16px] select-none">🧪</span>
+                  <div className="text-[12px] text-blue-950 leading-relaxed">
+                    <strong className="font-bold text-blue-900 block">Quick Sandbox Active</strong>
+                    This deck is currently hidden from the Team Repository.
+                  </div>
+                </div>
+                {onPromoteToRepository && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onPromoteToRepository();
+                      showToast('Saved to Team Repository!', 'success');
+                    }}
+                    className="self-start px-3 py-1.5 text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
+                  >
+                    Save to Team Repository
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── Before you send ───────────────────────────────────────────────
               One pre-flight block with up to three findings, rather than three
               stacked banners. Stacked, they read as unrelated alarms and push

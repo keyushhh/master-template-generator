@@ -11,6 +11,8 @@ interface ShareModalProps {
   onOpenExport: () => void;
   onOpenPresent: () => void;
   onShowToast: (msg: string, type: 'info' | 'success') => void;
+  isSandbox?: boolean;
+  onPromoteToRepository?: () => void;
 }
 
 export function ShareModal({
@@ -21,6 +23,8 @@ export function ShareModal({
   onOpenExport,
   onOpenPresent,
   onShowToast,
+  isSandbox,
+  onPromoteToRepository,
 }: ShareModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -96,13 +100,37 @@ export function ShareModal({
         {/* Content */}
         <div className="p-5 flex flex-col gap-4">
           {/* Privacy Guarantee Badge */}
-          <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-[var(--radius-sharp)] flex items-start gap-3">
-            <span className="text-[16px] select-none">🔒</span>
-            <div className="text-[12px] text-emerald-950 leading-relaxed">
-              <strong className="font-bold text-emerald-900 block">Client Privacy & Storage Guarantee</strong>
-              This deck remains 100% private to your browser local storage. Share files directly with colleagues without cloud uploads.
+          {isSandbox ? (
+            <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-[var(--radius-sharp)] flex flex-col gap-3">
+              <div className="flex items-start gap-3">
+                <span className="text-[16px] select-none">🧪</span>
+                <div className="text-[12px] text-blue-950 leading-relaxed">
+                  <strong className="font-bold text-blue-900 block">Quick Sandbox Active</strong>
+                  This deck is currently hidden from the Team Repository.
+                </div>
+              </div>
+              {onPromoteToRepository && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPromoteToRepository();
+                    onShowToast('Saved to Team Repository!', 'success');
+                  }}
+                  className="self-start px-3 py-1.5 text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
+                >
+                  Save to Team Repository
+                </button>
+              )}
             </div>
-          </div>
+          ) : (
+            <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-[var(--radius-sharp)] flex items-start gap-3">
+              <span className="text-[16px] select-none">🔒</span>
+              <div className="text-[12px] text-emerald-950 leading-relaxed">
+                <strong className="font-bold text-emerald-900 block">Client Privacy & Storage Guarantee</strong>
+                This deck remains 100% private to your browser local storage. Share files directly with colleagues without cloud uploads.
+              </div>
+            </div>
+          )}
 
           {/* Share Option 1: Editable Deck Package */}
           <div className="p-3.5 border border-neutral-200 rounded-[var(--radius-sharp)] bg-neutral-50/50 flex flex-col gap-2">

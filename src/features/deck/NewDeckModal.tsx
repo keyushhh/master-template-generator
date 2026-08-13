@@ -62,10 +62,12 @@ const isHex6 = (v: string) => /^[0-9a-fA-F]{6}$/.test(v.replace('#', ''));
  */
 export function NewDeckModal({
   open,
+  isSandboxMode,
   onClose,
   onCreate,
 }: {
   open: boolean;
+  isSandboxMode?: boolean;
   onClose: () => void;
   /** The deck already carries its `themeId`; the caller only has to store it. */
   onCreate: (name: string, deck: Deck) => void;
@@ -192,12 +194,12 @@ export function NewDeckModal({
         className="wg-modal flex flex-col w-full max-w-[880px] max-h-[90vh] overflow-hidden my-auto bg-white"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative flex flex-col gap-1 px-5 py-4 border-b border-neutral-150 shrink-0">
-          <div className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
-            New deck
+        <div className={`relative flex flex-col gap-1 px-5 py-4 border-b shrink-0 ${isSandboxMode ? 'bg-emerald-50 border-emerald-200' : 'border-neutral-150'}`}>
+          <div className={`font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase ${isSandboxMode ? 'text-emerald-700' : 'text-neutral-400'}`}>
+            {isSandboxMode ? 'Quick Sandbox' : 'New deck'}
           </div>
           <h2 className="text-[17px] font-bold text-neutral-900">
-            What are you building, and who for?
+            {isSandboxMode ? 'Create a local, unsaved emergency deck' : 'What are you building, and who for?'}
           </h2>
           <button
             onClick={onClose}

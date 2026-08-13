@@ -74,6 +74,7 @@ import {
   createProject,
   renameProject,
   deleteProject,
+  promoteToRepository,
   type ProjectMeta,
   type StoredSession,
 } from '../features/deck/deckStore';
@@ -2336,6 +2337,14 @@ export function MasterTemplatePage() {
         onOpenSorter={() => setSorterOpen(true)}
         onFitAll={handleFitAll}
         theme={deckTheme}
+        isSandbox={projects.find(p => p.id === activeId)?.isSandbox}
+        onPromoteToRepository={() => {
+          if (activeId) {
+            promoteToRepository(activeId);
+            setProjects(listProjects());
+            setReviewOpen(false);
+          }
+        }}
       />
       <SlideSorter
         open={sorterOpen}
@@ -2399,6 +2408,23 @@ export function MasterTemplatePage() {
         onClose={() => setSaveTemplateOpen(false)}
         deck={deck}
         deckName={projectName}
+      />
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        deck={deck}
+        deckName={projectName}
+        onOpenExport={() => setReviewOpen(true)}
+        onOpenPresent={() => setPresentOpen(true)}
+        onShowToast={showToast}
+        isSandbox={projects.find(p => p.id === activeId)?.isSandbox}
+        onPromoteToRepository={() => {
+          if (activeId) {
+            promoteToRepository(activeId);
+            setProjects(listProjects());
+            setShareOpen(false);
+          }
+        }}
       />
       <CommandPalette
         open={paletteOpen}
