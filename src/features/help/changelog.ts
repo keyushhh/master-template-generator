@@ -14,6 +14,28 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '2.0.0',
+    date: '2026-08-14',
+    summary: 'Dedicated Presentation Template Architecture, Native Mobile Screen Mockups, and Template-Specific Visual Systems.',
+    added: [
+      'Dedicated Presentation Template Architecture: Every template now features its own complete, bespoke slide suite with custom typography, layouts, grids, and composition rhythm.',
+      'Native Mobile Screen Mockup System: Reusable device frames with precision bezels, Dynamic Island, status bar, and elevation shadows for single, dual, trio, and sequential workflow slides.',
+      'Replaceable PNG Screen Assets: Complete separation of physical phone frames from content, enabling in-place PNG screen image replacement in edit mode without altering device geometry.',
+      'Four Product & Mobile Storytelling Templates: Product Showcase, UX Journey & Flow, Mobile Editorial, and Product & Data SaaS.',
+      'Institutional Investor Syndicate Memo: High-density venture syndicate presentation with deal terms, valuation sheets, and allocation matrices.',
+      'Unified Thumbnail & Preview Engine: Template cards and selected previews now render through the exact same FitStage renderer for pixel-perfect visual fidelity.',
+    ],
+    improved: [
+      'Template-Specific Backgrounds: Scoped technical hairline grids strictly to the Classic Wozku template, giving each template its own authentic background ground.',
+      'Brand Alignment: Enforced strict 0px corner radius across all template modal cards, buttons, tabs, and container elements.',
+      'Clean Action CTAs: Removed sparkle/AI icons from the deck creation action buttons.',
+    ],
+    fixed: [
+      'Fixed template thumbnail and preview mismatch where thumbnails displayed simplified mockups instead of the actual template cover.',
+      'Fixed default hairline grid leaking into dark and editorial slide presentations.',
+    ],
+  },
+  {
     version: '1.7.0',
     date: '2026-08-13',
     summary: 'A cleaner header and a beautiful new modal for choosing where your decks are saved.',

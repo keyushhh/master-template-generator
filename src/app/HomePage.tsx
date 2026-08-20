@@ -1060,43 +1060,15 @@ export function HomePage() {
       <main className="relative z-[1] mx-auto w-full max-w-[1220px] px-8 pt-6">
         {/* ── Workspace Context Header (Root Library View) ── */}
         {!activeFolder && (
-          <div className="flex flex-col gap-3 pb-5 mb-6 border-b border-neutral-200/60">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              {/* Title & Badge */}
-              <div className="flex items-center gap-3">
-                <h2 className="text-[22px] font-bold text-neutral-900 tracking-[-0.02em]" style={{ fontFamily: 'var(--font-display)' }}>
-                  Team Repository
-                </h2>
-                <span className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10.5px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200/80 rounded-none select-none">
-                  <PeopleIcon size={11} /> Shared Team
-                </span>
-              </div>
-
-              {/* Team avatars on the right (Shared only) */}
-              <div className="flex items-center gap-2.5 self-start sm:self-auto select-none">
-                <div className="flex items-center gap-1">
-                  <span className="w-6 h-6 bg-emerald-600 text-white text-[9px] font-mono font-bold flex items-center justify-center">SU</span>
-                  <span className="w-6 h-6 bg-indigo-600 text-white text-[9px] font-mono font-bold flex items-center justify-center">AB</span>
-                  <span className="w-6 h-6 bg-amber-600 text-white text-[9px] font-mono font-bold flex items-center justify-center">CD</span>
-                </div>
-                <span className="text-[11px] text-neutral-400 font-medium">
-                  +3 others
-                </span>
-              </div>
-            </div>
-
-            {/* Sub-header Metadata row */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-neutral-500 font-medium">
-              <span className="flex items-center gap-1.5 text-neutral-700">
-                <span className="text-neutral-400"><AlbumsIcon size={13} /></span>
-                <strong>{projects.length}</strong> team decks active
-              </span>
-              <span className="text-neutral-300 select-none">|</span>
-              <span className="text-neutral-500">Shared brand kits &amp; assets synced</span>
-              <span className="text-neutral-300 select-none">|</span>
-              <span className="flex items-center gap-1.5 text-blue-600">
-                <span className="w-1.5 h-1.5 bg-blue-500 rounded-none animate-pulse" />
-                Synced with cloud
+          <div className="flex items-center justify-between gap-3 pb-5 mb-6 border-b border-neutral-200/60">
+            {/* Title & Count */}
+            <div className="flex items-center gap-3">
+              <h2 className="text-[22px] font-bold text-neutral-900 tracking-[-0.02em] leading-none" style={{ fontFamily: 'var(--font-display)' }}>
+                Team Repository
+              </h2>
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-neutral-500 font-medium leading-none">
+                <span className="text-neutral-400 flex items-center"><AlbumsIcon size={13} /></span>
+                <span><strong className="text-neutral-700 font-semibold">{projects.length}</strong> decks active</span>
               </span>
             </div>
           </div>

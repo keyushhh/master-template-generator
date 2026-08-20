@@ -130,6 +130,18 @@ export interface DeckTheme {
     /** The same grid on a dark slide, where a near-white rule is invisible. */
     gridOnDark: string;
   };
+
+  /** System-level visual personality and composition rules */
+  styleSystem?: {
+    coverLayout?: 'centered' | 'left-aligned' | 'split-card' | 'monumental' | 'editorial-split';
+    coverGradient?: string;
+    slideBackground?: string;
+    isDarkSlideDefault?: boolean;
+    cardStyle?: 'glass' | 'bordered' | 'solid' | 'minimal';
+    glowColor?: string;
+    showGrid?: boolean;
+    headerStyle?: 'minimal' | 'hud' | 'boxed' | 'underline';
+  };
 }
 
 /**
@@ -202,13 +214,6 @@ export const WOZKU_THEME: DeckTheme = {
   },
 };
 
-/**
- * An austere variant with no colour at all: the accent collapses onto the ink
- * ramp. Not a decorative option - some decks (legal, financial, a client whose
- * own brand is monochrome) read wrong with any accent, and the alternative was
- * a user hand-picking near-black in the kit editor and getting the tint step
- * subtly wrong.
- */
 export const MONOCHROME_THEME: DeckTheme = {
   ...WOZKU_THEME,
   id: 'monochrome',
@@ -221,9 +226,196 @@ export const MONOCHROME_THEME: DeckTheme = {
   },
 };
 
+export const EDITORIAL_THEME: DeckTheme = {
+  ...WOZKU_THEME,
+  id: 'template_editorial',
+  name: 'The Editorial',
+  accent: {
+    base: 'C2884A',
+    bright: 'D5A26B',
+    deep: '855B2E',
+    tint: 'FDF8F3',
+  },
+  fonts: {
+    display: { family: 'Playfair Display', stack: '"Playfair Display", "Georgia", serif' },
+    sans: { family: 'Plus Jakarta Sans', stack: '"Plus Jakarta Sans", "Inter", sans-serif' },
+    mono: { family: 'Space Mono', stack: '"Space Mono", monospace' },
+  },
+  styleSystem: {
+    coverLayout: 'centered',
+    coverGradient: 'radial-gradient(ellipse at 50% 30%, #2A2420 0%, #151311 60%, #0D0C0B 100%)',
+    slideBackground: '#FDFBF7',
+    glowColor: 'rgba(194, 136, 74, 0.12)',
+    showGrid: false,
+    headerStyle: 'minimal',
+  },
+};
+
+export const AI_NATIVE_THEME: DeckTheme = {
+  ...WOZKU_THEME,
+  id: 'template_ai_native',
+  name: 'AI-Native',
+  accent: {
+    base: '7C3AED',
+    bright: 'A78BFA',
+    deep: '5B21B6',
+    tint: '1E1338',
+  },
+  surface: {
+    light: '0B071A',
+    dark: '05020D',
+  },
+  ink: {
+    onLight: 'FFFFFF',
+    dimOnLight: 'A1A1AA',
+    mutedOnLight: '71717A',
+    onDark: 'FFFFFF',
+    dimOnDark: 'A1A1AA',
+    headingOnDark: 'F4F4F5',
+  },
+  neutral: {
+    n50: '18122B',
+    n100: '1F1836',
+    n200: '2E254A',
+    n300: '3D335E',
+    n400: '6D5F9A',
+    n500: '9D92C4',
+    n600: 'C4BCDF',
+    n700: 'E2DEEE',
+    n900: 'FFFFFF',
+  },
+  fonts: {
+    display: { family: 'Outfit', stack: '"Outfit", "Inter", sans-serif' },
+    sans: { family: 'Inter', stack: '"Inter", sans-serif' },
+    mono: { family: 'JetBrains Mono', stack: '"JetBrains Mono", monospace' },
+  },
+  styleSystem: {
+    coverLayout: 'centered',
+    coverGradient: 'radial-gradient(circle at 50% 0%, #3B1676 0%, #170C30 50%, #090514 100%)',
+    slideBackground: '#0B071A',
+    isDarkSlideDefault: true,
+    cardStyle: 'glass',
+    glowColor: 'rgba(124, 58, 237, 0.35)',
+    showGrid: true,
+    headerStyle: 'boxed',
+  },
+};
+
+export const WAVE_THEME: DeckTheme = {
+  ...WOZKU_THEME,
+  id: 'template_wave',
+  name: 'The Wave Organic',
+  accent: {
+    base: '0D9488',
+    bright: '2DD4BF',
+    deep: '0F766E',
+    tint: 'E6F7F4',
+  },
+  surface: {
+    light: 'F4FAF8',
+    dark: '0F2D27',
+  },
+  fonts: {
+    display: { family: 'Plus Jakarta Sans', stack: '"Plus Jakarta Sans", "Inter", sans-serif' },
+    sans: { family: 'Inter', stack: '"Inter", sans-serif' },
+    mono: { family: 'DM Mono', stack: '"DM Mono", monospace' },
+  },
+  styleSystem: {
+    coverLayout: 'left-aligned',
+    coverGradient: 'linear-gradient(135deg, #E6F4F1 0%, #D2EBE4 45%, #B7E4D8 100%)',
+    slideBackground: '#F4FAF8',
+    glowColor: 'rgba(13, 148, 136, 0.18)',
+    showGrid: false,
+    headerStyle: 'underline',
+  },
+};
+
+export const STARTUP_BOLD_THEME: DeckTheme = {
+  ...WOZKU_THEME,
+  id: 'template_startup_bold',
+  name: 'Startup Bold',
+  accent: {
+    base: 'EA580C',
+    bright: 'FB923C',
+    deep: 'C2410C',
+    tint: 'FFF7ED',
+  },
+  surface: {
+    light: '09090B',
+    dark: '000000',
+  },
+  ink: {
+    onLight: 'FAFAFA',
+    dimOnLight: 'A1A1AA',
+    mutedOnLight: '71717A',
+    onDark: 'FAFAFA',
+    dimOnDark: 'A1A1AA',
+    headingOnDark: 'FFFFFF',
+  },
+  neutral: {
+    n50: '18181B',
+    n100: '27272A',
+    n200: '3F3F46',
+    n300: '52525B',
+    n400: '71717A',
+    n500: 'A1A1AA',
+    n600: 'D4D4D8',
+    n700: 'E4E4E7',
+    n900: 'FFFFFF',
+  },
+  fonts: {
+    display: { family: 'Syne', stack: '"Syne", "Inter", sans-serif' },
+    sans: { family: 'Inter', stack: '"Inter", sans-serif' },
+    mono: { family: 'JetBrains Mono', stack: '"JetBrains Mono", monospace' },
+  },
+  styleSystem: {
+    coverLayout: 'monumental',
+    coverGradient: 'radial-gradient(circle at 80% 20%, #431407 0%, #18181B 60%, #09090B 100%)',
+    slideBackground: '#09090B',
+    isDarkSlideDefault: true,
+    cardStyle: 'bordered',
+    glowColor: 'rgba(234, 88, 12, 0.28)',
+    showGrid: true,
+    headerStyle: 'hud',
+  },
+};
+
+export const SWISS_MINIMAL_THEME: DeckTheme = {
+  ...WOZKU_THEME,
+  id: 'template_swiss_minimal',
+  name: 'Swiss Minimal',
+  accent: {
+    base: '2563EB',
+    bright: '60A5FA',
+    deep: '1D4ED8',
+    tint: 'EFF6FF',
+  },
+  fonts: {
+    display: { family: 'Space Grotesk', stack: '"Space Grotesk", "Inter", sans-serif' },
+    sans: { family: 'DM Sans', stack: '"DM Sans", "Inter", sans-serif' },
+    mono: { family: 'Space Mono', stack: '"Space Mono", monospace' },
+  },
+  styleSystem: {
+    coverLayout: 'editorial-split',
+    coverGradient: 'linear-gradient(180deg, #F8FAFC 0%, #EDF2F7 100%)',
+    slideBackground: '#FFFFFF',
+    glowColor: 'rgba(37, 99, 235, 0.08)',
+    showGrid: true,
+    headerStyle: 'minimal',
+  },
+};
+
 /** The themes that ship with the app. Client brand kits are stored separately
  *  (see brandKitStore) because they are user data, not code. */
-export const BUILT_IN_THEMES: DeckTheme[] = [WOZKU_THEME, MONOCHROME_THEME];
+export const BUILT_IN_THEMES: DeckTheme[] = [
+  WOZKU_THEME,
+  MONOCHROME_THEME,
+  EDITORIAL_THEME,
+  AI_NATIVE_THEME,
+  WAVE_THEME,
+  STARTUP_BOLD_THEME,
+  SWISS_MINIMAL_THEME,
+];
 
 /**
  * Resolves a theme id against the built-ins plus any extra themes (a caller's
@@ -463,6 +655,11 @@ export function css(hex: Hex): string {
  * the studio chrome around the slide is untouched.
  */
 export function themeCssVars(theme: DeckTheme): Record<string, string> {
+  const isDark = theme.styleSystem?.isDarkSlideDefault;
+  const headingColor = isDark ? css(theme.ink.headingOnDark || theme.ink.onDark) : css(theme.ink.onLight);
+  const bodyColor = isDark ? css(theme.ink.dimOnDark || theme.ink.onDark) : css(theme.ink.dimOnLight);
+  const mutedColor = isDark ? css(theme.ink.dimOnDark) : css(theme.ink.mutedOnLight);
+
   return {
     '--font-display': theme.fonts.display.stack,
     '--font-sans': theme.fonts.sans.stack,
@@ -478,11 +675,12 @@ export function themeCssVars(theme: DeckTheme): Record<string, string> {
     '--neutral-200': css(theme.neutral.n200),
     '--neutral-300': css(theme.neutral.n300),
     '--neutral-400': css(theme.neutral.n400),
-    '--neutral-500': css(theme.neutral.n500),
-    '--neutral-600': css(theme.neutral.n600),
-    '--neutral-700': css(theme.neutral.n700),
-    '--neutral-900': css(theme.neutral.n900),
+    '--neutral-500': bodyColor,
+    '--neutral-600': mutedColor,
+    '--neutral-700': isDark ? css(theme.neutral.n700) : css(theme.neutral.n700),
+    '--neutral-900': headingColor,
 
     '--pure-white': css(theme.surface.light),
+    '--border-subtle': isDark ? 'rgba(255,255,255,0.08)' : css(theme.rule.hairline),
   };
 }

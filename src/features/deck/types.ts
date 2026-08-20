@@ -14,7 +14,8 @@ export type SlideTemplateId =
   | 'blank'
   /** A slide imported from an uploaded .pptx, keeping its original layout.
    *  Carries positioned shapes rather than template slots - see ImportedShape. */
-  | 'imported';
+  | 'imported'
+  | (string & {});
 
 /** One text run inside an imported shape: the smallest span of characters that
  *  share formatting. Kept as runs (not flattened) so bold labels, coloured
@@ -248,19 +249,30 @@ export interface ComparisonRow {
 }
 
 export interface RoadmapPhase {
+  num?: string;
   title: string;
-  description: string;
+  description?: string;
+  body?: string;
+  timing?: string;
   completed?: boolean;
 }
 
 export interface ProcessStep {
+  num?: string;
   title: string;
-  description: string;
+  description?: string;
+  text?: string;
 }
 
 export interface RegionSector {
   label: string;
   value: string;
+}
+
+export interface MobileScreenAsset {
+  id?: string;
+  src: string;
+  alt?: string;
 }
 
 /** Flat bag of every slot the 14 templates expose. Renderers read only the
@@ -307,6 +319,9 @@ export interface SlideContent {
   // s6 Data Monument
   value?: string;
   unit?: string;
+  stat?: string;
+  label?: string;
+  caption?: string;
 
   // s7 Metrics Dashboard
   bars?: MetricBar[];
@@ -331,14 +346,23 @@ export interface SlideContent {
    *  placeholder. Re-adding an image clears this. */
   hideImage?: boolean;
 
+  // Mobile / Screen Mockup PNG Assets
+  screenAsset?: string;
+  screenAssets?: (string | MobileScreenAsset)[];
+  screens?: MobileScreenAsset[];
+
   // s13 Featured Quote
   quote?: string;
   author?: string;
   role?: string;
   /** Uploaded author headshot (downscaled data URL). */
   avatarUrl?: string;
-  /** Size multiplier for the headshot, 1 = the template's default 84px. */
   avatarScale?: number;
+  // Layout and composition overrides
+  coverLayout?: 'classic' | 'centered-hero' | 'split-editorial' | 'monumental-bold' | 'data-grid' | 'swiss-minimal';
+  layoutVariant?: string;
+  badge?: string;
+  categoryTag?: string;
 
   // s14 Exit
   contacts?: string[];

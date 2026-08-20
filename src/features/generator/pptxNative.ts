@@ -1600,45 +1600,82 @@ async function buildSlideBody(
 
   switch (instance.templateId) {
     case 's1':
+    case 'editorial_cover':
+    case 'ai_native_cover':
+    case 'startup_cover':
+    case 'swiss_cover':
+    case 'wave_cover':
+    case 'product_showcase_cover':
+    case 'ux_journey_cover':
+    case 'mobile_editorial_cover':
+    case 'product_data_cover':
+    case 'investor_memo_cover':
       await buildCover(slide, c, logoUrl, logoScale);
       break;
     case 's2':
+    case 'ai_native_overview':
       buildIndex(slide, c, num);
       break;
     case 's3':
+    case 'editorial_exec':
+    case 'ai_native_problem':
+    case 'startup_problem':
+    case 'swiss_metrics':
+    case 'product_showcase_hero':
       buildExecutiveSummary(slide, c, num);
       break;
     case 's4':
       await buildSectionDivider(slide, c, num, logoUrl, logoScale);
       break;
     case 's5':
+    case 'editorial_story':
+    case 'ux_journey_before_after':
+    case 'mobile_editorial_asymmetric':
       buildTwoColumnContext(slide, c, num);
       break;
     case 's6':
+    case 'editorial_metrics':
       buildDataMonument(slide, c);
       break;
     case 's7':
+    case 'ai_native_metrics':
+    case 'startup_traction':
+    case 'wave_metrics':
+    case 'product_data_screen_kpi':
       buildMetricsDashboard(slide, c, num);
       break;
     case 's8':
+    case 'investor_memo_terms':
       buildComparativeTable(slide, c, num);
       break;
     case 's9':
+    case 'startup_roadmap':
       buildStrategicRoadmap(slide, c, num);
       break;
     case 's10':
       await buildImageEditorial(slide, c);
       break;
     case 's11':
+    case 'ai_native_pipeline':
+    case 'product_showcase_trio':
+    case 'ux_journey_flow':
       buildProcessArchitecture(slide, c, num);
       break;
     case 's12':
       await buildGlobalMap(slide, c, num);
       break;
     case 's13':
+    case 'editorial_quote':
       await buildFeaturedQuote(slide, c, num);
       break;
     case 's14':
+    case 'editorial_closing':
+    case 'ai_native_closing':
+    case 'product_showcase_closing':
+    case 'ux_journey_closing':
+    case 'mobile_editorial_closing':
+    case 'product_data_closing':
+    case 'investor_memo_closing':
       await buildExit(slide, c, logoUrl, logoScale);
       break;
     case 'blank':

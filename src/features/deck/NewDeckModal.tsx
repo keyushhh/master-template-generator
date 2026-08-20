@@ -2,64 +2,116 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import { FitStage } from '../generator/FitStage';
-import {
-  brandKitThemes,
-  createBrandKit,
-  listBrandKits,
-  type BrandKit,
-} from '../theme/brandKitStore';
-import {
-  accentRamp,
-  BUILT_IN_THEMES,
-  css,
-  themeById,
-  WOZKU_THEME,
-  type DeckTheme,
-} from '../theme/deckTheme';
-import { AddIcon, CheckIcon, CloseIcon, TrashIcon } from '../ui/icons';
+import { themeById, type DeckTheme } from '../theme/deckTheme';
+import { CheckIcon, CloseIcon, SearchIcon, TrashIcon } from '../ui/icons';
 import { ensureFonts } from '../fonts/loadFont';
-import { DECK_STARTERS, type DeckStarter } from './deckStarters';
 import { deleteDeckTemplate, instantiateDeckTemplate, listDeckTemplates, type SavedDeckTemplate } from './deckTemplateStore';
 import type { Deck } from './types';
 import { ConfirmModal, cannotBeUndone } from '../ui/ConfirmModal';
+import {
+  PRESENTATION_TEMPLATES,
+  TEMPLATE_CATEGORIES,
+  type TemplateCategory,
+  type TemplateDefinition,
+} from '../templates/presentationTemplates';
 
-/** A saved template, shaped like a built-in starter so both can share one list. */
-function starterFromTemplate(t: SavedDeckTemplate): DeckStarter & { custom: true; savedId: string } {
-  return {
-    id: `custom:${t.id}`,
-    savedId: t.id,
-    custom: true,
-    name: t.name,
-    description: t.description || `${t.slideCount} slide${t.slideCount === 1 ? '' : 's'}, saved from a deck.`,
-    build: () => instantiateDeckTemplate(t),
-  };
+function TemplateCard({
+  tmpl,
+  isSelected,
+  onSelect,
+  onDelete,
+}: {
+  tmpl: TemplateDefinition & { isCustom?: boolean; savedId?: string };
+  isSelected: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+}) {
+  const deck = useMemo(() => tmpl.build(), [tmpl]);
+  const theme: DeckTheme = useMemo(() => {
+    const baseTheme = themeById(tmpl.defaultThemeId);
+    return {
+      ...baseTheme,
+      fonts: {
+        display: { family: tmpl.fonts.display, stack: `"${tmpl.fonts.display}", ${baseTheme.fonts.display.stack}` },
+        sans: { family: tmpl.fonts.sans, stack: `"${tmpl.fonts.sans}", ${baseTheme.fonts.sans.stack}` },
+        mono: { family: tmpl.fonts.mono || baseTheme.fonts.mono.family, stack: `"${tmpl.fonts.mono || baseTheme.fonts.mono.family}", ${baseTheme.fonts.mono.stack}` },
+      },
+    };
+  }, [tmpl]);
+
+  const firstSlide = deck.slides[0];
+
+  return (
+    <div
+      onClick={onSelect}
+      className={`group relative flex flex-col bg-white rounded-none border transition-all cursor-pointer overflow-hidden ${
+        isSelected
+          ? 'border-emerald-500 shadow-md ring-2 ring-emerald-500/20'
+          : 'border-neutral-200 hover:border-neutral-400 hover:shadow-sm'
+      }`}
+    >
+      {/* Visual Thumbnail Art - Exact Slide Cover rendered via FitStage */}
+      <div className="relative aspect-[16/9] w-full overflow-hidden select-none bg-neutral-900 border-b border-neutral-200">
+        {firstSlide && (
+          <div className="absolute inset-0 pointer-events-none">
+            <FitStage slide={firstSlide} ast={null} num="01" theme={theme} />
+          </div>
+        )}
+
+        {/* Badges */}
+        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-20 pointer-events-none">
+          <span
+            className="px-1.5 py-0.5 rounded-none text-[9px] font-bold tracking-wide uppercase font-mono shadow-sm"
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              color: '#FFFFFF',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            {tmpl.categoryLabel}
+          </span>
+          {tmpl.badge && (
+            <span className="px-1.5 py-0.5 rounded-none text-[8.5px] font-bold uppercase tracking-wider bg-emerald-500 text-white shadow-sm">
+              {tmpl.badge}
+            </span>
+          )}
+        </div>
+
+        {/* Selected Checkmark Badge */}
+        {isSelected && (
+          <div className="absolute top-2.5 right-2.5 w-6 h-6 rounded-none bg-emerald-500 text-white flex items-center justify-center shadow-lg z-20">
+            <CheckIcon size={14} />
+          </div>
+        )}
+      </div>
+
+      {/* Card Info Footer */}
+      <div className="p-3.5 flex flex-col gap-1 bg-white">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-[13.5px] font-bold text-neutral-900 truncate">
+            {tmpl.name}
+          </h4>
+          {tmpl.isCustom && tmpl.savedId && (
+            <button
+              aria-label={`Delete template "${tmpl.name}"`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="text-neutral-300 hover:text-rose-600 p-0.5 cursor-pointer"
+            >
+              <TrashIcon size={13} />
+            </button>
+          )}
+        </div>
+        <p className="text-[11.5px] text-neutral-500 line-clamp-2 leading-relaxed">
+          {tmpl.description}
+        </p>
+      </div>
+    </div>
+  );
 }
 
-/** Colours to offer when composing a kit here. The same set the fuller brand kit
- *  manager offers, so a kit made in either place starts from the same palette. */
-const SUGGESTED = ['0E9F6E', '2563EB', 'DC2626', 'D97706', '7C3AED', '0891B2'];
-
-const isHex6 = (v: string) => /^[0-9a-fA-F]{6}$/.test(v.replace('#', ''));
-
-/**
- * Starting a deck: what it is built from, and who it is for.
- *
- * This screen exists because the brand choice was in the wrong place. It used to
- * be a button in the studio's slide rail, which put "which client is this for"
- * next to "add a slide" - a decision about the whole deck sitting among the
- * decisions about one slide, and one you only found after you had already built
- * something in the house colours.
- *
- * It belongs at the start, next to the other question of the same size: which
- * template. Both are answered once, before there is any work to redo, and
- * putting them together is what makes room for the two lists to grow
- * independently. A set of client templates goes in the left column; a client's
- * colours go in the right; neither multiplies the other.
- *
- * Changing a deck's brand afterwards is still possible, through the command
- * palette in the studio. It is simply no longer taking up room in the rail for a
- * thing you do once.
- */
 export function NewDeckModal({
   open,
   isSandboxMode,
@@ -69,437 +121,339 @@ export function NewDeckModal({
   open: boolean;
   isSandboxMode?: boolean;
   onClose: () => void;
-  /** The deck already carries its `themeId`; the caller only has to store it. */
   onCreate: (name: string, deck: Deck) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open);
 
   const [name, setName] = useState('');
-  const [starterId, setStarterId] = useState(DECK_STARTERS[0].id);
-  /** `undefined` is the house look, the same thing an absent `themeId` means. */
-  const [themeId, setThemeId] = useState<string | undefined>(undefined);
-  const [kits, setKits] = useState<BrandKit[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<TemplateCategory>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTemplateId, setActiveTemplateId] = useState<string>(PRESENTATION_TEMPLATES[0].id);
   const [savedTemplates, setSavedTemplates] = useState<SavedDeckTemplate[]>([]);
-  /** Composing a kit inline, so a first deck for a new client is one screen. */
-  const [composing, setComposing] = useState(false);
-  const [kitName, setKitName] = useState('');
-  const [kitAccent, setKitAccent] = useState(SUGGESTED[0]);
-  /** The saved template pending delete confirmation, so the modal can name it. */
   const [pendingDeleteTemplate, setPendingDeleteTemplate] = useState<SavedDeckTemplate | null>(null);
-
-  const allStarters: (DeckStarter & { custom?: boolean; savedId?: string })[] = useMemo(
-    () => [...DECK_STARTERS, ...savedTemplates.map(starterFromTemplate)],
-    [savedTemplates]
-  );
-  const activeStarter = allStarters.find((s) => s.id === starterId) ?? allStarters[0];
 
   useEffect(() => {
     if (!open) return;
     setName('');
-    setStarterId(DECK_STARTERS[0].id);
-    setThemeId(undefined);
-    setKits(listBrandKits());
+    setSelectedCategory('all');
+    setSearchQuery('');
+    setActiveTemplateId(PRESENTATION_TEMPLATES[0].id);
     setSavedTemplates(listDeckTemplates());
-    setComposing(false);
-    setKitName('');
-    setKitAccent(SUGGESTED[0]);
   }, [open]);
 
   const removeTemplate = (savedId: string) => {
     deleteDeckTemplate(savedId);
     setSavedTemplates(listDeckTemplates());
-    if (starterId === `custom:${savedId}`) setStarterId(DECK_STARTERS[0].id);
+    if (activeTemplateId === `custom:${savedId}`) {
+      setActiveTemplateId(PRESENTATION_TEMPLATES[0].id);
+    }
   };
 
   useEffect(() => {
     if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      // Back out of the kit form first, so one press cannot discard a half-typed
-      // client and the whole screen together.
-      if (composing) setComposing(false);
-      else onClose();
+      if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose, composing]);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
 
+  // Combined built-in and user-saved templates
+  const allTemplates: (TemplateDefinition & { isCustom?: boolean; savedId?: string })[] = useMemo(() => {
+    const customList: (TemplateDefinition & { isCustom?: boolean; savedId?: string })[] = savedTemplates.map((t) => ({
+      id: `custom:${t.id}`,
+      savedId: t.id,
+      isCustom: true,
+      name: t.name,
+      category: 'saved' as TemplateCategory,
+      categoryLabel: 'Saved',
+      author: 'You',
+      description: t.description || `${t.slideCount} slides saved from a previous deck.`,
+      slideCountText: `${t.slideCount} slides`,
+      fonts: {
+        display: 'Space Grotesk',
+        sans: 'DM Sans',
+        mono: 'JetBrains Mono',
+      },
+      preview: {
+        accentColor: '10B981',
+        bgGradient: 'linear-gradient(135deg, #18181B 0%, #27272A 100%)',
+        titleColor: '#FFFFFF',
+        tagBg: 'rgba(16, 185, 129, 0.25)',
+        tagColor: '#6EE7B7',
+        subtitle: 'Custom saved template structure.',
+      },
+      defaultAccent: '10B981',
+      build: () => instantiateDeckTemplate(t),
+    }));
+
+    return [...PRESENTATION_TEMPLATES, ...customList];
+  }, [savedTemplates]);
+
+  const activeTemplate = useMemo(
+    () => allTemplates.find((t) => t.id === activeTemplateId) ?? allTemplates[0],
+    [allTemplates, activeTemplateId]
+  );
+
+  // Filter templates by category and query
+  const filteredTemplates = useMemo(() => {
+    return allTemplates.filter((t) => {
+      const matchCategory =
+        selectedCategory === 'all'
+          ? true
+          : selectedCategory === 'saved'
+          ? t.isCustom
+          : t.category === selectedCategory;
+
+      if (!matchCategory) return false;
+
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        t.name.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        t.categoryLabel.toLowerCase().includes(q) ||
+        t.author.toLowerCase().includes(q)
+      );
+    });
+  }, [allTemplates, selectedCategory, searchQuery]);
+
+  // Active theme calculation strictly from active template
   const theme: DeckTheme = useMemo(() => {
-    if (composing) {
-      return {
-        ...WOZKU_THEME,
-        id: 'preview',
-        name: kitName || 'New client',
-        accent: accentRamp(isHex6(kitAccent) ? kitAccent.replace('#', '') : WOZKU_THEME.accent.base),
-      };
-    }
-    return themeById(themeId, brandKitThemes(kits));
-  }, [composing, kitName, kitAccent, themeId, kits]);
+    const baseTheme = themeById(activeTemplate.defaultThemeId);
+    return {
+      ...baseTheme,
+      fonts: {
+        display: { family: activeTemplate.fonts.display, stack: `"${activeTemplate.fonts.display}", ${baseTheme.fonts.display.stack}` },
+        sans: { family: activeTemplate.fonts.sans, stack: `"${activeTemplate.fonts.sans}", ${baseTheme.fonts.sans.stack}` },
+        mono: { family: activeTemplate.fonts.mono || baseTheme.fonts.mono.family, stack: `"${activeTemplate.fonts.mono || baseTheme.fonts.mono.family}", ${baseTheme.fonts.mono.stack}` },
+      },
+    };
+  }, [activeTemplate]);
 
-  // The starter's own cover, drawn through the real renderer in the chosen
-  // colours. Both halves of the decision are visible in one object, which is the
-  // whole reason they are on one screen. Memoised on the starter alone: the deck
-  // is only built here to be looked at, and rebuilding it on every keystroke in
-  // the name field would remount the preview under the cursor.
-  const previewDeck = useMemo(() => activeStarter.build(), [activeStarter]);
+  const previewDeck = useMemo(() => activeTemplate.build(), [activeTemplate]);
 
-  /**
-   * A kit's typefaces have to be in the page before its cover is drawn.
-   *
-   * A kit carries type as well as colour now, so the preview beside these choices
-   * is only truthful once those faces have arrived - otherwise picking a client
-   * shows their colour on the house type and the deck looks different the moment
-   * it opens.
-   */
   useEffect(() => {
-    void ensureFonts([theme.fonts.display.family, theme.fonts.sans.family, theme.fonts.mono.family]);
-  }, [theme]);
-  const cover = previewDeck.slides[0];
+    if (!open) return;
+    const fonts = allTemplates.flatMap((t) => [
+      t.fonts.display,
+      t.fonts.sans,
+      t.fonts.mono,
+    ]).filter(Boolean) as string[];
+    void ensureFonts(Array.from(new Set(fonts)));
+  }, [open, allTemplates]);
 
   if (!open) return null;
 
-  const canCreateKit = kitName.trim().length > 0 && isHex6(kitAccent);
-
-  const commitKit = () => {
-    if (!canCreateKit) return;
-    const kit = createBrandKit(kitName, kitAccent.replace('#', ''));
-    setKits(listBrandKits());
-    // Adopt it straight away. Making a kit inside this screen is how you say
-    // "this deck is for this client"; asking you to then pick it out of the list
-    // you just added it to would be a step that means nothing.
-    setThemeId(kit.id);
-    setComposing(false);
-  };
-
-  const create = () => {
-    const deck = activeStarter.build();
-    onCreate(name.trim() || 'Untitled deck', { ...deck, themeId });
+  const create = (templateOverride?: TemplateDefinition) => {
+    const target = templateOverride || activeTemplate;
+    const deck = target.build();
+    const finalThemeId = target.defaultThemeId || deck.themeId;
+    onCreate(name.trim() || target.name, { ...deck, themeId: finalThemeId });
     onClose();
   };
 
-  const rowBase =
-    'w-full flex items-center gap-3 px-3 py-2.5 text-left border transition-colors cursor-pointer';
-
   return createPortal(
     <>
-    <div
-      className="wg-overlay fixed inset-0 z-[300] flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
-      onClick={onClose}
-    >
       <div
-        ref={panelRef}
-        role="dialog"
-        aria-label="New deck"
-        className="wg-modal flex flex-col w-full max-w-[880px] max-h-[90vh] overflow-hidden my-auto bg-white"
-        onClick={(e) => e.stopPropagation()}
+        className="wg-overlay fixed inset-0 z-[300] flex items-center justify-center p-3 sm:p-6 overflow-hidden bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
       >
-        <div className={`relative flex flex-col gap-1 px-5 py-4 border-b shrink-0 ${isSandboxMode ? 'bg-emerald-50 border-emerald-200' : 'border-neutral-150'}`}>
-          <div className={`font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase ${isSandboxMode ? 'text-emerald-700' : 'text-neutral-400'}`}>
-            {isSandboxMode ? 'Quick Sandbox' : 'New deck'}
-          </div>
-          <h2 className="text-[17px] font-bold text-neutral-900">
-            {isSandboxMode ? 'Create a local, unsaved emergency deck' : 'What are you building, and who for?'}
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="absolute top-3.5 right-3.5 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
-          >
-            <CloseIcon size={15} />
-          </button>
-        </div>
-
-        <div className="flex-1 min-h-0 flex flex-col sm:flex-row">
-          {/* ── The deck as it will arrive ─────────────────────────────────── */}
-          <div className="sm:w-[292px] shrink-0 p-5 bg-neutral-50 border-b sm:border-b-0 sm:border-r border-neutral-150 flex flex-col gap-3">
-            {cover && (
-              <div style={{ boxShadow: '0 0 0 1px var(--neutral-200), 0 6px 20px -8px rgba(15,23,20,0.25)' }}>
-                <FitStage slide={cover} ast={null} num="01" theme={theme} />
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-label="New deck template gallery"
+          className="wg-modal flex flex-col w-full max-w-[1140px] h-[92vh] max-h-[860px] overflow-hidden my-auto bg-white rounded-none shadow-2xl border border-neutral-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-4 border-b border-neutral-200 gap-3 shrink-0 bg-white">
+            <div className="flex items-center gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-none border border-emerald-200/80">
+                    {isSandboxMode ? 'Quick Sandbox' : 'Template Gallery'}
+                  </span>
+                  <span className="text-[11.5px] text-neutral-400 font-medium">
+                    {allTemplates.length} styles available
+                  </span>
+                </div>
+                <h2 className="text-[19px] font-bold text-neutral-900 tracking-tight mt-0.5" style={{ fontFamily: 'var(--font-display)' }}>
+                  {isSandboxMode ? 'Start an Emergency Sandbox Deck' : 'Choose a Presentation Template'}
+                </h2>
               </div>
-            )}
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[12.5px] font-bold text-neutral-800">
-                {activeStarter.name}
-              </span>
-              <span className="font-mono text-[10px] text-neutral-400">
-                {previewDeck.slides.length} slide{previewDeck.slides.length === 1 ? '' : 's'}
-              </span>
             </div>
-            <p className="text-[11.5px] text-neutral-500 leading-relaxed">
-              {activeStarter.description}
-            </p>
-            <div className="mt-auto flex items-center gap-2 pt-3 border-t border-neutral-200">
-              <span
-                className="shrink-0 w-[15px] h-[15px] border border-black/10"
-                style={{ background: css(theme.accent.base) }}
-              />
-              <span className="text-[11.5px] font-semibold text-neutral-600 truncate">
-                {theme.name}
-              </span>
+
+            <div className="flex items-center gap-3">
+              <div className="relative w-full sm:w-[240px]">
+                <span className="absolute inset-y-0 left-3 flex items-center text-neutral-400 pointer-events-none">
+                  <SearchIcon size={14} />
+                </span>
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search templates..."
+                  className="w-full h-[36px] pl-9 pr-3 text-[12.5px] bg-neutral-100/80 hover:bg-neutral-100 focus:bg-white border border-neutral-200 focus:border-neutral-400 rounded-none outline-none transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-2.5 flex items-center text-neutral-400 hover:text-neutral-700 text-[14px] cursor-pointer"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+
+              <button
+                onClick={onClose}
+                aria-label="Close"
+                className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-none transition-colors cursor-pointer shrink-0"
+              >
+                <CloseIcon size={16} />
+              </button>
             </div>
           </div>
 
-          {/* ── The two choices ───────────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 overflow-y-auto p-4 flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5">
-              <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
-                Deck name
-              </span>
-              <input
-                autoFocus
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !composing && create()}
-                placeholder="Q3 Performance Review"
-                className="h-[38px] px-3 text-[13px] border border-neutral-200 focus:border-emerald-500 outline-none text-neutral-900"
-              />
-            </label>
+          <div className="flex items-center gap-1.5 px-6 py-2.5 border-b border-neutral-150 bg-neutral-50/50 overflow-x-auto shrink-0 no-scrollbar">
+            {TEMPLATE_CATEGORIES.map((cat) => {
+              const active = selectedCategory === cat.id;
+              const count =
+                cat.id === 'all'
+                  ? allTemplates.length
+                  : cat.id === 'saved'
+                  ? savedTemplates.length
+                  : allTemplates.filter((t) => t.category === cat.id).length;
 
-            <div className="flex flex-col gap-1.5">
-              <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
-                Start from
-              </span>
-              {allStarters.map((s) => {
-                const active = s.id === starterId;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => setStarterId(s.id)}
-                    className={`${rowBase} items-start ${
-                      active
-                        ? 'border-emerald-500 bg-emerald-50/60'
-                        : 'border-neutral-200 hover:border-neutral-400'
-                    }`}
-                  >
-                    <span className="flex flex-col min-w-0 flex-1 gap-0.5">
-                      <span
-                        className={`text-[13px] ${
-                          active ? 'font-bold text-emerald-800' : 'font-semibold text-neutral-800'
-                        }`}
-                      >
-                        {s.name}
-                        {s.custom && (
-                          <span className="ml-1.5 font-mono text-[8.5px] font-bold tracking-[0.1em] uppercase text-neutral-400 align-middle">
-                            Saved
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-[11.5px] text-neutral-500 leading-snug">
-                        {s.description}
-                      </span>
-                    </span>
-                    {active && (
-                      <span className="shrink-0 mt-0.5 text-emerald-600 flex items-center">
-                        <CheckIcon size={15} />
-                      </span>
-                    )}
-                    {s.custom && s.savedId && (
-                      <span
-                        role="button"
-                        aria-label={`Delete template "${s.name}"`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const saved = savedTemplates.find((t) => t.id === s.savedId);
-                          if (saved) setPendingDeleteTemplate(saved);
-                        }}
-                        className="shrink-0 mt-0.5 text-neutral-300 hover:text-rose-600 flex items-center cursor-pointer"
-                      >
-                        <TrashIcon size={13} />
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+              if (cat.id === 'saved' && savedTemplates.length === 0) return null;
 
-            <div className="flex flex-col gap-1.5">
-              <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
-                Brand
-              </span>
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`h-[28px] px-3 text-[11.5px] font-bold rounded-none transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    active
+                      ? 'bg-neutral-900 text-white shadow-xs'
+                      : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/60'
+                  }`}
+                >
+                  <span>{cat.label}</span>
+                  <span className={`text-[10px] font-mono px-1 rounded-none ${active ? 'bg-white/20 text-white' : 'text-neutral-400'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-              {composing ? (
-                /* A cut-down kit form, not the full manager. Everything here is
-                   about getting one deck started, so it asks the two things a
-                   kit needs and nothing else. Renaming, recolouring and deleting
-                   kits stay in the brand kit screen, where the consequences for
-                   other decks can be stated. */
-                <div className="flex flex-col gap-2.5 p-3 border border-neutral-200 bg-neutral-50">
-                  <input
-                    autoFocus
-                    value={kitName}
-                    onChange={(e) => setKitName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && commitKit()}
-                    placeholder="Client name"
-                    className="h-[36px] px-3 text-[13px] border border-neutral-200 focus:border-emerald-500 outline-none text-neutral-900 bg-white"
-                  />
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={css(isHex6(kitAccent) ? kitAccent.replace('#', '') : WOZKU_THEME.accent.base)}
-                      onChange={(e) => setKitAccent(e.target.value.replace('#', '').toUpperCase())}
-                      aria-label="Pick brand colour"
-                      className="w-[36px] h-[36px] p-0 border border-neutral-200 bg-white cursor-pointer"
-                    />
-                    <span className="flex items-center h-[36px] px-3 border border-neutral-200 bg-white focus-within:border-emerald-500">
-                      <span className="font-mono text-[13px] text-neutral-400 pr-0.5">#</span>
-                      <input
-                        value={kitAccent.replace('#', '')}
-                        onChange={(e) =>
-                          setKitAccent(e.target.value.replace('#', '').toUpperCase().slice(0, 6))
-                        }
-                        onKeyDown={(e) => e.key === 'Enter' && commitKit()}
-                        spellCheck={false}
-                        className="w-[74px] font-mono text-[13px] outline-none text-neutral-900 uppercase bg-transparent"
-                      />
-                    </span>
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      {SUGGESTED.map((hex) => (
-                        <button
-                          key={hex}
-                          onClick={() => setKitAccent(hex)}
-                          aria-label={`Use #${hex}`}
-                          title={`#${hex}`}
-                          className="w-5 h-5 border border-neutral-200 hover:scale-110 transition-transform cursor-pointer"
-                          style={{ background: css(hex) }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={commitKit}
-                      disabled={!canCreateKit}
-                      className="h-[32px] px-3.5 text-[12px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer disabled:bg-neutral-300 disabled:cursor-not-allowed"
-                    >
-                      Save client
-                    </button>
-                    <button
-                      onClick={() => setComposing(false)}
-                      className="h-[32px] px-3.5 text-[12px] font-bold text-neutral-700 border border-neutral-200 bg-white hover:bg-neutral-100 transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+          <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
+            <div className="flex-1 p-6 overflow-y-auto bg-neutral-100/50">
+              {filteredTemplates.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-8 text-neutral-400">
+                  <p className="text-[14px] font-medium text-neutral-600">No templates found</p>
+                  <p className="text-[12px] mt-1">Try adjusting your search or category filter</p>
                 </div>
               ) : (
-                <>
-                  {BUILT_IN_THEMES.map((t) => {
-                    const id = t.id === WOZKU_THEME.id ? undefined : t.id;
-                    const active = (themeId ?? WOZKU_THEME.id) === t.id;
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredTemplates.map((tmpl) => {
+                    const isSelected = tmpl.id === activeTemplateId;
                     return (
-                      <button
-                        key={t.id}
-                        onClick={() => setThemeId(id)}
-                        className={`${rowBase} ${
-                          active
-                            ? 'border-emerald-500 bg-emerald-50/60'
-                            : 'border-neutral-200 hover:border-neutral-400'
-                        }`}
-                      >
-                        <span
-                          className="shrink-0 w-[22px] h-[22px] border border-black/10"
-                          style={{ background: css(t.accent.base) }}
-                        />
-                        <span
-                          className={`flex-1 text-[13px] ${
-                            active ? 'font-bold text-emerald-800' : 'font-semibold text-neutral-800'
-                          }`}
-                        >
-                          {t.name}
-                        </span>
-                        <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-neutral-400">
-                          House
-                        </span>
-                        {active && (
-                          <span className="shrink-0 text-emerald-600 flex items-center">
-                            <CheckIcon size={15} />
-                          </span>
-                        )}
-                      </button>
+                      <TemplateCard
+                        key={tmpl.id}
+                        tmpl={tmpl}
+                        isSelected={isSelected}
+                        onSelect={() => setActiveTemplateId(tmpl.id)}
+                        onDelete={() => {
+                          const saved = savedTemplates.find((t) => t.id === tmpl.savedId);
+                          if (saved) setPendingDeleteTemplate(saved);
+                        }}
+                      />
                     );
                   })}
-
-                  {kits.map((kit) => {
-                    const active = themeId === kit.id;
-                    return (
-                      <button
-                        key={kit.id}
-                        onClick={() => setThemeId(kit.id)}
-                        className={`${rowBase} ${
-                          active
-                            ? 'border-emerald-500 bg-emerald-50/60'
-                            : 'border-neutral-200 hover:border-neutral-400'
-                        }`}
-                      >
-                        <span
-                          className="shrink-0 w-[22px] h-[22px] border border-black/10"
-                          style={{ background: css(kit.accent) }}
-                        />
-                        <span
-                          className={`flex-1 min-w-0 truncate text-[13px] ${
-                            active ? 'font-bold text-emerald-800' : 'font-semibold text-neutral-800'
-                          }`}
-                        >
-                          {kit.name}
-                        </span>
-                        <span className="shrink-0 font-mono text-[10px] text-neutral-400">
-                          #{kit.accent}
-                        </span>
-                        {active && (
-                          <span className="shrink-0 text-emerald-600 flex items-center">
-                            <CheckIcon size={15} />
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-
-                  <button
-                    onClick={() => setComposing(true)}
-                    className="flex items-center gap-2 px-3 py-2.5 border border-dashed border-neutral-300 text-[12.5px] font-bold text-neutral-700 hover:border-neutral-500 hover:bg-neutral-50 transition-colors cursor-pointer"
-                  >
-                    <AddIcon size={14} />
-                    New client
-                  </button>
-                </>
+                </div>
               )}
             </div>
-          </div>
-        </div>
 
-        <div className="shrink-0 flex items-center gap-2.5 px-5 py-3.5 border-t border-neutral-150">
-          <span className="text-[11px] text-neutral-400">
-            Both choices can be changed later.
-          </span>
-          <div className="ml-auto flex items-center gap-2.5">
-            <button
-              onClick={onClose}
-              className="h-[38px] px-4 text-[12.5px] font-bold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={create}
-              disabled={composing}
-              className="h-[38px] px-5 text-[12.5px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer disabled:bg-neutral-300 disabled:cursor-not-allowed"
-            >
-              Create deck
-            </button>
+            {/* Right Drawer: Live Slide Preview & Options */}
+            <div className="w-full md:w-[360px] shrink-0 border-t md:border-t-0 md:border-l border-neutral-200 bg-white p-5 flex flex-col gap-4 overflow-y-auto">
+              <div className="flex flex-col gap-1 pb-3 border-b border-neutral-200">
+                <span className="font-mono text-[9px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                  Selected Template
+                </span>
+                <div className="flex items-baseline justify-between">
+                  <h3 className="text-[16px] font-bold text-neutral-900" style={{ fontFamily: `"${activeTemplate.fonts.display}", sans-serif` }}>
+                    {activeTemplate.name}
+                  </h3>
+                  <span className="text-[11px] font-mono text-neutral-400">
+                    {activeTemplate.slideCountText}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-500">
+                  <span>Fonts: <strong className="text-neutral-700">{activeTemplate.fonts.display}</strong> + <strong className="text-neutral-700">{activeTemplate.fonts.sans}</strong></span>
+                </div>
+              </div>
+
+              {/* Live Slide 1 Preview */}
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-[9px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                  Cover Preview
+                </span>
+                <div
+                  className="rounded-none overflow-hidden border border-neutral-200 bg-neutral-50"
+                  style={{ boxShadow: '0 4px 14px -4px rgba(0,0,0,0.1)' }}
+                >
+                  {previewDeck.slides[0] && (
+                    <FitStage slide={previewDeck.slides[0]} ast={null} num="01" theme={theme} />
+                  )}
+                </div>
+              </div>
+
+              {/* Deck Name Input */}
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+                  Deck name
+                </span>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && create()}
+                  placeholder={activeTemplate.name}
+                  className="h-[38px] px-3 text-[13px] border border-neutral-200 focus:border-emerald-500 rounded-none outline-none text-neutral-900 bg-white"
+                />
+              </div>
+
+              {/* Create Action Button */}
+              <div className="mt-auto pt-4 border-t border-neutral-200 flex items-center gap-2">
+                <button
+                  onClick={() => create()}
+                  className="flex-1 h-[42px] px-4 text-[13px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 rounded-none shadow-sm transition-all flex items-center justify-center cursor-pointer"
+                >
+                  <span>Create Deck with {activeTemplate.name}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <ConfirmModal
-      open={pendingDeleteTemplate !== null}
-      title={`Delete "${pendingDeleteTemplate?.name ?? 'this template'}"?`}
-      message={cannotBeUndone('Decks already made from it are unaffected, but this saved template will be gone.')}
-      onConfirm={() => {
-        if (pendingDeleteTemplate) removeTemplate(pendingDeleteTemplate.id);
-        setPendingDeleteTemplate(null);
-      }}
-      onCancel={() => setPendingDeleteTemplate(null)}
-    />
+
+      {pendingDeleteTemplate && (
+        <ConfirmModal
+          open={true}
+          title={`Delete template "${pendingDeleteTemplate.name}"?`}
+          message={cannotBeUndone('This template will be removed from your saved templates.')}
+          onCancel={() => setPendingDeleteTemplate(null)}
+          onConfirm={() => {
+            removeTemplate(pendingDeleteTemplate.id);
+            setPendingDeleteTemplate(null);
+          }}
+        />
+      )}
     </>,
     document.body
   );

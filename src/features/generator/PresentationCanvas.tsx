@@ -12,6 +12,63 @@ import { ConfirmModal } from '../ui/ConfirmModal';
 import { FitProbe } from '../fit/FitProbe';
 import { FitFixChip } from '../fit/FitFixChip';
 import { css as themeCss, themeCssVars, WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
+import {
+  EditorialSlideCover,
+  EditorialSlideExec,
+  EditorialSlideStory,
+  EditorialSlideMetrics,
+  EditorialSlideQuote,
+  EditorialSlideClosing,
+} from '../templates/slides/EditorialSlides';
+import {
+  AiNativeSlideCover,
+  AiNativeSlideOverview,
+  AiNativeSlideProblem,
+  AiNativeSlideMetrics,
+  AiNativeSlidePipeline,
+  AiNativeSlideClosing,
+} from '../templates/slides/AiNativeSlides';
+import {
+  StartupSlideCover,
+  StartupSlideProblem,
+  StartupSlideTraction,
+  StartupSlideRoadmap,
+} from '../templates/slides/StartupSlides';
+import {
+  SwissSlideCover,
+  SwissSlideMetrics,
+} from '../templates/slides/SwissSlides';
+import {
+  WaveSlideCover,
+  WaveSlideMetrics,
+} from '../templates/slides/WaveSlides';
+import {
+  ProductShowcaseSlideCover,
+  ProductShowcaseSlideHero,
+  ProductShowcaseSlideTrio,
+  ProductShowcaseSlideClosing,
+} from '../templates/slides/ProductShowcaseSlides';
+import {
+  UxJourneySlideCover,
+  UxJourneySlideFlow,
+  UxJourneySlideBeforeAfter,
+  UxJourneySlideClosing,
+} from '../templates/slides/UxJourneySlides';
+import {
+  MobileEditorialSlideCover,
+  MobileEditorialSlideAsymmetric,
+  MobileEditorialSlideClosing,
+} from '../templates/slides/MobileEditorialSlides';
+import {
+  ProductDataSlideCover,
+  ProductDataSlideScreenKpi,
+  ProductDataSlideClosing,
+} from '../templates/slides/ProductDataSlides';
+import {
+  InvestorMemoSlideCover,
+  InvestorMemoSlideTerms,
+  InvestorMemoSlideClosing,
+} from '../templates/slides/InvestorMemoSlides';
 
 /** Overlay shapes actually shown for this slide right now - everything, minus
  *  any shape pinned to a different 'blank' layout than the one in effect
@@ -69,7 +126,7 @@ interface PresentationCanvasProps {
 /** Props every slide renderer receives: parsed document (for the logo), the
  *  instance's content slots, its visible slide number ("04"), and edit-mode
  *  wiring (onEdit routes a content patch back to this slide instance). */
-interface SlideRenderProps {
+export interface SlideRenderProps {
   ast: DocumentNode | null;
   content: SlideContent;
   num: string;
@@ -94,14 +151,14 @@ interface SlideRenderProps {
   onSelect?: (selection: Selection, additive?: boolean) => void;
 }
 
-const PLACEHOLDER =
+export const PLACEHOLDER =
   'Placeholder content for the Wozku Master Template. This section will automatically populate once a Document is provided.';
 
 // ---------------------------------------------------------------------------
 // Design System Typography Scale
 // All primary headings across all 14 slide renderers inherit from this base
 // ---------------------------------------------------------------------------
-const DISPLAY_HEADING_BASE: React.CSSProperties = {
+export const DISPLAY_HEADING_BASE: React.CSSProperties = {
   fontFamily: 'var(--font-display)',
   lineHeight: 0.85,
   letterSpacing: '-0.05em',
@@ -360,7 +417,7 @@ function CornerAnchors() {
 /** Renders plain text normally; in edit mode becomes a contentEditable span
  *  that commits on blur. Committing an empty string signals "revert to the
  *  template placeholder" (callers map '' → undefined). */
-function E({ value, editing, onCommit, multiline, dataField, onActivate, slot }: EditableProps) {
+export function E({ value, editing, onCommit, multiline, dataField, onActivate, slot }: EditableProps) {
   const { styles, selectedSlots, anchorSlot, onSelectSlot, onBeginDrag, revision, dragDelta } =
     useContext(SlotContext);
   const framedSlot = useContext(FrameContext);
@@ -731,7 +788,7 @@ function ImageSlot({ src, editing, onChange, placeholder, style, onDeleteContain
 /** Hairline grid overlay present on most light slides.
  *  Uses explicit z-index to stay strictly behind text content layers.
  */
-function SlideGrid() {
+export function SlideGrid() {
   return (
     <div
       style={{
@@ -751,7 +808,7 @@ function SlideGrid() {
 /** Radial glow for light slides - uses accent colour.
  *  Uses explicit z-index to avoid overlaying text.
  */
-function Glow({ style }: { style?: React.CSSProperties }) {
+export function Glow({ style }: { style?: React.CSSProperties }) {
   return (
     <div
       style={{
@@ -771,7 +828,7 @@ function Glow({ style }: { style?: React.CSSProperties }) {
 /** Top HUD bar: slide label left, slide number right.
  *  Always stacked nicely above background layers.
  */
-function HudTop({ label, num }: { label: React.ReactNode; num: React.ReactNode }) {
+export function HudTop({ label, num }: { label: React.ReactNode; num: React.ReactNode }) {
   return (
     <div
       style={{
@@ -805,7 +862,7 @@ function HudTop({ label, num }: { label: React.ReactNode; num: React.ReactNode }
  *  as that slot's frame (see FrameContext), so dragging the text carries the
  *  emerald rule with it instead of leaving it stranded. Labels holding fixed
  *  text ('Navigation') take no slot and never move. */
-function EditorialLabel({
+export function EditorialLabel({
   children,
   style,
   slot,
@@ -856,7 +913,7 @@ function EditorialLabel({
 }
 
 /** Oversized background numeral used by dark divider / monument slides. */
-function GhostNumeral({
+export function GhostNumeral({
   num,
   dark,
   style,
@@ -1029,7 +1086,7 @@ function ScaleHandle({
 /** Client logo slot. Deck-level `logoUrl` (seeded from the Business Record's
  *  optional `logo` frontmatter). In edit mode the slot becomes click-to-upload
  *  with a remove control, so users can set the brand logo without a URL. */
-function Logo({
+export function Logo({
   src,
   editing,
   onChange,
@@ -1136,14 +1193,330 @@ function Logo({
 
 function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
   const lines = content.headingLines ?? ['Master Primary', 'Heading.'];
-  // Auto-fit the hero: shrink the font and tighten the top padding for longer
-  // titles so the headline never overflows the fixed 1080px slide and keeps a
-  // clean bottom gap. Short titles keep the full 180px display size.
+  const layout = content.coverLayout || 'classic';
+
+  // 1. CENTERED HERO (AI-Native / Tech Systems)
+  if (layout === 'centered-hero') {
+    return (
+      <>
+        <SlideGrid />
+        <Glow style={{ top: '20%', left: '50%', transform: 'translate(-50%, -50%)', width: 900, height: 900, background: 'radial-gradient(circle, var(--emerald-500) 0%, rgba(124,58,237,0) 70%)', opacity: 0.22 }} />
+        
+        {/* Futuristic Top HUD Bar */}
+        <div style={{ position: 'absolute', top: 60, left: 80, right: 80, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span style={{ width: 8, height: 8, background: 'var(--emerald-400)', boxShadow: '0 0 10px var(--emerald-400)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--emerald-400)' }}>
+              <E slot="projectLabel"
+                value={content.projectLabel ?? 'FOUNDRY AGENTIC SYSTEMS'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, projectLabel: v || undefined }))}
+              />
+            </span>
+          </div>
+          <div style={{ border: '1px solid var(--border-subtle)', background: 'rgba(255,255,255,0.04)', padding: '6px 16px', backdropFilter: 'blur(10px)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.15em', color: 'var(--neutral-400)' }}>
+              <E slot="versionLabel"
+                value={content.versionLabel ?? 'OCT 2026 // V1.0'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, versionLabel: v || undefined }))}
+              />
+            </span>
+          </div>
+        </div>
+
+        {/* Centered Futuristic Hero Content */}
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 180px', position: 'relative', zIndex: 10 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12, padding: '8px 20px', background: 'rgba(124,58,237,0.12)', border: '1px solid var(--emerald-500)', marginBottom: 36 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--emerald-400)' }}>
+              <E slot="eyebrow"
+                value={content.eyebrow ?? 'SERIES A DECK // OCTOBER 2026'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+              />
+            </span>
+          </div>
+
+          <h1
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 130,
+              fontWeight: 800,
+              lineHeight: 0.95,
+              letterSpacing: '-0.04em',
+              color: 'var(--neutral-900)',
+              marginBottom: 40,
+              maxWidth: 1500,
+            }}
+          >
+            {editing ? (
+              <E
+                slot="headingLines"
+                value={lines.join('\n')}
+                editing
+                multiline
+                onCommit={(v) =>
+                  onEdit((c) => ({
+                    ...c,
+                    headingLines: v ? v.split('\n').map((l) => l.trim()).filter(Boolean) : undefined,
+                  }))
+                }
+              />
+            ) : (
+              lines.map((line, i) => (
+                <span key={i}>
+                  {i === lines.length - 1 && lines.length > 1 ? (
+                    <span style={{ color: 'var(--emerald-400)', textShadow: '0 0 40px rgba(167,139,250,0.3)' }}>{line}</span>
+                  ) : (
+                    line
+                  )}
+                  {i < lines.length - 1 && <br />}
+                </span>
+              ))
+            )}
+          </h1>
+
+          <p
+            style={{
+              fontFamily: 'var(--font-sans)',
+              fontSize: 24,
+              lineHeight: 1.6,
+              color: 'var(--neutral-400)',
+              maxWidth: 860,
+              margin: '0 auto',
+            }}
+          >
+            <E slot="tagline"
+              value={content.tagline ?? 'AUTONOMOUS INTELLIGENCE PIPELINES FOR MODERN ENGINEERING ORGANIZATIONS.'}
+              editing={editing}
+              multiline
+              onCommit={(v) => onEdit((c) => ({ ...c, tagline: v || undefined }))}
+            />
+          </p>
+        </div>
+
+        <div style={{ position: 'absolute', bottom: 60, left: 80, right: 80, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, letterSpacing: '0.15em', color: 'var(--neutral-500)' }}>
+            <E slot="confidentialLabel"
+              value={content.confidentialLabel ?? 'PROPRIETARY AND CONFIDENTIAL'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, confidentialLabel: v }))}
+            />
+          </span>
+          <Logo src={logoUrl} editing={editing} onChange={onLogoChange} scale={logoScale} onScaleChange={onLogoScaleChange} />
+        </div>
+      </>
+    );
+  }
+
+  // 2. MONUMENTAL BOLD (Startup Pitch Deck)
+  if (layout === 'monumental-bold') {
+    return (
+      <>
+        <SlideGrid />
+        <Glow style={{ top: -200, right: -100, width: 800, height: 800, background: 'radial-gradient(circle, var(--emerald-500) 0%, rgba(0,0,0,0) 70%)', opacity: 0.35 }} />
+        
+        <div style={{ position: 'absolute', top: 60, left: 80, right: 80, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 10 }}>
+          <div style={{ borderLeft: '3px solid var(--emerald-500)', paddingLeft: 18 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700, color: 'var(--emerald-400)', letterSpacing: '0.15em' }}>
+              <E slot="projectLabel"
+                value={content.projectLabel ?? 'PULSE COMMERCE // SEED'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, projectLabel: v || undefined }))}
+              />
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neutral-500)', marginTop: 4 }}>
+              <E slot="versionLabel"
+                value={content.versionLabel ?? 'TARGET: $3.5M SEED ROUND'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, versionLabel: v || undefined }))}
+              />
+            </div>
+          </div>
+          <Logo src={logoUrl} editing={editing} onChange={onLogoChange} scale={logoScale} onScaleChange={onLogoScaleChange} />
+        </div>
+
+        <div style={{ padding: '0 80px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', zIndex: 10 }}>
+          <div style={{ marginBottom: 24 }}>
+            <span style={{ background: 'var(--emerald-500)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 800, padding: '4px 12px', letterSpacing: '0.1em' }}>
+              <E slot="eyebrow"
+                value={content.eyebrow ?? 'CONFIDENTIAL INVESTOR MEMORANDUM'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+              />
+            </span>
+          </div>
+
+          <h1
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 160,
+              fontWeight: 800,
+              lineHeight: 0.88,
+              letterSpacing: '-0.05em',
+              color: 'var(--neutral-900)',
+              marginBottom: 48,
+              textTransform: 'uppercase',
+            }}
+          >
+            {editing ? (
+              <E
+                slot="headingLines"
+                value={lines.join('\n')}
+                editing
+                multiline
+                onCommit={(v) =>
+                  onEdit((c) => ({
+                    ...c,
+                    headingLines: v ? v.split('\n').map((l) => l.trim()).filter(Boolean) : undefined,
+                  }))
+                }
+              />
+            ) : (
+              lines.map((line, i) => (
+                <span key={i}>
+                  {i === lines.length - 1 && lines.length > 1 ? (
+                    <span style={{ color: 'var(--emerald-500)' }}>{line}</span>
+                  ) : (
+                    line
+                  )}
+                  {i < lines.length - 1 && <br />}
+                </span>
+              ))
+            )}
+          </h1>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 40, borderTop: '1px solid var(--border-subtle)', paddingTop: 32, maxWidth: 1100 }}>
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 28, fontWeight: 500, color: 'var(--neutral-300)', lineHeight: 1.4 }}>
+              <E slot="tagline"
+                value={content.tagline ?? 'BUILDING THE AUTONOMOUS CHECKOUT LAYER FOR 100M+ GLOBAL SHOPPERS.'}
+                editing={editing}
+                multiline
+                onCommit={(v) => onEdit((c) => ({ ...c, tagline: v || undefined }))}
+              />
+            </p>
+          </div>
+        </div>
+
+        <div style={{ position: 'absolute', bottom: 60, left: 80, right: 80, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--neutral-500)' }}>
+            <E slot="confidentialLabel"
+              value={content.confidentialLabel ?? 'SERIES SEED // SAN FRANCISCO, CA'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, confidentialLabel: v }))}
+            />
+          </span>
+        </div>
+      </>
+    );
+  }
+
+  // 3. SPLIT EDITORIAL / SWISS (The Editorial / Swiss Minimal)
+  if (layout === 'split-editorial' || layout === 'swiss-minimal') {
+    return (
+      <>
+        <SlideGrid />
+        <div style={{ position: 'absolute', top: 60, left: 100, right: 100, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--neutral-300)', paddingBottom: 24, zIndex: 10 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--neutral-900)' }}>
+            <E slot="projectLabel"
+              value={content.projectLabel ?? 'EDITORIAL / VOLUME 04'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, projectLabel: v || undefined }))}
+            />
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--neutral-500)' }}>
+            <E slot="versionLabel"
+              value={content.versionLabel ?? 'EDITION 2026 // N° 12'}
+              editing={editing}
+              onCommit={(v) => onEdit((c) => ({ ...c, versionLabel: v || undefined }))}
+            />
+          </span>
+        </div>
+
+        <div style={{ height: '100%', display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', padding: '140px 100px 80px', gap: 80, alignItems: 'center', position: 'relative', zIndex: 10 }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, color: 'var(--emerald-600)', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 28 }}>
+              <E slot="eyebrow"
+                value={content.eyebrow ?? 'A PERSPECTIVE ON DESIGN RIGOR'}
+                editing={editing}
+                onCommit={(v) => onEdit((c) => ({ ...c, eyebrow: v || undefined }))}
+              />
+            </div>
+            <h1
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 120,
+                fontWeight: 500,
+                lineHeight: 1.0,
+                letterSpacing: '-0.03em',
+                color: 'var(--neutral-900)',
+                marginBottom: 32,
+              }}
+            >
+              {editing ? (
+                <E
+                  slot="headingLines"
+                  value={lines.join('\n')}
+                  editing
+                  multiline
+                  onCommit={(v) =>
+                    onEdit((c) => ({
+                      ...c,
+                      headingLines: v ? v.split('\n').map((l) => l.trim()).filter(Boolean) : undefined,
+                    }))
+                  }
+                />
+              ) : (
+                lines.map((line, i) => (
+                  <span key={i}>
+                    {i === lines.length - 1 && lines.length > 1 ? (
+                      <span style={{ fontStyle: 'italic', color: 'var(--emerald-600)' }}>{line}</span>
+                    ) : (
+                      line
+                    )}
+                    {i < lines.length - 1 && <br />}
+                  </span>
+                ))
+              )}
+            </h1>
+          </div>
+
+          <div style={{ borderLeft: '1px solid var(--neutral-300)', paddingLeft: 60, display: 'flex', flexDirection: 'column', gap: 32 }}>
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: 26, lineHeight: 1.6, color: 'var(--neutral-600)' }}>
+              <E slot="tagline"
+                value={content.tagline ?? 'An architectural exploration of structure, typography, and visual clarity for the modern enterprise.'}
+                editing={editing}
+                multiline
+                onCommit={(v) => onEdit((c) => ({ ...c, tagline: v || undefined }))}
+              />
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+              <div style={{ width: 40, height: 1, background: 'var(--emerald-600)' }} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--neutral-500)' }}>
+                <E slot="confidentialLabel"
+                  value={content.confidentialLabel ?? 'CONFIDENTIAL // PUBLICATION'}
+                  editing={editing}
+                  onCommit={(v) => onEdit((c) => ({ ...c, confidentialLabel: v }))}
+                />
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ position: 'absolute', bottom: 40, right: 100, zIndex: 10 }}>
+          <Logo src={logoUrl} editing={editing} onChange={onLogoChange} scale={logoScale} onScaleChange={onLogoScaleChange} />
+        </div>
+      </>
+    );
+  }
+
+  // 4. CLASSIC MASTER (Wozku / The Wave Organic / Default)
   const longestLine = Math.max(...lines.map((l) => l.length), 1);
   const heroFont = Math.round(
     Math.max(72, Math.min(180, 1640 / (longestLine * 0.6), 620 / (lines.length * 0.95)))
   );
   const heroTopPad = lines.length >= 4 ? 160 : lines.length === 3 ? 210 : 280;
+
   return (
     <>
       <SlideGrid />
@@ -1164,8 +1537,18 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
           />
         }
       />
-      {/* Top padding adapts to the number of hero lines so long titles fit cleanly. */}
-      <div style={{ padding: `${heroTopPad}px 140px`, position: 'relative', zIndex: 10 }}>
+
+      <div
+        style={{
+          padding: `${heroTopPad}px 140px`,
+          position: 'relative',
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          height: '100%',
+        }}
+      >
         <EditorialLabel slot="eyebrow">
           <E slot="eyebrow"
             value={content.eyebrow ?? 'Presentation Subtitle'}
@@ -1210,8 +1593,8 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
             ))
           )}
         </h1>
-        <div style={{ marginTop: 96, display: 'flex', alignItems: 'center', gap: 48 }}>
-          <div style={{ width: 135, height: 1, background: 'var(--emerald-500)' }} />
+        <div style={{ marginTop: 64, display: 'flex', alignItems: 'center', gap: 48 }}>
+          <div style={{ width: 135, height: 2, background: 'var(--emerald-500)' }} />
           <p
             style={{
               fontFamily: 'var(--font-mono)',
@@ -1219,6 +1602,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
               textTransform: 'uppercase',
               letterSpacing: '0.25em',
               color: 'var(--neutral-500)',
+              maxWidth: 980,
             }}
           >
             <E slot="tagline"
@@ -1245,8 +1629,6 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
           zIndex: 10,
         }}
       >
-        {/* Editable, and clearable: not every deck is confidential, so an empty
-            value removes the line rather than leaving a stuck legal notice. */}
         {(content.confidentialLabel ?? 'PROPRIETARY AND CONFIDENTIAL') !== '' && (
           <span>
             <E
@@ -3448,6 +3830,7 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
 }
 
 const SLIDE_RENDERERS: Record<string, (props: SlideRenderProps) => React.ReactElement> = {
+  // Default Wozku Presentation System
   s1: SlideCover,
   s2: SlideIndex,
   s3: SlideExecutiveSummary,
@@ -3464,9 +3847,95 @@ const SLIDE_RENDERERS: Record<string, (props: SlideRenderProps) => React.ReactEl
   s14: SlideExit,
   blank: SlideBlank,
   imported: SlideImported,
+
+  // The Editorial Presentation System
+  editorial_cover: EditorialSlideCover,
+  editorial_exec: EditorialSlideExec,
+  editorial_story: EditorialSlideStory,
+  editorial_metrics: EditorialSlideMetrics,
+  editorial_quote: EditorialSlideQuote,
+  editorial_closing: EditorialSlideClosing,
+
+  // AI-Native Presentation System
+  ai_native_cover: AiNativeSlideCover,
+  ai_native_overview: AiNativeSlideOverview,
+  ai_native_problem: AiNativeSlideProblem,
+  ai_native_metrics: AiNativeSlideMetrics,
+  ai_native_pipeline: AiNativeSlidePipeline,
+  ai_native_closing: AiNativeSlideClosing,
+
+  // Startup Pitch Deck Presentation System
+  startup_cover: StartupSlideCover,
+  startup_problem: StartupSlideProblem,
+  startup_traction: StartupSlideTraction,
+  startup_roadmap: StartupSlideRoadmap,
+
+  // Swiss Enterprise Minimal Presentation System
+  swiss_cover: SwissSlideCover,
+  swiss_metrics: SwissSlideMetrics,
+
+  // The Wave Organic Presentation System
+  wave_cover: WaveSlideCover,
+  wave_metrics: WaveSlideMetrics,
+
+  // Product Showcase Presentation System
+  product_showcase_cover: ProductShowcaseSlideCover,
+  product_showcase_hero: ProductShowcaseSlideHero,
+  product_showcase_trio: ProductShowcaseSlideTrio,
+  product_showcase_closing: ProductShowcaseSlideClosing,
+
+  // UX Journey Presentation System
+  ux_journey_cover: UxJourneySlideCover,
+  ux_journey_flow: UxJourneySlideFlow,
+  ux_journey_before_after: UxJourneySlideBeforeAfter,
+  ux_journey_closing: UxJourneySlideClosing,
+
+  // Mobile Editorial Presentation System
+  mobile_editorial_cover: MobileEditorialSlideCover,
+  mobile_editorial_asymmetric: MobileEditorialSlideAsymmetric,
+  mobile_editorial_closing: MobileEditorialSlideClosing,
+
+  // Product Data Presentation System
+  product_data_cover: ProductDataSlideCover,
+  product_data_screen_kpi: ProductDataSlideScreenKpi,
+  product_data_closing: ProductDataSlideClosing,
+
+  // Investor Memorandum Presentation System
+  investor_memo_cover: InvestorMemoSlideCover,
+  investor_memo_terms: InvestorMemoSlideTerms,
+  investor_memo_closing: InvestorMemoSlideClosing,
 };
 
-const DARK_TEMPLATES = new Set(['s4', 's14']);
+const DARK_TEMPLATES = new Set([
+  's4',
+  's14',
+  'editorial_closing',
+  'ai_native_cover',
+  'ai_native_overview',
+  'ai_native_problem',
+  'ai_native_metrics',
+  'ai_native_pipeline',
+  'ai_native_closing',
+  'startup_cover',
+  'startup_problem',
+  'startup_traction',
+  'startup_roadmap',
+  'product_showcase_cover',
+  'product_showcase_hero',
+  'product_showcase_trio',
+  'product_showcase_closing',
+  'ux_journey_cover',
+  'ux_journey_flow',
+  'ux_journey_before_after',
+  'ux_journey_closing',
+  'mobile_editorial_closing',
+  'product_data_cover',
+  'product_data_screen_kpi',
+  'product_data_closing',
+  'investor_memo_cover',
+  'investor_memo_terms',
+  'investor_memo_closing',
+]);
 
 /** Imported slides carry their own background colour, so darkness is a
  *  property of the slide instance rather than of its template id. */
@@ -3523,8 +3992,13 @@ export function SlideStage({
           position: 'relative',
           overflow: 'hidden',
           padding: 0,
-          background: isDark ? themeCss(theme.surface.dark) : themeCss(theme.surface.light),
-          color: isDark ? themeCss(theme.ink.onDark) : themeCss(theme.ink.onLight),
+          background:
+            slide.templateId === 's1' && theme.styleSystem?.coverGradient
+              ? theme.styleSystem.coverGradient
+              : isDark || theme.styleSystem?.isDarkSlideDefault
+              ? (theme.styleSystem?.slideBackground ?? themeCss(theme.surface.dark))
+              : themeCss(theme.surface.light),
+          color: (isDark || theme.styleSystem?.isDarkSlideDefault) ? themeCss(theme.ink.onDark) : themeCss(theme.ink.onLight),
         }}
       >
         {Renderer && <Renderer ast={ast} content={slide.content} num={num} editing={false} onEdit={() => { }} logoUrl={logoUrl} />}
@@ -3746,9 +4220,14 @@ export function PresentationCanvas({
               transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + 18px + ${pan.y}px)) scale(${scale})`,
               transformOrigin: 'center center',
               overflow: 'hidden',
-              background: isDark ? themeCss(theme.surface.dark) : themeCss(theme.surface.light),
-              color: isDark ? themeCss(theme.ink.onDark) : themeCss(theme.ink.onLight),
-              boxShadow: isDark
+              background:
+                slide.templateId === 's1' && theme.styleSystem?.coverGradient
+                  ? theme.styleSystem.coverGradient
+                  : isDark || theme.styleSystem?.isDarkSlideDefault
+                  ? (theme.styleSystem?.slideBackground ?? themeCss(theme.surface.dark))
+                  : themeCss(theme.surface.light),
+              color: (isDark || theme.styleSystem?.isDarkSlideDefault) ? themeCss(theme.ink.onDark) : themeCss(theme.ink.onLight),
+              boxShadow: isDark || theme.styleSystem?.isDarkSlideDefault
                 ? 'var(--shadow-stage)'
                 : 'var(--shadow-stage), inset 0 0 0 1px rgba(0,0,0,0.06)',
               // Every slide stays mounted so the exporter can still capture any
