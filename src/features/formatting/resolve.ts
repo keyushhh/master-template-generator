@@ -245,13 +245,3 @@ export function patchStyles(
   return Object.keys(next).length ? next : undefined;
 }
 
-/** Drops every override for a slot. */
-export function clearSlot(
-  styles: Record<string, SlotStyle> | undefined,
-  slot: string
-): Record<string, SlotStyle> | undefined {
-  if (!styles || !(slot in styles)) return styles;
-  const next = { ...styles };
-  delete next[slot];
-  return Object.keys(next).length ? next : undefined;
-}

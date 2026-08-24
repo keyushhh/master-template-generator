@@ -27,7 +27,7 @@ export interface SavedDeckTemplate {
 }
 
 function newId(): string {
-  return `tpl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  return `tpl_${crypto.randomUUID()}`;
 }
 
 export function listDeckTemplates(): SavedDeckTemplate[] {

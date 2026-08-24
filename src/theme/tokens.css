@@ -132,9 +132,6 @@
   --neutral-900: #171717;
   --neutral-950: #0a0a0a;
 
-  /* Integrations sandbox grid line color */
-  --grid-line-color: rgba(226, 232, 240, 0.4);
-
   /* Brand primary scale (emerald green) */
   --emerald-50: #ecfdf5;
   --emerald-100: #d1fae5;
@@ -240,22 +237,6 @@
   }
 }
 
-/* Custom Dotted Background Grid - Light & Dark adaptation */
-.bg-grid-dots {
-  background-size: 24px 24px !important;
-  background-image: radial-gradient(circle, var(--neutral-200) 1px, transparent 1px) !important;
-}
-
-.bg-grid-dots-dark {
-  background-size: 24px 24px !important;
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.12) 1.2px, transparent 1.2px) !important;
-}
-
-.bg-grid-dots-accent {
-  background-size: 20px 20px !important;
-  background-image: radial-gradient(circle, var(--neutral-300) 1.2px, transparent 1.2px) !important;
-}
-
 /* Live-status dot in the studio header. Breathes rather than blinks: a hard
    on/off draws the eye away from the canvas, which is the opposite of what a
    background autosave indicator should do. */
@@ -274,103 +255,4 @@
 }
 
 svg { overflow: visible; }
-
-/* Sharp/Squared corners styling toggle */
-:root.corners-sharp,
-.corners-sharp,
-.corners-sharp * {
-  border-radius: 0px !important;
-}
-
-/* Exclude map ripples, tiny status indicators, and color preset circles from being squared */
-.corners-sharp .custom-ripple,
-.corners-sharp .reach-ripple,
-.corners-sharp [class*="ripple"],
-.corners-sharp .w-1.h-1,
-.corners-sharp .w-2.h-2,
-.corners-sharp .w-3.h-3,
-.corners-sharp .h-1.w-1,
-.corners-sharp .h-2.w-2,
-.corners-sharp .h-3.w-3,
-.corners-sharp .w-7.h-7,
-.corners-sharp .w-8.h-8,
-.corners-sharp .h-7.w-7,
-.corners-sharp .h-8.w-8 {
-  border-radius: 50% !important;
-}
-
-.corners-sharp ::-webkit-scrollbar-thumb {
-  border-radius: 0px !important;
-}
-
-/* Hide all page and section description pills/badges and tracking-widest uppercase sub-labels */
-span[class*="tracking-widest"][class*="uppercase"],
-span[class*="tracking-widest"][class*="font-mono"],
-span[class*="font-mono"][class*="uppercase"][class*="px-"],
-span.font-mono.uppercase[class*="bg-"] {
-  display: none !important;
-}
-
-/* Standard height utility to keep inputs, buttons, and selects in perfect visual sync */
-.modal-control-height {
-  height: 44px !important;
-  box-sizing: border-box !important;
-}
-
-/* Ambient background blur orbs compositor-friendly animations */
-.animate-orb-top-left {
-  animation: orb-drift-top-left 18s ease-in-out infinite;
-}
-.animate-orb-top-right {
-  animation: orb-drift-top-right 22s ease-in-out infinite;
-}
-.animate-orb-center {
-  animation: orb-pulse-center 28s ease-in-out infinite;
-}
-.animate-orb-mid-left {
-  animation: orb-pulse-mid-left 24s ease-in-out infinite;
-}
-.animate-orb-lower {
-  animation: orb-pulse-lower 20s ease-in-out infinite;
-}
-.animate-orb-bottom {
-  animation: orb-pulse-bottom 26s ease-in-out infinite;
-}
-
-@keyframes orb-drift-top-left {
-  0%, 100% { translate: 0 0; scale: 1; }
-  33% { translate: 60px -40px; scale: 1.2; }
-  66% { translate: -40px 40px; scale: 0.9; }
-}
-
-@keyframes orb-drift-top-right {
-  0%, 100% { translate: 0 0; scale: 1; }
-  33% { translate: -60px 50px; scale: 0.95; }
-  66% { translate: 40px -30px; scale: 1.15; }
-}
-
-@keyframes orb-pulse-center {
-  0%, 100% { scale: 1; }
-  50% { scale: 1.18; }
-  75% { scale: 0.88; }
-}
-
-@keyframes orb-pulse-mid-left {
-  0%, 100% { scale: 1; }
-  50% { scale: 0.9; }
-  75% { scale: 1.1; }
-}
-
-@keyframes orb-pulse-lower {
-  0%, 100% { scale: 1; }
-  50% { scale: 0.98; }
-  75% { scale: 1.12; }
-}
-
-@keyframes orb-pulse-bottom {
-  0%, 100% { scale: 1; }
-  50% { scale: 1.15; }
-  75% { scale: 0.95; }
-}
-
 

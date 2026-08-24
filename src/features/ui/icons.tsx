@@ -261,24 +261,6 @@ export function CloudUploadIcon({ size = 14 }: IconProps) {
   );
 }
 
-/** ionicons: link-outline */
-export function LinkIcon({ size = 14 }: IconProps) {
-  return (
-    <Ion size={size}>
-      <path d="M208 352h-64a96 96 0 0 1 0-192h64M304 160h64a96 96 0 0 1 0 192h-64M163.29 256h187.42" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="36px"/>
-    </Ion>
-  );
-}
-
-/** ionicons: remove-outline */
-export function MinusIcon({ size = 14 }: IconProps) {
-  return (
-    <Ion size={size}>
-      <path d="M400 256H112" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px"/>
-    </Ion>
-  );
-}
-
 /** ionicons: reorder-two-outline */
 export function GripIcon({ size = 14 }: IconProps) {
   return (
@@ -525,15 +507,6 @@ export function FolderIcon({ size = 14 }: IconProps) {
   return (
     <Ion size={size}>
       <path d="M440 432H72a40 40 0 01-40-40V120a40 40 0 0140-40h120l32 40h216a40 40 0 0140 40v232a40 40 0 01-40 40z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="32px"/>
-    </Ion>
-  );
-}
-
-/** ionicons: folder (filled) */
-export function FolderFilledIcon({ size = 14 }: IconProps) {
-  return (
-    <Ion size={size}>
-      <path d="M496 152a56 56 0 00-56-56H220.37l-32-40H72a56 56 0 00-56 56v288a56 56 0 0056 56h368a56 56 0 0056-56z" fill="currentColor"/>
     </Ion>
   );
 }

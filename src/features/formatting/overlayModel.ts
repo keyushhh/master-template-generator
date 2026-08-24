@@ -10,13 +10,9 @@
 import type { OverlayShape, SlideContent } from '../deck/types';
 import { GRID, SLIDE_H, SLIDE_W, clampToSlide, type Rect } from './snap';
 
-let seq = 0;
-
-/** Ids only need to be unique within a slide's overlay array. A counter plus a
- *  random suffix avoids collisions when a slide is duplicated. */
+/** Ids only need to be unique within a slide's overlay array. */
 function mintId(kind: string): string {
-  seq += 1;
-  return `ov_${kind}_${seq}_${Math.random().toString(36).slice(2, 7)}`;
+  return `ov_${kind}_${crypto.randomUUID()}`;
 }
 
 const NEUTRAL_200 = 'E5E5E5';
@@ -137,15 +133,3 @@ export function layerBounds(shapes: OverlayShape[], id: string) {
   return { isFirst: i <= 0, isLast: i === shapes.length - 1, index: i, total: shapes.length };
 }
 
-/** Short human label for the layer list. */
-export function shapeLabel(s: OverlayShape): string {
-  if (s.kind === 'text') {
-    const t = (s.text ?? '').replace(/\s+/g, ' ').trim();
-    return t ? (t.length > 24 ? `${t.slice(0, 24)}…` : t) : 'Text box';
-  }
-  if (s.kind === 'image') return 'Image';
-  if (s.kind === 'video') return s.videoName ?? 'Video';
-  if (s.kind === 'table') return 'Table';
-  if (s.kind === 'chart') return 'Chart';
-  return s.kind === 'ellipse' ? 'Ellipse' : 'Rectangle';
-}

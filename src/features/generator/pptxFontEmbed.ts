@@ -234,7 +234,7 @@ export async function embedPptxFonts(
   zip.file('ppt/_rels/presentation.xml.rels', relsXml);
   zip.file('[Content_Types].xml', contentTypesXml);
 
-  return { buffer: await zip.generateAsync({ type: 'arraybuffer' }), report };
+  return { buffer: await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' }), report };
 }
 
 /** Family names reach the XML verbatim, and a catalogue name can contain an

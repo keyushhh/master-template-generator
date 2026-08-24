@@ -346,6 +346,34 @@ function Row({
 
 // ── Text controls ───────────────────────────────────────────────────────────
 
+/** Alt text for an image slot - a screen reader description that also
+ *  becomes the picture's alt text in the exported .pptx. Commits on blur/Enter
+ *  like the size stepper, so typing doesn't spam the deck's undo history. */
+function AltTextField({
+  value, onCommit,
+}: { value?: string; onCommit: (text: string) => void }) {
+  const [draft, setDraft] = useState(value ?? '');
+  useEffect(() => { setDraft(value ?? ''); }, [value]);
+
+  return (
+    <input
+      title="Alt text - describes this image for screen readers and in the exported file"
+      aria-label="Alt text"
+      placeholder="Describe this image…"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => onCommit(draft)}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+      style={{
+        width: 160, height: 28, padding: '0 8px',
+        fontSize: 12, color: 'var(--neutral-900)', background: '#fff',
+        border: '1px solid var(--neutral-200)',
+        borderRadius: 'var(--radius-sharp)',
+      }}
+    />
+  );
+}
+
 function SizeStepper({
   shown, onSet,
 }: { shown?: number; onSet: (px: number) => void }) {
@@ -1344,6 +1372,16 @@ export function EditToolbar({
                   </>
                 )}
               </Menu>
+              <Sep />
+            </>
+          )}
+
+          {selectedShape.kind === 'image' && (
+            <>
+              <AltTextField
+                value={selectedShape.altText}
+                onCommit={(text) => onPatchShape?.({ altText: text.trim() || undefined })}
+              />
               <Sep />
             </>
           )}

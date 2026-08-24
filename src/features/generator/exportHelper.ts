@@ -132,7 +132,7 @@ async function captureSlide(id: string): Promise<HTMLCanvasElement | null> {
 
   try {
     return await html2canvas(el, {
-      scale: 2, // 2× for crisp presentation-quality output
+      scale: 1.5, // 2880x1620 - sharper than 1080p, well under half the file size of 2x
       useCORS: true,
       logging: false,
       backgroundColor: null,
@@ -183,6 +183,7 @@ export async function exportPptxBuffer(
   }
   const mediaNotes = takeMediaNotes();
 
+  // pptxgenjs ignores its own `compression` option for outputType 'arraybuffer'; the real DEFLATE pass happens in embedPptxFonts below.
   const rawBuffer = (await pptx.write({ outputType: 'arraybuffer' })) as ArrayBuffer;
   let finalBuffer = rawBuffer;
   let report: FontEmbedReport = { embedded: [], named: [], approximate: [] };
@@ -245,7 +246,7 @@ export async function exportToPDF(
   const total = slideIds.length;
   if (total === 0) return;
 
-  const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [SLIDE_W, SLIDE_H] });
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [SLIDE_W, SLIDE_H], compress: true });
 
   let placed = 0;
   for (let i = 0; i < total; i++) {
@@ -253,7 +254,7 @@ export async function exportToPDF(
     const canvas = await captureSlide(slideIds[i]);
     if (!canvas) continue;
     if (placed > 0) pdf.addPage([SLIDE_W, SLIDE_H], 'landscape');
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, SLIDE_W, SLIDE_H);
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, SLIDE_W, SLIDE_H);
     placed++;
   }
 
@@ -319,7 +320,7 @@ export async function exportToHTML(
     onProgress?.(i, total);
     const canvas = await captureSlide(slides[i].instanceId);
     if (canvas) {
-      images.push(canvas.toDataURL('image/jpeg', 0.92));
+      images.push(canvas.toDataURL('image/jpeg', 0.85));
       videos.push(await htmlVideoPlacements(slides[i], notes));
     }
   }
@@ -593,17 +594,4 @@ function blobToDataUrl(blob: Blob): Promise<string> {
     r.onerror = () => reject(r.error ?? new Error('read failed'));
     r.readAsDataURL(blob);
   });
-}
-
-/**
- * Copy the current URL to clipboard.
- */
-export async function copyShareLink(): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(window.location.href);
-    return true;
-  } catch (err) {
-    console.error('Failed to copy link:', err);
-    return false;
-  }
 }

@@ -121,9 +121,6 @@ const FIELD_LABELS: Record<string, string> = {
   versionLabel: 'Version line',
 };
 
-/** Exported for the check script, which asserts these cover the renderers. */
-export const PREFLIGHT_TABLES = { HOUSE_DEFAULTS, PLACEHOLDER_FIELDS, FIELD_LABELS };
-
 /** Field names on this slide that nobody has filled in, as labels. */
 export function placeholdersOn(slide: SlideInstance): string[] {
   const fields = PLACEHOLDER_FIELDS[slide.templateId] ?? [];

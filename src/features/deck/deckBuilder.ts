@@ -40,10 +40,8 @@ export const TEMPLATE_SLIDES: TemplateEntry[] = [
   { templateId: 's14', group: 'Closing',      title: 'Exit / Thank You' },
 ];
 
-let uidCounter = 0;
 export function mintInstanceId(templateId: string): string {
-  uidCounter += 1;
-  return `${templateId}-${uidCounter}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${templateId}-${crypto.randomUUID()}`;
 }
 
 /** A fresh, empty freeform slide the user can drop anywhere and fill in. */

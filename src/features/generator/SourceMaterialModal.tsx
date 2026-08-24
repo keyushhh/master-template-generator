@@ -5,7 +5,6 @@ import { SAMPLE_DECKS } from '../business-record/sampleDecks';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { ValidationResult } from '../business-record/parser/types';
-import { parsePptx } from '../pptx-import/pptxParser';
 import { buildDeckFromImport } from '../pptx-import/pptxDeckBuilder';
 import type { Deck } from '../deck/types';
 import { MarkdownCodeEditor } from './MarkdownCodeEditor';
@@ -213,6 +212,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
     }
     setIsValidating(true);
     try {
+      const { parsePptx } = await import('../pptx-import/pptxParser');
       const { slides, warnings } = await parsePptx(file);
       const deck = buildDeckFromImport(slides);
       onImportDeck(deck, file.name.replace(/\.pptx$/i, ''), warnings);

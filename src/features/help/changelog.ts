@@ -14,6 +14,53 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '2.0.8',
+    date: '2026-08-24',
+    summary: 'Every export format is now dramatically smaller, at the same visual quality.',
+    improved: [
+      'PowerPoint exports are compressed properly for the first time: the exporter was writing every file uncompressed inside its own zip package. A pristine deck now exports at roughly a fifth of its previous size, with zero change to the file’s content.',
+      'PDF, PNG and standalone HTML exports capture each slide at 1.5x resolution instead of 2x (still sharper than a 1080p screen) and flatten to JPEG at the same quality level already used for stored images elsewhere in the app. Both cut file size substantially with no visible change.',
+    ],
+  },
+  {
+    version: '2.0.7',
+    date: '2026-08-24',
+    summary: 'A much faster load, and a labeling bug fixed on two templates.',
+    fixed: [
+      'UX Journey & Flow’s "Legacy Journey" / "Redesigned Flow" labels, and a badge on mobile mockup slides, were being hidden by a leftover style rule from before this app’s own design system existed. Both show again.',
+    ],
+    improved: [
+      'The app loads its editor and export tools only once you actually open a deck or export one, instead of downloading all of it up front. The gallery now opens with well under half the code it used to.',
+    ],
+  },
+  {
+    version: '2.0.6',
+    date: '2026-08-24',
+    summary: 'Paste a spreadsheet straight into a chart.',
+    added: [
+      'The chart data panel now accepts a pasted table from a spreadsheet, in addition to the existing CSV file upload. Copy a range in Sheets or Excel, click the chart’s Data button, and paste to replace its categories and series.',
+    ],
+  },
+  {
+    version: '2.0.5',
+    date: '2026-08-24',
+    summary: 'A brand check before you export, catching off-palette colours and low-contrast text.',
+    added: [
+      'The export sheet now flags any typed-in colour that doesn’t match the deck’s theme, and any text sitting on its own fill below the 4.5:1 contrast minimum, slide by slide, before you send.',
+    ],
+  },
+  {
+    version: '2.0.4',
+    date: '2026-08-24',
+    summary: 'Alt text on images, and a cleaner changelog timeline.',
+    added: [
+      'Image shapes have an Alt text field in the toolbar. It describes the picture for screen readers on the canvas and carries through to the exported .pptx.',
+    ],
+    improved: [
+      'The changelog timeline no longer has a floating vertical line; its dots sit closer to the left edge with a tighter, deliberate gap before each release card.',
+    ],
+  },
+  {
     version: '2.0.3',
     date: '2026-08-24',
     summary: 'Per-slide backgrounds on Wozku Master Classic, and cleaner changelog timeline markers.',

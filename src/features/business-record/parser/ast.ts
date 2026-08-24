@@ -1,13 +1,3 @@
-export type ASTNode =
-  | DocumentNode
-  | MetadataNode
-  | SectionNode
-  | HeadingNode
-  | ParagraphNode
-  | BulletListNode
-  | BulletListItemNode
-  | UnsupportedNode;
-
 export interface DocumentNode {
   type: 'Document';
   metadata: MetadataNode;

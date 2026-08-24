@@ -580,7 +580,7 @@ async function addImageContain(
   slide: pptxgen.Slide,
   dataUrl: string,
   b: Box,
-  options?: { rotate?: number; transparency?: number }
+  options?: { rotate?: number; transparency?: number; altText?: string }
 ) {
   let ratio = 1;
   try {
@@ -605,6 +605,7 @@ async function addImageContain(
     h,
     rotate: options?.rotate,
     transparency: options?.transparency,
+    altText: options?.altText,
   });
 }
 
@@ -1503,7 +1504,7 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
         : undefined;
 
     if (s.kind === 'image') {
-      if (s.imageUrl) await addImageContain(slide, s.imageUrl, b, { rotate, transparency });
+      if (s.imageUrl) await addImageContain(slide, s.imageUrl, b, { rotate, transparency, altText: s.altText });
       continue;
     }
 

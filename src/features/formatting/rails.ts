@@ -123,7 +123,6 @@ export const TEXT_CASES = [
   { key: 'lower', label: 'lowercase' },
   { key: 'title', label: 'Title Case' },
 ] as const;
-export type TextCase = (typeof TEXT_CASES)[number]['key'];
 
 export interface Swatch {
   /** Hex, no '#'. */
@@ -177,14 +176,6 @@ export function normalizeHex(input: string): string | undefined {
   }
   if (/^[0-9a-fA-F]{6}$/.test(h)) return h.toUpperCase();
   return undefined;
-}
-
-/** Relative luminance (0..1) of a bare hex, for deciding whether a swatch
- *  needs light or dark contrast against it. */
-export function luminance(hex: string): number {
-  const h = hex.replace('#', '');
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 /**

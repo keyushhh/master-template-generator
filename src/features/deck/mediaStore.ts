@@ -49,7 +49,7 @@ function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequ
 }
 
 function mintAssetId(): string {
-  return `vid_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return `vid_${crypto.randomUUID()}`;
 }
 
 export class VideoTooLargeError extends Error {
@@ -78,16 +78,6 @@ export async function getVideo(id: string): Promise<VideoAsset | null> {
   } catch {
     return null;
   }
-}
-
-export async function deleteVideo(id: string): Promise<void> {
-  try {
-    await tx('readwrite', (s) => s.delete(id) as IDBRequest<undefined>);
-  } catch {
-    // A leftover blob is harmless; failing a delete shouldn't break an edit.
-  }
-  const url = urlCache.get(id);
-  if (url) { URL.revokeObjectURL(url); urlCache.delete(id); }
 }
 
 const urlCache = new Map<string, string>();

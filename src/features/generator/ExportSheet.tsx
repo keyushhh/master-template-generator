@@ -9,6 +9,7 @@ import { AlertIcon, ArrowForwardIcon, CheckIcon, CloseIcon, CopyIcon, LayersIcon
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 import { useFitReport } from '../fit/fitStore';
 import { placeholderReport } from '../preflight/placeholders';
+import { brandCheckReport } from '../preflight/brandCheck';
 import { catalogNow, fontByFamily, isBundled } from '../fonts/fontCatalog';
 import { familiesInDeck } from '../fonts/deckFonts';
 
@@ -161,6 +162,11 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
   // every thumbnail in the rail would be noise that teaches you to ignore the
   // rail. The moment it matters is the moment you are about to send it.
   const unfilled = open ? placeholderReport(visible) : [];
+
+  /** Off-palette colours and contrast, checked against the deck's own theme -
+   *  see brandCheck.ts. Same "only at the moment it matters" timing as the
+   *  placeholder check above. */
+  const brandIssues = open ? brandCheckReport(visible, theme) : [];
 
   /**
    * Typefaces in this deck that PowerPoint will not have outlines for.
@@ -345,7 +351,7 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
               Nothing here blocks the export. Every one of these is sometimes
               the right thing to ship, and that call belongs to the designer,
               not to a dialog. */}
-          {(unfilled.length > 0 || clipped.length > 0 || issues > 0 || unembeddable.length > 0) && (
+          {(unfilled.length > 0 || clipped.length > 0 || issues > 0 || unembeddable.length > 0 || brandIssues.length > 0) && (
             <div className="bg-amber-50 border-b border-amber-200">
               <div className="flex items-center gap-2 px-5 pt-2.5 pb-1.5">
                 <span className="text-amber-600 flex items-center">
@@ -462,6 +468,31 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                       and the PDF export are unaffected. Usually an imported deck carrying its original
                       author&rsquo;s fonts.
                     </span>
+                  </div>
+                )}
+
+                {/* Brand check: colours an editor typed by hand rather than
+                    picked from the palette, and text that fails contrast
+                    against its own fill. See brandCheck.ts. */}
+                {brandIssues.length > 0 && (
+                  <div className="flex flex-col gap-1 px-5 py-2">
+                    <span className="text-[12px] font-bold text-amber-900 leading-snug">
+                      {brandIssues.length} brand check issue{brandIssues.length === 1 ? '' : 's'}
+                    </span>
+                    <ul className="flex flex-col gap-0.5 text-[11px] text-amber-800/90 leading-snug">
+                      {brandIssues.slice(0, 4).map((issue, idx) => (
+                        <li key={`${issue.instanceId}-${idx}`} className="truncate">
+                          <span className="font-mono text-[10px] font-bold">
+                            {String(issue.n).padStart(2, '0')}
+                          </span>{' '}
+                          <span className="font-semibold">{issue.title}</span>
+                          <span className="text-amber-700/75"> &middot; {issue.detail}</span>
+                          {idx === 3 && brandIssues.length > 4 && (
+                            <span className="text-amber-700/70">{' '}…and {brandIssues.length - 4} more</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 

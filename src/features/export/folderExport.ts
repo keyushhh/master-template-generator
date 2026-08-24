@@ -1,6 +1,4 @@
-import JSZip from 'jszip';
 import { listProjects, loadProjectSession } from '../deck/deckStore';
-import { exportPptxBuffer } from '../generator/exportHelper';
 import { themeById, WOZKU_THEME } from '../theme/deckTheme';
 
 function sanitize(name: string): string {
@@ -19,6 +17,10 @@ export async function exportFolderToZip(
   const allDecks = listProjects().filter((p) => p.folderId === folderId);
   if (allDecks.length === 0) return false;
 
+  const [{ default: JSZip }, { exportPptxBuffer }] = await Promise.all([
+    import('jszip'),
+    import('../generator/exportHelper'),
+  ]);
   const zip = new JSZip();
   let count = 0;
 

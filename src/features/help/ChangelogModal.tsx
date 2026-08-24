@@ -95,9 +95,6 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
 
         {/* Timeline Content Area */}
         <div className="flex-1 overflow-y-auto px-6 py-8 relative">
-          {/* Continuous vertical line for the timeline */}
-          <div className="absolute left-[39px] top-8 bottom-8 w-px bg-neutral-200/80 pointer-events-none" />
-
           {visibleReleases.length === 0 && (
             <div className="flex items-center justify-center h-40">
               <p className="text-[14px] text-neutral-400 font-medium">No updates found for this filter.</p>
@@ -109,12 +106,9 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
               const isLatest = release.version === CHANGELOG[0].version;
               
               return (
-                <section key={release.version} className="relative flex gap-6 z-10">
-                  {/* Timeline Node spacer - keeps the card indented past the line */}
-                  <div className="shrink-0 mt-1.5 w-[26px]" />
-                  {/* Timeline dot - `left` matches the vertical line's above, so it's
-                      centred on it regardless of the spacer column's own width. */}
-                  <div className="absolute left-[39px] top-[10px] -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm z-10" />
+                <section key={release.version} className="relative flex items-start gap-3 z-10">
+                  {/* Timeline dot */}
+                  <div className="shrink-0 mt-[15px] w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm" />
 
                   {/* Release Card */}
                   <div className="flex-1 bg-white border border-neutral-150 rounded-[var(--radius-sharp)] p-6 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-shadow">

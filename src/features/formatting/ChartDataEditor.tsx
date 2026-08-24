@@ -76,6 +76,21 @@ export function ChartDataEditor({ chartType, categories, series, onChange, onClo
     return () => document.removeEventListener('keydown', key);
   }, [onClose]);
 
+  useEffect(() => {
+    // A cell input handles its own paste (one value into one box); pasting
+    // while nothing in this panel is focused replaces the whole table, same
+    // split as the CSV file upload below.
+    const paste = (e: ClipboardEvent) => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && wrap.current?.contains(active)) return;
+      const text = e.clipboardData?.getData('text');
+      const parsed = text ? parseCSV(text) : null;
+      if (parsed) { e.preventDefault(); onChange(parsed); }
+    };
+    document.addEventListener('paste', paste);
+    return () => document.removeEventListener('paste', paste);
+  }, [onChange]);
+
   const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -205,7 +220,11 @@ export function ChartDataEditor({ chartType, categories, series, onChange, onClo
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+      <div style={{ ...mono, color: 'rgba(255,255,255,0.35)', marginTop: 10 }}>
+        Paste a table from a spreadsheet to replace this data
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
         <button
           onClick={addCategory}
           style={{ ...cellInput, cursor: 'pointer', width: 'auto', padding: '0 10px', fontWeight: 600 }}

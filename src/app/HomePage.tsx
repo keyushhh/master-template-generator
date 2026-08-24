@@ -17,7 +17,6 @@ import { FolderModal } from '../features/deck/FolderModal';
 import { DeleteFolderModal } from '../features/deck/DeleteFolderModal';
 import { MoveDecksToFolderModal } from '../features/deck/MoveDecksToFolderModal';
 import { ConfirmModal, cannotBeUndone } from '../features/ui/ConfirmModal';
-import { exportFolderToZip } from '../features/export/folderExport';
 import { useToast } from '../features/toast/Toast';
 import type { Deck } from '../features/deck/types';
 import {
@@ -710,6 +709,7 @@ export function HomePage() {
 
   const handleExportZip = async (folder: FolderMeta) => {
     showToast(`Preparing ZIP for "${folder.name}"...`, 'info');
+    const { exportFolderToZip } = await import('../features/export/folderExport');
     const success = await exportFolderToZip(folder.id, folder.name, (current, total, name) => {
       showToast(`Exporting ${name} (${current}/${total})...`, 'info');
     });

@@ -54,7 +54,7 @@ interface ProjectIndex {
 }
 
 function newId(): string {
-  return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return `p_${crypto.randomUUID()}`;
 }
 
 function readIndex(): ProjectIndex {
@@ -84,10 +84,6 @@ function sessionKey(id: string): string {
 /** Newest-first list of decks for the switcher. */
 export function listProjects(): ProjectMeta[] {
   return [...readIndex().projects].sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-export function getActiveId(): string | null {
-  return readIndex().activeId;
 }
 
 export function setActiveId(id: string): void {
@@ -278,7 +274,7 @@ function writeFolders(folders: FolderMeta[]): void {
 export function createFolder(name: string, color: FolderColor = 'blue'): FolderMeta {
   const clean = name.trim() || 'New Folder';
   const folder: FolderMeta = {
-    id: `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    id: `f_${crypto.randomUUID()}`,
     name: clean,
     color,
     createdAt: Date.now(),

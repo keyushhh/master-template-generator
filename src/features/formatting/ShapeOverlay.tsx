@@ -303,7 +303,7 @@ export function ShapeOverlay({
             {shape.kind === 'image' && shape.imageUrl && (
               <img
                 src={shape.imageUrl}
-                alt=""
+                alt={shape.altText ?? ''}
                 draggable={false}
                 style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
               />

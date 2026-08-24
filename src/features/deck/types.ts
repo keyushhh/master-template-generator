@@ -170,6 +170,10 @@ export interface OverlayShape {
   opacity?: number;
   /** kind === 'image' - a downscaled data URL, as elsewhere in the deck. */
   imageUrl?: string;
+  /** kind === 'image' - describes the image for screen readers and appears
+   *  as the picture's alt text in the exported .pptx. Absent means an empty
+   *  alt, exactly the behaviour before this field existed. */
+  altText?: string;
   /** kind === 'text' - the text box's content. Newlines are honoured. */
   text?: string;
   /** kind === 'text' - size/weight/colour/alignment, shared with template slots. */
