@@ -16,6 +16,18 @@ export function canCustomizeBackground(templateId: SlideTemplateId): boolean {
   return BACKGROUND_CUSTOMIZABLE_TEMPLATE_IDS.has(templateId);
 }
 
+/** Whether text on this background has to be light. Lives here rather than in
+ *  the canvas so the deck builders pick the same ink the renderer will. */
+export function hexIsDark(base?: string): boolean {
+  if (!base) return false;
+  const h = base.replace('#', '');
+  if (!/^[0-9A-Fa-f]{6}$/.test(h)) return false;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+}
+
 /** CSS for a custom slide background override. Returns undefined when there's
  *  nothing to override, so the caller falls through to the template default. */
 export function backgroundCssFor(bg: SlideBackground | undefined): CSSProperties | undefined {

@@ -22,7 +22,7 @@ interface GeneratorSidebarProps {
   /** Import a source AND build the deck in one step (Import & Load in the modal). */
   onImport: (ast: DocumentNode) => void;
   /** Load a deck built from an uploaded .pptx (no Business Record behind it). */
-  onImportDeck: (deck: Deck, name: string, warnings: string[]) => void;
+  onImportDeck: (deck: Deck, name: string, warnings: string[], relit?: boolean) => void;
   onGenerate: () => void;
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
@@ -39,6 +39,9 @@ interface GeneratorSidebarProps {
   onNavigate: (instanceId: string) => void;
   /** The deck's resolved theme, so a rail thumbnail matches the stage. */
   theme?: DeckTheme;
+  /** The chosen template, so an imported .pptx keeps it instead of falling
+   *  back to the house one. */
+  presentationTemplateId?: string;
   /** Opens the brand kit picker. */
 }
 
@@ -62,6 +65,7 @@ export function GeneratorSidebar({
   currentId,
   onNavigate,
   theme = WOZKU_THEME,
+  presentationTemplateId,
 }: GeneratorSidebarProps) {
   const [sourceOpen, setSourceOpen] = useState(false);
   /** Whether the filmstrip has been scrolled at all. The fade under the pinned
@@ -196,6 +200,8 @@ export function GeneratorSidebar({
         onImport={onImport}
         onImportDeck={onImportDeck}
         hasSource={hasPresentation}
+        deckTheme={theme}
+        presentationTemplateId={presentationTemplateId}
       />
     </>
   );

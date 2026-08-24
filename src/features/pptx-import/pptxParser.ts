@@ -5,7 +5,8 @@ import type {
   ImportedRun,
   ImportedTableRow,
 } from '../deck/types';
-import { mapFont, snapToBrand } from './brandMap';
+import { mapFont, snapToBrand, WOZKU_BRAND, type BrandMap } from './brandMap';
+import { hexIsDark } from '../deck/slideBackground';
 
 /**
  * Reads an uploaded .pptx and lifts each slide into positioned shapes in the
@@ -35,6 +36,8 @@ export interface PptxImportResult {
   slides: ImportedSlide[];
   /** Non-fatal notes worth showing the user (skipped charts, unsupported art). */
   warnings: string[];
+  /** Whether the deck's colours were mirrored to match the template's lightness. */
+  relit: boolean;
 }
 
 /** A shape's placement plus the group transform stack it sits under. */
@@ -190,7 +193,7 @@ async function loadTableStyleMap(zip: JSZip, theme: ThemeMap): Promise<TableStyl
   return map;
 }
 
-function readParagraphs(sp: Element, theme: ThemeMap): ImportedParagraph[] | undefined {
+function readParagraphs(sp: Element, theme: ThemeMap, brand: BrandMap): ImportedParagraph[] | undefined {
   const txBody = el(sp, 'http://schemas.openxmlformats.org/presentationml/2006/main', 'txBody')
     ?? el(sp, A, 'txBody');
   if (!txBody) return undefined;
@@ -212,10 +215,10 @@ function readParagraphs(sp: Element, theme: ThemeMap): ImportedParagraph[] | und
         if (rPr.getAttribute('b') === '1') run.bold = true;
         if (rPr.getAttribute('i') === '1') run.italic = true;
         const color = readFill(rPr, theme);
-        if (color) run.color = snapToBrand(color);
+        if (color) run.color = snapToBrand(color, brand);
         const latin = firstChild(rPr, 'latin');
         const face = latin?.getAttribute('typeface');
-        if (face) run.font = mapFont(face);
+        if (face) run.font = mapFont(face, brand);
       }
       runs.push(run);
     }
@@ -286,6 +289,7 @@ function readTable(
   frame: Frame,
   scale: number,
   theme: ThemeMap,
+  brand: BrandMap,
   tableStyles: TableStyleMap,
   counter: { n: number }
 ): ImportedShape | null {
@@ -340,8 +344,8 @@ function readTable(
       const tcPr = firstChild(tc, 'tcPr');
       const fill = readFill(tcPr, theme) ?? styleFillFor(ri, ci);
       return {
-        fill: fill ? snapToBrand(fill) : undefined,
-        paragraphs: readParagraphs(tc, theme),
+        fill: fill ? snapToBrand(fill, brand) : undefined,
+        paragraphs: readParagraphs(tc, theme, brand),
       };
     }),
   }));
@@ -366,6 +370,7 @@ function walk(
   media: Map<string, string>,
   rels: Map<string, string>,
   theme: ThemeMap,
+  brand: BrandMap,
   tableStyles: TableStyleMap,
   out: ImportedShape[],
   warnings: string[],
@@ -396,12 +401,12 @@ function walk(
           };
         }
       }
-      walk(node, next, scale, media, rels, theme, tableStyles, out, warnings, counter);
+      walk(node, next, scale, media, rels, theme, brand, tableStyles, out, warnings, counter);
       continue;
     }
 
     if (name === 'graphicFrame') {
-      const table = readTable(node, frame, scale, theme, tableStyles, counter);
+      const table = readTable(node, frame, scale, theme, brand, tableStyles, counter);
       if (table) {
         out.push(table);
       } else {
@@ -442,14 +447,14 @@ function walk(
 
     const fill = readFill(spPr, theme);
     const line = readLine(spPr, theme);
-    const paragraphs = readParagraphs(node, theme);
+    const paragraphs = readParagraphs(node, theme, brand);
     if (!fill && !line && !paragraphs) continue; // invisible spacer
 
     out.push({
       ...base,
       kind: geomOf(spPr),
-      fill: fill ? snapToBrand(fill) : undefined,
-      line: line ? { color: snapToBrand(line.color), widthPx: line.widthPx } : undefined,
+      fill: fill ? snapToBrand(fill, brand) : undefined,
+      line: line ? { color: snapToBrand(line.color, brand), widthPx: line.widthPx } : undefined,
       paragraphs,
       vAlign: paragraphs ? readAnchor(node) : undefined,
     });
@@ -505,12 +510,59 @@ async function slideOrder(zip: JSZip): Promise<string[]> {
   return out;
 }
 
+/**
+ * Mirrors every colour in the deck onto the opposite end of its ramp, so a deck
+ * built dark reads correctly on a light template and the reverse.
+ *
+ * Done for the whole deck at once, never per slide: a dark divider inside an
+ * otherwise light deck is dark *relative to* its neighbours, and flipping each
+ * slide against the template independently would collapse that difference. One
+ * decision for the deck keeps the odd slide odd.
+ *
+ * Text with no explicit colour needs nothing here - the renderer already picks
+ * its ink from the slide's background, which this flips.
+ */
+function flipAll(slides: ImportedSlide[], brand: BrandMap): ImportedSlide[] {
+  const snap = (hex: string | undefined) => (hex === undefined ? undefined : snapToBrand(hex, brand, true));
+  const paras = (ps: ImportedParagraph[] | undefined) => ps?.map((p) => ({
+    ...p,
+    runs: p.runs.map((r) => (r.color ? { ...r, color: snapToBrand(r.color, brand, true) } : r)),
+  }));
+  const shape = (sh: ImportedShape): ImportedShape => ({
+    ...sh,
+    fill: snap(sh.fill),
+    line: sh.line ? { ...sh.line, color: snapToBrand(sh.line.color, brand, true) } : sh.line,
+    paragraphs: paras(sh.paragraphs),
+    rows: sh.rows?.map((row) => ({
+      ...row,
+      cells: row.cells.map((c) => ({ ...c, fill: snap(c.fill), paragraphs: paras(c.paragraphs) })),
+    })),
+  });
+  return slides.map((s) => ({
+    ...s,
+    base: snapToBrand(s.base, brand, true),
+    shapes: s.shapes.map(shape),
+  }));
+}
+
+/** Decides whether this deck disagrees with the template's lightness, and
+ *  mirrors it if so. Majority vote, so one dark divider in a light deck does
+ *  not decide it for the other twenty. */
+export function relightForBrand(
+  slides: ImportedSlide[],
+  brand: BrandMap
+): { slides: ImportedSlide[]; relit: boolean } {
+  const sourceIsDark = slides.filter((s) => hexIsDark(s.base)).length * 2 > slides.length;
+  const relit = brand.isDark !== undefined && brand.isDark !== sourceIsDark;
+  return { slides: relit ? flipAll(slides, brand) : slides, relit };
+}
+
 const MIME: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
   gif: 'image/gif', webp: 'image/webp',
 };
 
-export async function parsePptx(file: File | ArrayBuffer): Promise<PptxImportResult> {
+export async function parsePptx(file: File | ArrayBuffer, brand: BrandMap = WOZKU_BRAND): Promise<PptxImportResult> {
   const zip = await JSZip.loadAsync(file);
   const warnings: string[] = [];
   const parser = new DOMParser();
@@ -579,7 +631,7 @@ export async function parsePptx(file: File | ArrayBuffer): Promise<PptxImportRes
     const bgSrgb = bg?.getElementsByTagNameNS(A, 'srgbClr')[0]?.getAttribute('val');
 
     const shapes: ImportedShape[] = [];
-    walk(spTree, IDENTITY, scale, media, rels, theme, tableStyles, shapes, warnings, { n: 0 });
+    walk(spTree, IDENTITY, scale, media, rels, theme, brand, tableStyles, shapes, warnings, { n: 0 });
     slides.push({
       shapes,
       base: bgSrgb ?? 'FFFFFF',
@@ -589,5 +641,13 @@ export async function parsePptx(file: File | ArrayBuffer): Promise<PptxImportRes
 
   if (!slides.length) throw new Error('No slides could be read from this file.');
 
-  return { slides, warnings: Array.from(new Set(warnings)) };
+  // A deck built dark and dropped onto a light template comes out white-on-cream
+  // unless the whole thing is re-lit.
+  const lit = relightForBrand(slides, brand);
+  if (lit.relit && slides.some((s) => s.shapes.some((sh) => sh.kind === 'image'))) {
+    warnings.push('Colours were re-lit to match this template. Images keep their '
+      + 'original background, so a screenshot may need replacing.');
+  }
+
+  return { slides: lit.slides, warnings: Array.from(new Set(warnings)), relit: lit.relit };
 }

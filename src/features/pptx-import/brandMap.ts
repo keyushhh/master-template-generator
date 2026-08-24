@@ -1,11 +1,29 @@
 /**
- * Maps a foreign deck's type and colour onto the Wozku brand.
+ * Maps a foreign deck's type and colour onto the brand of the template the
+ * deck is being imported into.
  *
  * This is what makes an uploaded .pptx read as ours rather than merely sitting
  * on our background: every typeface lands on the brand stack, and every colour
  * snaps to the nearest step of the brand ramps. Geometry and text are never
  * touched.
+ *
+ * The ramps used to be the house emerald and Space Grotesk regardless of which
+ * template the user had chosen, so importing into Mobile Editorial produced an
+ * emerald, Space Grotesk deck. They now come from the active theme, which is
+ * what "brand theme applied" was always supposed to mean.
  */
+import type { DeckTheme } from '../theme/deckTheme';
+
+export interface BrandMap {
+  display: string;
+  sans: string;
+  mono: string;
+  neutrals: string[];
+  accents: string[];
+  /** Whether the template being imported into paints dark slides. Undefined
+   *  means "unknown", and nothing is ever re-lit. */
+  isDark?: boolean;
+}
 
 /** Brand type stack, from src/theme/tokens.css. */
 const DISPLAY = 'Space Grotesk';
@@ -22,17 +40,16 @@ const SERIF_FACES = /times|georgia|garamond|cambria|book|serif|palatino|baskervi
  */
 const KEEP = /wingding|webding|symbol|awesome|material|glyph/i;
 
-export function mapFont(typeface: string): string {
+export function mapFont(typeface: string, brand: BrandMap = WOZKU_BRAND): string {
   const face = typeface.trim();
   if (!face || KEEP.test(face)) return face;
-  if (MONO_FACES.test(face)) return MONO;
-  // A serif in a foreign deck is nearly always a heading face; the brand has no
-  // serif, and display is the closest role.
-  if (SERIF_FACES.test(face)) return DISPLAY;
-  // Everything else is a grotesque doing display or body work. Space Grotesk is
-  // the brand's display face and metrically close to Arial/Helvetica, so this
-  // does not reflow text noticeably.
-  return face.toLowerCase().startsWith('space grotesk') ? face : DISPLAY;
+  if (MONO_FACES.test(face)) return brand.mono;
+  // A serif in a foreign deck is nearly always a heading face, and display is
+  // the closest role in any of our templates.
+  if (SERIF_FACES.test(face)) return brand.display;
+  // Everything else is a grotesque doing display or body work. The display face
+  // is metrically close to Arial/Helvetica, so this does not reflow noticeably.
+  return face.toLowerCase() === brand.display.toLowerCase() ? face : brand.display;
 }
 
 /** Neutral ramp (tokens.css). */
@@ -79,25 +96,76 @@ function nearestByLuminance(ramp: string[], target: number): string {
   return best;
 }
 
+/** The house brand, and the fallback for any caller with no theme in hand. */
+export const WOZKU_BRAND: BrandMap = {
+  display: DISPLAY,
+  sans: SANS,
+  mono: MONO,
+  neutrals: NEUTRALS,
+  accents: EMERALDS,
+};
+
+/**
+ * The brand a template imports into. The accent ramp is spun out of the
+ * theme's four accent steps so a colour can still be matched by lightness:
+ * four steps alone leave visible banding on a deck that shades one accent.
+ */
+export function brandMapFor(theme: DeckTheme): BrandMap {
+  const base = [theme.accent.deep, theme.accent.base, theme.accent.bright, theme.accent.tint]
+    .map((c) => String(c).replace('#', '').toUpperCase())
+    .filter((c) => /^[0-9A-F]{6}$/.test(c));
+
+  const accents: string[] = [];
+  for (let i = 0; i < base.length - 1; i++) {
+    accents.push(base[i], mix(base[i], base[i + 1]));
+  }
+  accents.push(base[base.length - 1]);
+
+  return {
+    display: theme.fonts.display.family,
+    sans: theme.fonts.sans.family,
+    mono: theme.fonts.mono.family,
+    neutrals: NEUTRALS,
+    accents: accents.length ? accents : EMERALDS,
+    isDark: theme.styleSystem?.isDarkSlideDefault === true,
+  };
+}
+
+/** The midpoint of two hexes, as one more step on a ramp. */
+function mix(a: string, b: string): string {
+  const [ar, ag, ab] = toRgb(a);
+  const [br, bg, bb] = toRgb(b);
+  return [(ar + br) / 2, (ag + bg) / 2, (ab + bb) / 2]
+    .map((v) => Math.round(v).toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+}
+
 /**
  * Snaps a colour onto the brand palette, preserving its lightness so contrast
  * relationships survive: a dark heading stays dark, a pale card stays pale.
  *
- * Greys go to the neutral ramp, anything with real chroma goes to emerald.
- * That is deliberate - the brand has exactly one accent, so a deck arriving
- * with blue or orange accents comes out emerald rather than off-brand.
+ * Greys go to the neutral ramp, anything with real chroma goes to the accent.
+ * That is deliberate - a template has exactly one accent, so a deck arriving
+ * with blue accents comes out in the accent of the template it lands on.
+ *
+ * `flip` mirrors the match to the opposite end of the ramp, which is how a dark
+ * deck becomes a light one: because every colour on the slide - background,
+ * fill, rule and type - is matched by the same lightness, inverting all of them
+ * at once preserves every contrast relationship rather than breaking them.
  */
-export function snapToBrand(hex: string): string {
+export function snapToBrand(hex: string, brand: BrandMap = WOZKU_BRAND, flip = false): string {
   const clean = hex.replace('#', '').toUpperCase();
   if (!/^[0-9A-F]{6}$/.test(clean)) return clean;
 
   const rgb = toRgb(clean);
-  const lum = luminance(rgb);
+  const lum = flip ? 1 - luminance(rgb) : luminance(rgb);
 
-  // Pure black and white are structural, not decorative - a black divider
-  // slide must stay black, and white must stay white.
-  if (clean === 'FFFFFF' || clean === '000000') return clean;
+  // Pure black and white are structural, not decorative - a black divider slide
+  // must stay black, and white must stay white. Except when re-lighting, where
+  // keeping white white is exactly what strands white text on a cream slide.
+  if (!flip && (clean === 'FFFFFF' || clean === '000000')) return clean;
 
-  if (saturation(rgb) < 0.15) return nearestByLuminance(NEUTRALS, lum);
-  return nearestByLuminance(EMERALDS, lum);
+  if (saturation(rgb) < 0.15) return nearestByLuminance(brand.neutrals, lum);
+  return nearestByLuminance(brand.accents, lum);
 }

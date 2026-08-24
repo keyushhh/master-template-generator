@@ -14,6 +14,56 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '2.1.1',
+    date: '2026-08-24',
+    summary: 'Headings no longer run through the text underneath them.',
+    fixed: [
+      'A heading long enough to wrap onto a third line ran straight through the body copy below it, most visibly on closing and section-divider slides where the type is set at 180px. Text is now sized against the size the slide actually sets it at, so it wraps to a height the layout has room for.',
+      'Switching a slide to a different layout kept the text at the size the old layout used. A heading written for a 96px slot arrived on a 180px one unchanged and immediately overlapped whatever sat beneath it. Layouts now re-fit the text they receive.',
+      'Body copy on the stat slide was being shrunk when it did not need to be: it was measured against a 1200px column when the slide draws it in an 800px one at a smaller size.',
+    ],
+  },
+  {
+    version: '2.1.0',
+    date: '2026-08-24',
+    summary: 'A dark deck imported onto a light template comes out light, text and all.',
+    fixed: [
+      'Uploading a dark .pptx onto a light template (or a light one onto a dark template) left every slide at its original lightness, so a deck built on black arrived black inside a cream template and looked nothing like the template you picked.',
+      'Type kept its original colour in that case, which is what put white headings on a near-white slide and made them unreadable.',
+    ],
+    improved: [
+      'An imported deck is now re-lit as a whole to match the template it lands on: backgrounds, shape fills, rules, table cells and text all move together, so a heading that stood out against its background still stands out against the new one. The decision is made once for the deck rather than slide by slide, so a dark divider inside a light deck stays the odd one out instead of being flattened.',
+      'Images are left exactly as they are, since their background is baked into the picture. Where an imported deck has any, the confirmation says so, so a screenshot that now sits bright against a dark slide is something you know about rather than something you find in the meeting.',
+      'The confirmation after an import says whether colours were re-lit, alongside the theme it used.',
+    ],
+  },
+  {
+    version: '2.0.9',
+    date: '2026-08-24',
+    summary: 'Generating from a document keeps your chosen template, and builds every slide your source asks for.',
+    fixed: [
+      'Generating a deck from a Business Record or an outline used to replace most templates with Classic Wozku Master, even though only Blank Presentation actually has nowhere for a document’s sections to land. Every other template - Product Showcase, UX Journey & Flow, Mobile Editorial, Product & Data SaaS, Investor Syndicate Memo, AI-Native Pitch Deck and Startup Pitch Deck included - now fills its own slide layout, fonts and colors directly.',
+      'A document with more sections than the template had slides for used to lose everything past the first match, so a twenty-section source could generate a four-slide deck with no warning. Every section now gets a slide.',
+      'Reset did nothing after generating a deck. It was reverting to the generated deck itself rather than to the empty template, so there was never anything to change. It now takes the deck back to the placeholders the chosen template started with.',
+      'The closing section of your source was being dropped on eight of the twelve templates, because it was written to a field those closing slides do not draw, or because the template has no closing slide at all. It now always reaches the deck, as the closing line where it is short enough and as its own slide where it is not.',
+      'Text longer than the slot it was written into is now sized to fit on every template, not just on the slides generated from leftover sections. A paragraph landing in a display heading no longer runs off the slide.',
+      'Uploading a .pptx kept the template you picked. It used to arrive with no template and no theme at all, falling back to the house brand, so a deck imported into Mobile Editorial came back in Wozku green and Space Grotesk while still being named Mobile Editorial. Imported type and colour now land on the accent and fonts of the template you are importing into, and the confirmation names the theme it actually used.',
+    ],
+    added: [
+      'Tables, quotes and images in your source now become slides. A table is built as a real, editable table keeping every one of its columns, whether or not it is written with leading pipes; a blockquote becomes a pull quote; an image becomes a slide with an empty image slot and its caption, ready for you to drop the artwork in. These were read from your document and then discarded before, which is why a source full of tables generated nothing but text slides.',
+    ],
+    improved: [
+      'Slides built from the leftover sections of your source pick a layout that suits their content instead of repeating one: a table for comparison rows, a dashboard for metrics and KPIs, a timeline for phases, a process diagram for steps, a headline stat for a single figure, and a text slide for prose. A section that has no figures of its own no longer lands on a chart layout showing sample numbers.',
+      'Text-only slides use a much wider column. It was capped at 800px on a 1920px slide, so text crowded into the left third while the rest of the slide sat empty.',
+      'Headings and body text on generated slides are sized to their length against the space the slide actually has, so a long heading arrives at a size that fits instead of filling the slide and pushing its own body off the bottom. Sizes come from the standard type scale, so they stay on brand and you can still step them yourself.',
+      'A section with more text than one slide can hold now continues on the next slide, breaking between paragraphs or sentences, rather than shrinking to an unreadable size or running off the bottom edge. Nothing generated should arrive already cut off.',
+      'Bold, italic, code and link markers in your source are no longer printed on the slide as raw asterisks and brackets.',
+      'A section holding both prose and a table now produces both slides rather than only one of them.',
+      'Mockup and screenshot slots on generated slides keep the template’s placeholder image, so you can drop in your own screens or delete the slide. Only slides whose content the source actually supplies are built.',
+      'The Source Material window opens on the Conversion Prompt. The Samples tab has been removed.',
+    ],
+  },
+  {
     version: '2.0.8',
     date: '2026-08-24',
     summary: 'Every export format is now dramatically smaller, at the same visual quality.',

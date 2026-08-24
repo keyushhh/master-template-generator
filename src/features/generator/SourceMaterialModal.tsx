@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { CONVERSION_PROMPT } from '../business-record/conversionPrompt';
 import { ImportService } from '../business-record/ImportService';
-import { SAMPLE_DECKS } from '../business-record/sampleDecks';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { ValidationResult } from '../business-record/parser/types';
 import { buildDeckFromImport } from '../pptx-import/pptxDeckBuilder';
+import type { DeckTheme } from '../theme/deckTheme';
 import type { Deck } from '../deck/types';
 import { MarkdownCodeEditor } from './MarkdownCodeEditor';
 import { ArrowForwardIcon, CheckIcon, CloseIcon, CloudUploadIcon, CopyIcon, TrashIcon } from '../ui/icons';
@@ -18,15 +18,17 @@ interface SourceMaterialModalProps {
   onImport: (ast: DocumentNode) => void;
   /** Load a deck built from an uploaded .pptx, bypassing the Business Record
    *  path entirely - an imported deck has no AST behind it. */
-  onImportDeck: (deck: Deck, name: string, warnings: string[]) => void;
+  onImportDeck: (deck: Deck, name: string, warnings: string[], relit?: boolean) => void;
+  /** The template being imported on top of, so the deck keeps its brand. */
+  deckTheme: DeckTheme;
+  presentationTemplateId?: string;
   /** True when a Business Record is currently loaded - enables "Clear source". */
   hasSource: boolean;
 }
 
-type Tab = 'samples' | 'prompt' | 'paste' | 'upload' | 'pptx';
+type Tab = 'prompt' | 'paste' | 'upload' | 'pptx';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'samples', label: 'Samples' },
   { id: 'prompt', label: 'Conversion Prompt' },
   { id: 'paste', label: 'Paste .md' },
   { id: 'upload', label: 'Upload .md' },
@@ -88,7 +90,7 @@ function synthesizeBusinessRecord(text: string, filename: string): string {
  *  - Paste .md: drop Claude's markdown straight in - no file needed.
  *  - Upload .md: pick or drag a .md file.
  */
-export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport, onImportDeck, hasSource }: SourceMaterialModalProps) {
+export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport, onImportDeck, hasSource, deckTheme, presentationTemplateId }: SourceMaterialModalProps) {
   const [tab, setTab] = useState<Tab>('prompt');
   const [copied, setCopied] = useState(false);
   const [pasteText, setPasteText] = useState('');
@@ -106,7 +108,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   // Reset transient state each time the modal opens.
   useEffect(() => {
     if (open) {
-      setTab('samples');
+      setTab('prompt');
       setCopied(false);
       setError(null);
       setRawTranscriptHint(false);
@@ -213,9 +215,10 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
     setIsValidating(true);
     try {
       const { parsePptx } = await import('../pptx-import/pptxParser');
-      const { slides, warnings } = await parsePptx(file);
-      const deck = buildDeckFromImport(slides);
-      onImportDeck(deck, file.name.replace(/\.pptx$/i, ''), warnings);
+      const { brandMapFor } = await import('../pptx-import/brandMap');
+      const { slides, warnings, relit } = await parsePptx(file, brandMapFor(deckTheme));
+      const deck = buildDeckFromImport(slides, { themeId: deckTheme.id, presentationTemplateId });
+      onImportDeck(deck, file.name.replace(/\.pptx$/i, ''), warnings, relit);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'This .pptx could not be read.');
@@ -305,32 +308,6 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {tab === 'samples' && (
-            <div className="flex flex-col gap-3">
-              <p className="text-[12.5px] text-neutral-600 leading-relaxed">
-                Start from a ready-made deck instead of a blank page. Loading one builds the deck immediately, then edit anything.
-              </p>
-              <div className="flex flex-col gap-2.5">
-                {SAMPLE_DECKS.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => importText(s.markdown, s.name)}
-                    disabled={isValidating}
-                    className="text-left flex items-start justify-between gap-4 p-4 border border-neutral-200 hover:border-neutral-900 hover:bg-neutral-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <span className="flex flex-col gap-1 min-w-0">
-                      <span className="text-[14px] font-bold text-neutral-900">{s.name}</span>
-                      <span className="text-[12px] text-neutral-500 leading-relaxed">{s.description}</span>
-                    </span>
-                    <span className="shrink-0 mt-0.5 text-neutral-400">
-                      <ArrowForwardIcon size={16} />
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {tab === 'prompt' && (
             <div className="flex flex-col gap-3">
               <ol className="flex flex-col gap-1.5 text-[12.5px] text-neutral-600 leading-relaxed list-decimal pl-4">
@@ -417,7 +394,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
           {tab === 'pptx' && (
             <div className="flex flex-col gap-3">
               <p className="text-[12.5px] text-neutral-600 leading-relaxed">
-                Upload an existing deck and it comes back on the Wozku theme - grid, ambient
+                Upload an existing deck and it comes back on this deck's theme - grid, ambient
                 orbs, brand type and palette. <span className="font-semibold text-neutral-900">Your
                 words are never changed</span>, and every slide stays editable here afterwards.
               </p>

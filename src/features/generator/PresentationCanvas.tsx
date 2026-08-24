@@ -12,7 +12,8 @@ import { ConfirmModal } from '../ui/ConfirmModal';
 import { FitProbe } from '../fit/FitProbe';
 import { FitFixChip } from '../fit/FitFixChip';
 import { css as themeCss, themeCssVars, WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
-import { backgroundCssFor, canCustomizeBackground } from '../deck/slideBackground';
+import { backgroundCssFor, canCustomizeBackground, hexIsDark } from '../deck/slideBackground';
+import { TEXT_ONLY_MAX_W, TEXT_ONLY_PAD_X, TEXT_ONLY_PAD_Y } from '../deck/deckBuilder';
 import {
   EditorialSlideCover,
   EditorialSlideExec,
@@ -2559,8 +2560,13 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
         <div
           style={{
             flex: 1,
-            padding: showImage ? 140 : '140px 200px',
-            maxWidth: showImage ? undefined : 1200,
+            padding: showImage ? 140 : `${TEXT_ONLY_PAD_Y}px ${TEXT_ONLY_PAD_X}px`,
+            // Box-sizing is border-box, so this cap includes the 400px of side
+            // padding: 1200 left a 800px column of text on a 1920px slide, with
+            // the right half of the slide empty. Centred so the measure sits in
+            // the slide rather than hugging the left edge.
+            maxWidth: showImage ? undefined : TEXT_ONLY_MAX_W,
+            marginInline: showImage ? undefined : 'auto',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',
@@ -3422,13 +3428,7 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
 /** True when an imported slide's own background is dark, so the footer and
  *  chrome flip to light-on-dark like the s4/s14 templates do. */
 export function importedIsDark(base?: string): boolean {
-  if (!base) return false;
-  const h = base.replace('#', '');
-  if (!/^[0-9A-Fa-f]{6}$/.test(h)) return false;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+  return hexIsDark(base);
 }
 
 /**

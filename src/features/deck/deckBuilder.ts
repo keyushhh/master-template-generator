@@ -1,4 +1,5 @@
-import type { DocumentNode, SectionNode } from '../business-record/parser/ast';
+import type { DocumentNode, SectionNode, UnsupportedNode } from '../business-record/parser/ast';
+import { TYPE_SCALE, clampSize } from '../formatting/rails';
 import type {
   Deck,
   SlideInstance,
@@ -102,16 +103,158 @@ export function deckIsPristine(deck: Deck): boolean {
 // AST helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * The text-only Image Editorial slide's box, shared by the renderer that draws
+ * it and the builders that size text for it, so the two cannot drift.
+ *
+ * `TEXT_ONLY_MAX_W` is a border-box width, so the side padding comes out of it
+ * and `TEXT_ONLY_TEXT_W` is what a line of text actually gets. Sizing against
+ * the outer number rather than the inner one is what let generated text run
+ * off the bottom of the slide while still looking like it had been fitted.
+ */
+export const TEXT_ONLY_MAX_W = 1600;
+export const TEXT_ONLY_PAD_X = 200;
+export const TEXT_ONLY_PAD_Y = 140;
+export const TEXT_ONLY_TEXT_W = TEXT_ONLY_MAX_W - TEXT_ONLY_PAD_X * 2;
+export const TEXT_ONLY_TEXT_H = 1080 - TEXT_ONLY_PAD_Y * 2;
+
+/** A markdown table's alignment rule row, which is layout, not data. */
+const TABLE_RULE = /^:?-{2,}:?$/;
+
+/** Inline markdown a slide cannot render, removed rather than shown raw. The
+ *  renderers draw plain strings, so `**bold**` reached the slide as literal
+ *  asterisks. Emphasis and code markers are dropped and links keep their text. */
+export function stripInlineMarkdown(text: string): string {
+  return text
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/(^|[\s(])[*_]([^*_\n]+)[*_](?=[\s.,;:!?)]|$)/g, '$1$2');
+}
+
 export function paragraphsOf(section: SectionNode): string[] {
   return section.children
     .filter((c) => c.type === 'Paragraph')
-    .map((c) => (c as { text: string }).text);
+    .map((c) => stripInlineMarkdown((c as { text: string }).text));
 }
 
 export function bulletsOf(section: SectionNode): string[] {
   return section.children
     .filter((c) => c.type === 'BulletList')
-    .flatMap((c) => (c as { items: { text: string }[] }).items.map((it) => it.text));
+    .flatMap((c) => (c as { items: { text: string }[] }).items.map((it) => stripInlineMarkdown(it.text)));
+}
+
+/**
+ * A pipe table written without leading `|`, which the lexer accumulates into
+ * one paragraph instead of tokenising as a table.
+ *
+ * The signal is that every line carries the same number of pipes, which a two
+ * column table satisfies with one pipe per line. Counting pipes per line
+ * instead would either miss those tables or claim any prose containing a pipe;
+ * requiring the count to agree across at least two lines does neither.
+ */
+export function pipeTableFrom(text: string): string[][] | null {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2) return null;
+
+  const pipes = (l: string) => (l.match(/\|/g) ?? []).length;
+  const columns = pipes(lines[0]) + 1;
+  if (columns < 2 || !lines.every((l) => pipes(l) + 1 === columns)) return null;
+
+  const cells = lines.map((l) => l.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim()));
+  return cells.filter((r) => !r.every((c) => TABLE_RULE.test(c)));
+}
+
+/**
+ * A size from the type scale that a string of this length should roughly fit
+ * in, for text a builder is generating rather than a user is typing.
+ *
+ * Whether a string really fits can only be answered by the browser after
+ * layout, which is what `features/fit` does; but that runs post-render and
+ * only in edit mode, so a generated slide would be born clipped and stay that
+ * way until someone opened it and pressed Fit it. Estimating here means a
+ * heading long enough to need three lines is not emitted at the display size
+ * a two-word heading gets. The classic cover already sizes its hero line this
+ * way (`SlideCover`), on the same reasoning.
+ *
+ * Widths are the average glyph advance as a fraction of the font size, which
+ * is what makes this an estimate: 0.5 is about right for the display faces the
+ * templates use. Sizes snap down to `TYPE_SCALE` so generated text lands on
+ * the same rail the formatting controls offer.
+ */
+function snapDown(px: number, minPx: number): number {
+  const step = [...TYPE_SCALE].reverse().find((s) => s <= px);
+  return clampSize(Math.max(minPx, step ?? minPx));
+}
+
+export function fitHeadingPx(
+  text: string,
+  { widthPx, maxPx, minPx, maxLines }: { widthPx: number; maxPx: number; minPx: number; maxLines: number }
+): number {
+  const chars = Math.max(1, text.trim().length);
+  return snapDown(Math.min(maxPx, (widthPx * maxLines) / (chars * 0.5)), minPx);
+}
+
+export function fitBodyPx(
+  text: string,
+  { widthPx, heightPx, maxPx, minPx, lineHeight = 1.5 }: { widthPx: number; heightPx: number; maxPx: number; minPx: number; lineHeight?: number }
+): number {
+  const chars = Math.max(1, text.trim().length);
+  return snapDown(Math.min(maxPx, Math.sqrt((heightPx * widthPx) / (chars * 0.5 * lineHeight))), minPx);
+}
+
+/**
+ * The height a block of text needs at a given size, counting each paragraph's
+ * own wrapped lines plus the blank line the renderer draws between them.
+ *
+ * Treating the whole block as one continuous run undercounts: every paragraph
+ * ends its line early and adds a blank one, so a body packed to a flat
+ * character budget still overflowed by a couple of lines.
+ */
+export function estimateTextHeight(text: string, sizePx: number, widthPx: number, lineHeight = 1.5): number {
+  const paragraphs = text.split('\n\n');
+  const wrapped = paragraphs.reduce(
+    (n, p) => n + Math.max(1, Math.ceil((p.trim().length * sizePx * 0.5) / widthPx)),
+    0
+  );
+  return (wrapped + Math.max(0, paragraphs.length - 1)) * sizePx * lineHeight;
+}
+
+/** Raw text of every block the parser kept but could not model, by kind. The
+ *  lexer already captures tables, blockquotes and images this way; until now
+ *  nothing read them back, so a table in a source document was parsed and then
+ *  silently dropped instead of becoming a slide. */
+export function unsupportedOf(section: SectionNode, kind: UnsupportedNode['kind']): string[] {
+  return section.children
+    .filter((c): c is UnsupportedNode => c.type === 'Unsupported' && c.kind === kind)
+    .map((c) => c.rawText);
+}
+
+/** A markdown pipe table into rows of cells, without its alignment rule. */
+export function parseMarkdownTable(raw: string): string[][] {
+  const rows = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('|'))
+    .map((line) => line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim()));
+  return rows.filter((cells) => !cells.every((c) => TABLE_RULE.test(c)));
+}
+
+/** Blockquote text with its `>` markers and hard wrapping removed. */
+export function parseBlockquote(raw: string): string {
+  return raw
+    .split('\n')
+    .map((line) => line.trim().replace(/^>\s?/, ''))
+    .join(' ')
+    .trim();
+}
+
+/** The alt text of a markdown image, which is all a deck can use: the source
+ *  is a path or URL the deck cannot store, so the slide gets an empty image
+ *  slot for the user to drop the real asset into. */
+export function parseImageAlt(raw: string): string {
+  return raw.match(/^!\[([^\]]*)\]/)?.[1]?.trim() ?? '';
 }
 
 /** Parse `key: value` bullets into a map; non key-value bullets go to `rest`. */
@@ -474,7 +617,9 @@ export function buildDeckFromDocument(ast: DocumentNode): Deck {
         make('s10', s.heading.text, {
           eyebrow: 'Insight',
           heading: ensurePeriod(s.heading.text),
-          body: [...paragraphsOf(s), ...bulletsOf(s)].join('\n\n'),
+          // A pipe table reaches us as a paragraph; it becomes its own table
+          // slide, so leave it out of the prose rather than printing it twice.
+          body: [...paragraphsOf(s).filter((p) => !pipeTableFrom(p)), ...bulletsOf(s)].join('\n\n'),
           // The source document has no image for this section - full-width
           // text reads better than a blank placeholder. The user can bring
           // the image column back from the slide's own controls.

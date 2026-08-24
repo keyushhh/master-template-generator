@@ -65,7 +65,7 @@ import {
   mintInstanceId,
   createBlankSlide,
 } from '../features/deck/deckBuilder';
-import { DOCUMENT_TEMPLATE_BUILDERS, IMAGE_DRIVEN_TEMPLATE_IDS } from '../features/deck/templateDocumentBuilders';
+import { DOCUMENT_TEMPLATE_BUILDERS, fitSlideText } from '../features/deck/templateDocumentBuilders';
 import { canCustomizeBackground } from '../features/deck/slideBackground';
 import { ConfirmModal } from '../features/ui/ConfirmModal';
 import { PRESENTATION_TEMPLATES } from '../features/templates/presentationTemplates';
@@ -338,6 +338,16 @@ export function MasterTemplatePage() {
     [draft, deck, commitDeck]
   );
 
+/** The empty deck a presentation template starts from, built the same way
+ *  New deck builds it, so Reset lands on the placeholders the user first saw
+ *  rather than on whatever was generated over them. */
+function pristineDeckFor(templateId: string | undefined): Deck {
+  const template = templateId ? PRESENTATION_TEMPLATES.find((t) => t.id === templateId) : undefined;
+  if (!template) return createTemplateDeck();
+  const deck = template.build();
+  return { ...deck, themeId: template.defaultThemeId || deck.themeId, presentationTemplateId: template.id };
+}
+
 /** Which template family the active deck was built from decides which
    *  Business-Record builder should run. A template with no builder of its
    *  own (image-driven ones, or one that predates this system) falls back to
@@ -351,11 +361,9 @@ export function MasterTemplatePage() {
     [deck.presentationTemplateId]
   );
 
-  /** True whenever the active template has no Business-Record builder of its
-   *  own - either because it's fundamentally image-driven (screenshots,
-   *  device mockups a document can't supply) or because a mapper hasn't been
-   *  built for it yet. Either way, generating would silently fall back to the
-   *  classic Wozku Master layout, so it's worth a confirmation instead. */
+  /** True only for templates with no fixed slide structure at all (Blank
+   *  Presentation) - every other template has its own Business-Record builder
+   *  and keeps its selected layout and theme when generating. */
   const needsClassicSwitchWarning = useCallback(() => {
     const templateId = deck.presentationTemplateId;
     return !!templateId && !DOCUMENT_TEMPLATE_BUILDERS[templateId];
@@ -372,7 +380,10 @@ export function MasterTemplatePage() {
     commitDeck(built);
     dispatchDraft({ type: 'close' });
     setDirty(false);
-    setBaselineDeck(built);
+    // Reset goes back to the empty template, not to the generated deck. Making
+    // the generated deck its own baseline left Reset committing an identical
+    // deck, which the history reducer drops - so the button did nothing.
+    setBaselineDeck(pristineDeckFor(deck.presentationTemplateId));
     if (isImport) {
       // If the deck is still unnamed, adopt the source's title so it's easy to find.
       const current = projects.find((p) => p.id === activeId);
@@ -384,7 +395,7 @@ export function MasterTemplatePage() {
         }
       }
     }
-  }, [builderForActiveTemplate, commitDeck, projects, activeId]);
+  }, [builderForActiveTemplate, commitDeck, projects, activeId, deck.presentationTemplateId]);
 
   const handleGenerate = useCallback(() => {
     if (!ast) return;
@@ -409,7 +420,7 @@ export function MasterTemplatePage() {
   /** Deck built from an uploaded .pptx. There is no Business Record behind it,
    *  so the AST is cleared - the imported slides carry their own shapes and the
    *  Generate path must not overwrite them with template placeholders. */
-  const handleImportDeck = useCallback((built: Deck, name: string, warnings: string[]) => {
+  const handleImportDeck = useCallback((built: Deck, name: string, warnings: string[], relit?: boolean) => {
     setAst(null);
     commitDeck(built);
     dispatchDraft({ type: 'close' });
@@ -418,7 +429,8 @@ export function MasterTemplatePage() {
     showToast(
       warnings.length
         ? `Imported ${built.slides.length} slides. ${warnings.length} note${warnings.length > 1 ? 's' : ''}: ${warnings[0]}`
-        : `Imported ${built.slides.length} slides on the Wozku theme. Your content is unchanged.`
+        : `Imported ${built.slides.length} slides on the ${themeById(built.themeId).name} theme.`
+          + (relit ? ' Colours were re-lit to match it.' : ' Your content is unchanged.')
     );
     const current = projects.find((p) => p.id === activeId);
     if (current && current.name === 'Untitled deck' && name) {
@@ -1170,7 +1182,9 @@ export function MasterTemplatePage() {
     (instanceId: string, to: SlideTemplateId) => {
       mutateDeck((prev) => ({
         ...prev,
-        slides: prev.slides.map((s) => (s.instanceId === instanceId ? applySwitch(s, to) : s)),
+        // Re-fit on arrival: copy written for a 96px heading overflows a 180px
+        // one, and nothing else re-measures it after the move.
+        slides: prev.slides.map((s) => (s.instanceId === instanceId ? fitSlideText(applySwitch(s, to)) : s)),
       }));
       setSwitchTargetId(null);
       // The old selection may point at a slot the new template doesn't render.
@@ -2188,6 +2202,7 @@ export function MasterTemplatePage() {
         currentId={currentSlideId}
         onNavigate={setCurrentSlideId}
         theme={deckTheme}
+        presentationTemplateId={deck.presentationTemplateId}
       />
 
       {/* One floating frosted header carries identity, mode and actions.
@@ -2376,9 +2391,7 @@ export function MasterTemplatePage() {
         message={(() => {
           const templateId = deck.presentationTemplateId;
           const name = PRESENTATION_TEMPLATES.find((t) => t.id === templateId)?.name ?? 'This template';
-          return templateId && IMAGE_DRIVEN_TEMPLATE_IDS.has(templateId)
-            ? `${name} is built around screenshots and device mockups a document can't supply. Generating from your source will replace it with the Classic Wozku Master layout instead.`
-            : `${name} doesn't support generating from a Business Record yet. Generating from your source will replace it with the Classic Wozku Master layout instead.`;
+          return `${name} has no fixed slide layout for a document's sections to land on. Generating from your source will replace it with the Classic Wozku Master layout instead.`;
         })()}
         confirmLabel="Switch & Generate"
         cancelLabel="Cancel"
