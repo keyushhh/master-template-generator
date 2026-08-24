@@ -78,7 +78,7 @@ export function FolderModal({ open, onClose, folderToEdit, onSave }: FolderModal
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 flex flex-col items-center gap-6">
           {/* Live 3D Folder Preview */}
-          <div className="py-2">
+          <div className="pt-16 pb-2">
             <MacFolderIcon color={color} size="lg" />
           </div>
 

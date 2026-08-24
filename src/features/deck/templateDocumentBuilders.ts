@@ -14,6 +14,7 @@
  * instead, and the user can replace or remove it after generating.
  */
 import type { DocumentNode, SectionNode } from '../business-record/parser/ast';
+import { TEMPLATE_BASE } from '../templates/templateLook';
 import type { Deck, SlideInstance, SlideContent, SlotStyle, ComparisonRow, RoadmapPhase, ProcessStep, MetricBar, Kpi, IndexPart } from './types';
 import { hexIsDark } from './slideBackground';
 import {
@@ -460,7 +461,7 @@ export function buildSwissDeck(ast: DocumentNode): Deck {
   const closing = buildClosing(take);
 
   const consumed = new Set([preamble, monumentOrSummary, contextSection, comparisonSection, roadmapSection].filter((s): s is SectionNode => !!s));
-  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: 'FFFFFF' });
+  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: TEMPLATE_BASE['swiss-minimal'] });
 
   return {
     generated: true,
@@ -503,7 +504,7 @@ export function buildWaveDeck(ast: DocumentNode): Deck {
   const regionsContent = regions ? { heading: paragraphsOf(regions)[0], sectors: sectors?.length ? sectors : undefined } : null;
 
   const consumed = new Set([preamble, metrics, contextSection, comparisonSection, regions].filter((s): s is SectionNode => !!s));
-  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: 'F4FAF8' });
+  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: TEMPLATE_BASE['wave'] });
 
   return {
     generated: true,
@@ -557,7 +558,7 @@ export function buildEditorialDeck(ast: DocumentNode): Deck {
     : null;
 
   const consumed = new Set([preamble, monumentOrSummary, context, quote].filter((s): s is SectionNode => !!s));
-  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: 'FDFBF7' });
+  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: TEMPLATE_BASE['editorial'] });
 
   return {
     generated: true,
@@ -571,7 +572,7 @@ export function buildEditorialDeck(ast: DocumentNode): Deck {
       makeSlideInstance('editorial_story', 'Context', 'Market Dynamics', story ?? {}, !story),
       makeSlideInstance('editorial_metrics', 'Performance', 'Audience Perception', metricsSlide ?? {}, !metricsSlide),
       makeSlideInstance('editorial_quote', 'Closing', 'Design Philosophy', quoteContent ?? {}, !quoteContent),
-      ...closingSlidesFor('editorial_closing', 'Farewell', closing, { base: 'FDFBF7' }),
+      ...closingSlidesFor('editorial_closing', 'Farewell', closing, { base: TEMPLATE_BASE['editorial'] }),
     ],
   };
 }
@@ -597,7 +598,7 @@ export function buildProductShowcaseDeck(ast: DocumentNode): Deck {
   const trio = ecosystemHeading ? { hudLabel: 'Product Ecosystem', eyebrow: 'COMPLETE PRODUCT SUITE', heading: ecosystemHeading } : null;
 
   const consumed = new Set([preamble, monumentOrSummary, ecosystemSection].filter((s): s is SectionNode => !!s));
-  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: '050507' });
+  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: TEMPLATE_BASE['product-showcase'] });
 
   return {
     generated: true,
@@ -609,7 +610,7 @@ export function buildProductShowcaseDeck(ast: DocumentNode): Deck {
       makeSlideInstance('product_showcase_hero', 'Product', 'Hero Interface', heroContent ?? {}, !heroContent),
       makeSlideInstance('product_showcase_trio', 'Product', 'Product Ecosystem', trio ?? {}, !trio),
       ...overflow,
-      ...closingSlidesFor('product_showcase_closing', 'App Availability', closing, { base: '050507' }),
+      ...closingSlidesFor('product_showcase_closing', 'App Availability', closing, { base: TEMPLATE_BASE['product-showcase'] }),
     ],
   };
 }
@@ -637,7 +638,7 @@ export function buildUxJourneyDeck(ast: DocumentNode): Deck {
     : null;
 
   const consumed = new Set([preamble, process, monument].filter((s): s is SectionNode => !!s));
-  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: '020617' });
+  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: TEMPLATE_BASE['ux-journey'] });
 
   return {
     generated: true,
@@ -649,7 +650,7 @@ export function buildUxJourneyDeck(ast: DocumentNode): Deck {
       makeSlideInstance('ux_journey_flow', 'Workflow', '3-Step Product Sequence', flow ?? {}, !flow),
       makeSlideInstance('ux_journey_before_after', 'Workflow', 'UX Transformation Comparison', beforeAfter ?? {}, !beforeAfter),
       ...overflow,
-      ...closingSlidesFor('ux_journey_closing', 'Rollout Roadmap', closing, { base: '020617' }),
+      ...closingSlidesFor('ux_journey_closing', 'Rollout Roadmap', closing, { base: TEMPLATE_BASE['ux-journey'] }),
     ],
   };
 }
@@ -670,7 +671,7 @@ export function buildMobileEditorialDeck(ast: DocumentNode): Deck {
     : null;
 
   const consumed = new Set([preamble, context].filter((s): s is SectionNode => !!s));
-  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: 'F8F6F0' });
+  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: TEMPLATE_BASE['mobile-editorial'] });
 
   return {
     generated: true,
@@ -681,7 +682,7 @@ export function buildMobileEditorialDeck(ast: DocumentNode): Deck {
       makeSlideInstance('mobile_editorial_cover', 'Introduction', 'Atelier Mobile Collection', buildCover(ast, preamble ? paragraphsOf(preamble)[0] : undefined)),
       makeSlideInstance('mobile_editorial_asymmetric', 'Narrative', 'Curated Touchpoints', story ?? {}, !story),
       ...overflow,
-      ...closingSlidesFor('mobile_editorial_closing', 'Conclusion', closing, { base: 'F8F6F0' }),
+      ...closingSlidesFor('mobile_editorial_closing', 'Conclusion', closing, { base: TEMPLATE_BASE['mobile-editorial'] }),
     ],
   };
 }
@@ -705,7 +706,7 @@ export function buildProductDataDeck(ast: DocumentNode): Deck {
     : null;
 
   const consumed = new Set([preamble, metrics].filter((s): s is SectionNode => !!s));
-  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: '070A12' });
+  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: TEMPLATE_BASE['product-data'] });
 
   return {
     generated: true,
@@ -716,7 +717,7 @@ export function buildProductDataDeck(ast: DocumentNode): Deck {
       makeSlideInstance('product_data_cover', 'Introduction', 'Product Performance Keynote', buildCover(ast, preamble ? paragraphsOf(preamble)[0] : undefined)),
       makeSlideInstance('product_data_screen_kpi', 'Performance', 'Retention & Engagement Lift', kpiSlide ?? {}, !kpiSlide),
       ...overflow,
-      ...closingSlidesFor('product_data_closing', 'Enterprise Deployment', closing, { base: '070A12' }),
+      ...closingSlidesFor('product_data_closing', 'Enterprise Deployment', closing, { base: TEMPLATE_BASE['product-data'] }),
     ],
   };
 }
@@ -733,7 +734,7 @@ export function buildInvestorMemoDeck(ast: DocumentNode): Deck {
     : null;
 
   const consumed = new Set([preamble, comparisonSection].filter((s): s is SectionNode => !!s));
-  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: '0A0F1D' });
+  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: TEMPLATE_BASE['investor-memorandum'] });
 
   return {
     generated: true,
@@ -744,7 +745,7 @@ export function buildInvestorMemoDeck(ast: DocumentNode): Deck {
       makeSlideInstance('investor_memo_cover', 'Introduction', 'Series A Syndicate Memo', buildCover(ast, preamble ? paragraphsOf(preamble)[0] : undefined)),
       makeSlideInstance('investor_memo_terms', 'Terms', 'Deal Architecture', terms ?? {}, !terms),
       ...overflow,
-      ...closingSlidesFor('investor_memo_closing', 'Syndicate Adjournment', closing, { base: '0A0F1D' }),
+      ...closingSlidesFor('investor_memo_closing', 'Syndicate Adjournment', closing, { base: TEMPLATE_BASE['investor-memorandum'] }),
     ],
   };
 }
@@ -782,7 +783,7 @@ export function buildAiNativeDeck(ast: DocumentNode): Deck {
   const pipeline = steps?.length ? { hudLabel: 'Execution Pipeline', heading: ensurePeriod(paragraphsOf(process!)[0] ?? process!.heading.text), steps } : null;
 
   const consumed = new Set([preamble, monumentOrSummary, metrics, process, ...dividers].filter((s): s is SectionNode => !!s));
-  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: '0B071A' });
+  const overflow = overflowSlides(leftoverSections(ast, consumed), { base: TEMPLATE_BASE['ai-native'] });
 
   return {
     generated: true,
@@ -796,7 +797,7 @@ export function buildAiNativeDeck(ast: DocumentNode): Deck {
       makeSlideInstance('ai_native_metrics', 'Performance', 'Telemetry & Accuracy', metricsSlide ?? {}, !metricsSlide),
       makeSlideInstance('ai_native_pipeline', 'Strategy', 'Agentic Execution Loop', pipeline ?? {}, !pipeline),
       ...overflow,
-      ...closingSlidesFor('ai_native_closing', 'Deployment Console', closing, { base: '0B071A' }),
+      ...closingSlidesFor('ai_native_closing', 'Deployment Console', closing, { base: TEMPLATE_BASE['ai-native'] }),
     ],
   };
 }
@@ -827,7 +828,7 @@ export function buildStartupBoldDeck(ast: DocumentNode): Deck {
   const roadmapSlide = phases?.length ? { hudLabel: 'Execution Roadmap', heading: ensurePeriod(paragraphsOf(roadmap!)[0] ?? roadmap!.heading.text), phases } : null;
 
   const consumed = new Set([preamble, monumentOrSummary, metrics, roadmap].filter((s): s is SectionNode => !!s));
-  const look = { base: '09090B' };
+  const look = { base: TEMPLATE_BASE['startup-bold'] };
   const overflow = overflowSlides(leftoverSections(ast, consumed), look);
   // This template has no closing slide, so the closing section would otherwise
   // be built and then dropped. It becomes a slide of its own instead.

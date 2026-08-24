@@ -1438,12 +1438,15 @@ export function HomePage() {
                           {visibleFolders.map((f) => {
                             const deckCount = projects.filter((p) => p.folderId === f.id).length;
                             const isDragOver = dragOverFolderId === f.id;
+                            const isHovered = hoveredFolderId === f.id;
                             const actionBtn =
                               'w-7 h-7 flex items-center justify-center rounded-[var(--radius-sharp)] transition-colors cursor-pointer';
                             return (
                               <div
                                 key={f.id}
                                 onClick={() => navigateToFolder(f.id)}
+                                onMouseEnter={() => setHoveredFolderId(f.id)}
+                                onMouseLeave={() => setHoveredFolderId(null)}
                                 onDragOver={(e) => {
                                   e.preventDefault();
                                   e.dataTransfer.dropEffect = 'move';
@@ -1465,7 +1468,12 @@ export function HomePage() {
                                 }`}
                               >
                                 <span className="flex items-center gap-3 min-w-0">
-                                  <MacFolderIcon color={f.color} isEmpty={deckCount === 0} sizePx={28} />
+                                  <MacFolderIcon
+                                    color={f.color}
+                                    isEmpty={deckCount === 0}
+                                    isHovered={isHovered}
+                                    sizePx={28}
+                                  />
                                   <span className="truncate text-[13px] font-semibold text-neutral-900">
                                     {f.name}
                                   </span>
@@ -1550,7 +1558,7 @@ export function HomePage() {
                               className={`group relative flex flex-col items-center p-4 rounded-[var(--radius-sharp)] transition-all duration-200 cursor-pointer ${
                                 isDragOver
                                   ? 'bg-emerald-50 border-2 border-emerald-500 scale-105 z-20'
-                                  : 'border border-transparent'
+                                  : `border border-transparent ${isHovered ? 'z-10' : ''}`
                               }`}
                             >
                               {/* Header row, reserved regardless of icon size - the "..." lives
@@ -1560,7 +1568,10 @@ export function HomePage() {
                                   width (not the card's, which is often wider once the grid column
                                   stretches to fill its row) so the button's right edge lines up
                                   with the icon's right edge, not with empty space beside it. */}
-                              <div className="h-6 flex justify-end mb-2" style={{ width: folderZoom }}>
+                              <div
+                                className="relative z-20 h-6 flex justify-end mb-2"
+                                style={{ width: folderZoom }}
+                              >
                                 <span className="relative">
                                   <button
                                     onClick={(e) => {

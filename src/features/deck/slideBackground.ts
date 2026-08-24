@@ -28,6 +28,53 @@ export function hexIsDark(base?: string): boolean {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
 }
 
+/** WCAG relative luminance. Gamma-corrected, unlike the quick average
+ *  `hexIsDark` uses, because a contrast ratio is only meaningful with it. */
+function relativeLuminance(hex: string): number {
+  const h = hex.replace('#', '');
+  const c = [0, 2, 4].map((i) => {
+    const v = parseInt(h.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+
+/** WCAG contrast ratio between two colours, 1 (identical) to 21 (black/white). */
+export function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * The brand ink, taken far enough to actually be read against `bg`.
+ *
+ * A four-step accent ramp is a design, not a contrast guarantee: an accent pale
+ * enough to work as a wash leaves its own deep step short of legible on it, and
+ * a kit whose tint is dark leaves every step short. Rather than pick a
+ * different colour, this walks the chosen one toward black or white (whichever
+ * direction the background is not) until it clears the threshold, so the chip
+ * keeps the brand's hue and stops being decorative-only.
+ *
+ * 4.5:1 is the WCAG AA floor for text at normal size.
+ */
+export function readableInk(bg: string, preferred: string, min = 4.5): string {
+  const clean = preferred.replace('#', '').toUpperCase();
+  if (!/^[0-9A-F]{6}$/.test(clean)) return clean;
+  const toward = hexIsDark(bg) ? 255 : 0;
+  const rgb = [0, 2, 4].map((i) => parseInt(clean.slice(i, i + 2), 16));
+
+  let out = clean;
+  for (let step = 0; step <= 20; step++) {
+    if (contrastRatio(out, bg) >= min) return out;
+    const t = (step + 1) / 20;
+    out = rgb
+      .map((v) => Math.round(v + (toward - v) * t).toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase();
+  }
+  return out;
+}
+
 /** CSS for a custom slide background override. Returns undefined when there's
  *  nothing to override, so the caller falls through to the template default. */
 export function backgroundCssFor(bg: SlideBackground | undefined): CSSProperties | undefined {

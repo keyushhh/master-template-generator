@@ -13,6 +13,9 @@
  * what "brand theme applied" was always supposed to mean.
  */
 import type { DeckTheme } from '../theme/deckTheme';
+import type { ImportedSlide, ImportedShape, ImportedParagraph } from '../deck/types';
+import { hexIsDark } from '../deck/slideBackground';
+import { templateIsDark } from '../templates/templateLook';
 
 export interface BrandMap {
   display: string;
@@ -110,7 +113,7 @@ export const WOZKU_BRAND: BrandMap = {
  * theme's four accent steps so a colour can still be matched by lightness:
  * four steps alone leave visible banding on a deck that shades one accent.
  */
-export function brandMapFor(theme: DeckTheme): BrandMap {
+export function brandMapFor(theme: DeckTheme, presentationTemplateId?: string): BrandMap {
   const base = [theme.accent.deep, theme.accent.base, theme.accent.bright, theme.accent.tint]
     .map((c) => String(c).replace('#', '').toUpperCase())
     .filter((c) => /^[0-9A-F]{6}$/.test(c));
@@ -127,7 +130,9 @@ export function brandMapFor(theme: DeckTheme): BrandMap {
     mono: theme.fonts.mono.family,
     neutrals: NEUTRALS,
     accents: accents.length ? accents : EMERALDS,
-    isDark: theme.styleSystem?.isDarkSlideDefault === true,
+    // The template's own look first: a template can paint dark slides while
+    // carrying a light palette, and the palette is the wrong thing to ask.
+    isDark: templateIsDark(presentationTemplateId) ?? theme.styleSystem?.isDarkSlideDefault === true,
   };
 }
 
@@ -168,4 +173,51 @@ export function snapToBrand(hex: string, brand: BrandMap = WOZKU_BRAND, flip = f
 
   if (saturation(rgb) < 0.15) return nearestByLuminance(brand.neutrals, lum);
   return nearestByLuminance(brand.accents, lum);
+}
+
+/**
+ * Mirrors every colour in the deck onto the opposite end of its ramp, so a deck
+ * built dark reads correctly on a light template and the reverse.
+ *
+ * Done for the whole deck at once, never per slide: a dark divider inside an
+ * otherwise light deck is dark *relative to* its neighbours, and flipping each
+ * slide against the template independently would collapse that difference. One
+ * decision for the deck keeps the odd slide odd.
+ *
+ * Text with no explicit colour needs nothing here - the renderer already picks
+ * its ink from the slide's background, which this flips.
+ */
+function flipAll(slides: ImportedSlide[], brand: BrandMap): ImportedSlide[] {
+  const snap = (hex: string | undefined) => (hex === undefined ? undefined : snapToBrand(hex, brand, true));
+  const paras = (ps: ImportedParagraph[] | undefined) => ps?.map((p) => ({
+    ...p,
+    runs: p.runs.map((r) => (r.color ? { ...r, color: snapToBrand(r.color, brand, true) } : r)),
+  }));
+  const shape = (sh: ImportedShape): ImportedShape => ({
+    ...sh,
+    fill: snap(sh.fill),
+    line: sh.line ? { ...sh.line, color: snapToBrand(sh.line.color, brand, true) } : sh.line,
+    paragraphs: paras(sh.paragraphs),
+    rows: sh.rows?.map((row) => ({
+      ...row,
+      cells: row.cells.map((c) => ({ ...c, fill: snap(c.fill), paragraphs: paras(c.paragraphs) })),
+    })),
+  });
+  return slides.map((s) => ({
+    ...s,
+    base: snapToBrand(s.base, brand, true),
+    shapes: s.shapes.map(shape),
+  }));
+}
+
+/** Decides whether this deck disagrees with the template's lightness, and
+ *  mirrors it if so. Majority vote, so one dark divider in a light deck does
+ *  not decide it for the other twenty. */
+export function relightForBrand(
+  slides: ImportedSlide[],
+  brand: BrandMap
+): { slides: ImportedSlide[]; relit: boolean } {
+  const sourceIsDark = slides.filter((s) => hexIsDark(s.base)).length * 2 > slides.length;
+  const relit = brand.isDark !== undefined && brand.isDark !== sourceIsDark;
+  return { slides: relit ? flipAll(slides, brand) : slides, relit };
 }

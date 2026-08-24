@@ -1,12 +1,12 @@
 import JSZip from 'jszip';
 import type {
+  ImportedSlide,
   ImportedShape,
   ImportedParagraph,
   ImportedRun,
   ImportedTableRow,
 } from '../deck/types';
-import { mapFont, snapToBrand, WOZKU_BRAND, type BrandMap } from './brandMap';
-import { hexIsDark } from '../deck/slideBackground';
+import { mapFont, snapToBrand, relightForBrand, WOZKU_BRAND, type BrandMap } from './brandMap';
 
 /**
  * Reads an uploaded .pptx and lifts each slide into positioned shapes in the
@@ -24,13 +24,7 @@ const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const CANVAS_W = 1920;
 const CANVAS_H = 1080;
 
-export interface ImportedSlide {
-  shapes: ImportedShape[];
-  /** Hex, no '#'. */
-  base: string;
-  /** First substantial line of copy, used to title the slide in the sidebar. */
-  title: string;
-}
+export type { ImportedSlide };
 
 export interface PptxImportResult {
   slides: ImportedSlide[];
@@ -508,53 +502,6 @@ async function slideOrder(zip: JSZip): Promise<string[]> {
     if (target) out.push(`ppt/${target.replace(/^ppt\//, '')}`);
   }
   return out;
-}
-
-/**
- * Mirrors every colour in the deck onto the opposite end of its ramp, so a deck
- * built dark reads correctly on a light template and the reverse.
- *
- * Done for the whole deck at once, never per slide: a dark divider inside an
- * otherwise light deck is dark *relative to* its neighbours, and flipping each
- * slide against the template independently would collapse that difference. One
- * decision for the deck keeps the odd slide odd.
- *
- * Text with no explicit colour needs nothing here - the renderer already picks
- * its ink from the slide's background, which this flips.
- */
-function flipAll(slides: ImportedSlide[], brand: BrandMap): ImportedSlide[] {
-  const snap = (hex: string | undefined) => (hex === undefined ? undefined : snapToBrand(hex, brand, true));
-  const paras = (ps: ImportedParagraph[] | undefined) => ps?.map((p) => ({
-    ...p,
-    runs: p.runs.map((r) => (r.color ? { ...r, color: snapToBrand(r.color, brand, true) } : r)),
-  }));
-  const shape = (sh: ImportedShape): ImportedShape => ({
-    ...sh,
-    fill: snap(sh.fill),
-    line: sh.line ? { ...sh.line, color: snapToBrand(sh.line.color, brand, true) } : sh.line,
-    paragraphs: paras(sh.paragraphs),
-    rows: sh.rows?.map((row) => ({
-      ...row,
-      cells: row.cells.map((c) => ({ ...c, fill: snap(c.fill), paragraphs: paras(c.paragraphs) })),
-    })),
-  });
-  return slides.map((s) => ({
-    ...s,
-    base: snapToBrand(s.base, brand, true),
-    shapes: s.shapes.map(shape),
-  }));
-}
-
-/** Decides whether this deck disagrees with the template's lightness, and
- *  mirrors it if so. Majority vote, so one dark divider in a light deck does
- *  not decide it for the other twenty. */
-export function relightForBrand(
-  slides: ImportedSlide[],
-  brand: BrandMap
-): { slides: ImportedSlide[]; relit: boolean } {
-  const sourceIsDark = slides.filter((s) => hexIsDark(s.base)).length * 2 > slides.length;
-  const relit = brand.isDark !== undefined && brand.isDark !== sourceIsDark;
-  return { slides: relit ? flipAll(slides, brand) : slides, relit };
 }
 
 const MIME: Record<string, string> = {

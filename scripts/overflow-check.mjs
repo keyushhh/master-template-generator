@@ -658,7 +658,7 @@ check('symbol faces are still untouched', mapFont('Wingdings', startupBrand) ===
 // Keeping the source's lightness left white text on a cream slide. Background,
 // fill, rule and type are all matched by lightness, so mirroring every one of
 // them at once is what keeps the contrast intact.
-const { relightForBrand } = await jiti.import(resolvePath(root, 'src/features/pptx-import/pptxParser.ts'));
+const { relightForBrand } = await jiti.import(resolvePath(root, 'src/features/pptx-import/brandMap.ts'));
 const { hexIsDark } = await jiti.import(resolvePath(root, 'src/features/deck/slideBackground.ts'));
 
 const darkDeck = () => [
@@ -754,6 +754,46 @@ check('a size the builder set deliberately is never overruled',
 // perfectly well, so a paragraph the template can hold is now left alone.
 check('a body slot is measured in the column it is actually drawn in',
   sizeOf('s6', 'body', 'Placeholder content for this template slot. '.repeat(10).slice(0, 400)) === undefined);
+
+// --- 10. the importer knows what the template it lands on looks like ---------
+
+// It used to ask the theme (`styleSystem.isDarkSlideDefault`), which only two
+// themes set. Product Showcase paints #050507 while carrying the light house
+// palette, so a white PDF or .pptx dropped onto it was read as already matching
+// and never re-lit: white slides inside a black template.
+const { TEMPLATE_BASE, templateIsDark } = await jiti.import(
+  resolvePath(root, 'src/features/templates/templateLook.ts')
+);
+
+for (const id of Object.keys(DOCUMENT_TEMPLATE_BUILDERS)) {
+  check(`${id}: has a known look`, typeof TEMPLATE_BASE[id] === 'string', String(TEMPLATE_BASE[id]));
+}
+
+const DARK_LOOKING = ['product-showcase', 'ux-journey', 'product-data', 'investor-memorandum', 'ai-native', 'startup-bold'];
+const LIGHT_LOOKING = ['default', 'swiss-minimal', 'wave', 'editorial', 'mobile-editorial'];
+for (const id of DARK_LOOKING) check(`${id} is treated as a dark template`, templateIsDark(id) === true);
+for (const id of LIGHT_LOOKING) check(`${id} is treated as a light template`, templateIsDark(id) === false);
+check('an unknown template makes no claim', templateIsDark('nope') === undefined);
+check('no template id makes no claim', templateIsDark(undefined) === undefined);
+
+// The template beats the palette, which is the whole point.
+const showcaseBrand = brandMapFor(themeById('wozku'), 'product-showcase');
+check('a dark template carrying a light palette is still read as dark', showcaseBrand.isDark === true);
+check('and a white deck dropped onto it is re-lit',
+  relightForBrand([{ title: 'a', base: 'FFFFFF', shapes: [] }], showcaseBrand).relit);
+check('the same deck onto a light template is left alone',
+  !relightForBrand([{ title: 'a', base: 'FFFFFF', shapes: [] }], brandMapFor(themeById('wozku'), 'editorial')).relit);
+
+// With no template named, the palette still answers, as it did before.
+check('with no template the palette still decides',
+  brandMapFor(themeById('template_ai_native')).isDark === true);
+
+// The builders and the importer must not drift back apart: every base a builder
+// paints has to be the one this table names.
+const buildersSrc = readFileSync(resolvePath(root, 'src/features/deck/templateDocumentBuilders.ts'), 'utf8');
+check('no builder carries its own copy of a template background',
+  !/base: '[0-9A-Fa-f]{6}'/.test(buildersSrc.replace(/base: 'FFFFFF'/g, '')),
+  (buildersSrc.match(/base: '[0-9A-Fa-f]{6}'/g) ?? []).join(' '));
 
 // --- report -------------------------------------------------------------------
 

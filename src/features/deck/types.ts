@@ -72,6 +72,16 @@ export interface ImportedShape {
   rows?: ImportedTableRow[];
 }
 
+/** One slide lifted from an uploaded file, before it becomes a SlideInstance.
+ *  Shared by the .pptx and .pdf importers so both feed the same deck builder. */
+export interface ImportedSlide {
+  shapes: ImportedShape[];
+  /** Hex, no '#'. */
+  base: string;
+  /** First substantial line of copy, used to title the slide in the sidebar. */
+  title: string;
+}
+
 /** A per-slot formatting override applied on top of whatever the template
  *  renderer already specifies. Every field is optional and an absent field
  *  means "keep the template's value" - so a slide with no overrides renders

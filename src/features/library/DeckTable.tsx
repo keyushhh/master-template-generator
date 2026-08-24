@@ -3,6 +3,7 @@ import { FitStage } from '../generator/FitStage';
 import { FolderChip } from './FolderChip';
 import { css as themeCss, type DeckTheme } from '../theme/deckTheme';
 import type { Deck } from '../deck/types';
+import { hexIsDark, readableInk } from '../deck/slideBackground';
 import type { ProjectSummary } from '../deck/deckStore';
 import { relativeTime } from './relativeTime';
 import { Pagination } from './Pagination';
@@ -63,7 +64,7 @@ interface DeckTableProps {
  *  knowing which one you are about to open. */
 function sourceLabel(deck: Deck | null): string {
   if (!deck) return 'Unavailable';
-  if (deck.slides.some((s) => s.templateId === 'imported')) return 'Imported .pptx';
+  if (deck.slides.some((s) => s.templateId === 'imported')) return 'Imported deck';
   if (deck.generated) return 'From Business Record';
   return 'Master template';
 }
@@ -415,12 +416,20 @@ export function DeckTable({
                     </div>
                   </td>
 
-                  {/* Client, as a pill in the kit's own colour. */}
+                  {/* Client, as a pill in the kit's own colour. The ink is
+                      picked against the pill's own background: a kit whose tint
+                      is a dark wash (AI-Native) gets its light accent step, not
+                      the deep one that would vanish into it. */}
                   <td className="border-b border-neutral-200 px-3 py-2 align-middle">
                     <span
                       className="inline-flex items-center gap-1.5 max-w-full px-2 py-[2px] text-[11px] font-semibold border"
                       style={{
-                        color: themeCss(theme.accent.deep),
+                        color: themeCss(
+                          readableInk(
+                            theme.accent.tint,
+                            hexIsDark(theme.accent.tint) ? theme.accent.bright : theme.accent.deep
+                          )
+                        ),
                         borderColor: themeCss(theme.accent.base) + '55',
                         background: themeCss(theme.accent.tint),
                       }}

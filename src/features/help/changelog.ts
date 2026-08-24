@@ -14,6 +14,45 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '2.3.0',
+    date: '2026-08-24',
+    summary: 'Folders open on hover.',
+    improved: [
+      'Hovering a folder now lifts its papers right out and swings the front flap open on a hinge, each paper springing up on its own beat. The old folder squashed its flap flat and nudged the papers a couple of pixels, which read as a wobble rather than as opening.',
+      'The same folder is drawn live in the New Folder and Edit Folder window, so hovering the preview shows you exactly what the colour you picked will do in the library.',
+      'Folders are now drawn rather than loaded from flat pictures, so every colour is built from the swatch you chose instead of being a hue-shifted copy of the blue one. Emerald, rose and slate folders in particular are now the colours their swatches promise.',
+    ],
+  },
+  {
+    version: '2.2.1',
+    date: '2026-08-24',
+    summary: 'Uploads land on the template you picked, and say so when they cannot.',
+    fixed: [
+      'A .pdf or .pptx uploaded onto a dark template came in white. Product Showcase, UX Journey, Product & Data, Investor Memo, AI-Native and Startup Pitch all paint dark slides while carrying a light palette, and the importer was asking the palette rather than the template, so it decided nothing needed re-lighting. It now reads the template’s own look, which is also the one the document builders use.',
+      'When an upload failed, it said so at the bottom of the window, underneath a drop zone tall enough to push it out of sight. The reason now appears above the drop zone, so a file that cannot be read no longer looks like a button that does nothing.',
+    ],
+    improved: [
+      'Reading a PDF counts the pages as it goes rather than showing one unchanging word, and lets the window redraw between them. A long PDF is read a page at a time and used to look like the app had frozen.',
+      'A page with no text in it, which has to come in as a picture, is now drawn at nearly twice the resolution. Pages that do have text are still only drawn large enough to read their colours from, so this costs nothing on an ordinary document.',
+      'There is a ceiling on how much page artwork one import will store, because a deck is kept in this browser and has a few megabytes to work with. A picture-heavy PDF that reaches it now says how many pages came in blank, instead of quietly producing a deck that will not save.',
+    ],
+  },
+  {
+    version: '2.2.0',
+    date: '2026-08-24',
+    summary: 'Upload a PDF, and one Upload tab instead of three.',
+    added: [
+      'PDFs can now be uploaded like a .pptx. Every page becomes a slide with its text and pictures where you left them, brought onto whichever template you picked: brand type, brand palette, and flipped to match the template’s lightness if the PDF was built the other way round.',
+      'PDF text arrives as real editable text, not a picture of a page. A PDF stores no headings or paragraphs, only glyphs at positions, so lines and paragraphs are rebuilt from the spacing on the page. Expect to tidy the odd block.',
+      'A scanned PDF has no text in it at all. Those pages come in as images and the confirmation says so, rather than presenting an empty slide as a success.',
+    ],
+    improved: [
+      'One Upload tab that takes every format, replacing the separate Upload .md and Upload .pptx tabs. Drop or browse for a .md, .txt, .pptx or .pdf in the same place: there is no file type to set first, since the file already says what it is.',
+      'Legacy .ppt and Keynote files now say what to do about it instead of failing as an unreadable file.',
+      'The client name in the deck library is readable on every brand kit. AI-Native’s was its own dark violet on a dark violet chip, and Wozku’s green sat below the contrast floor on its pale green one.',
+    ],
+  },
+  {
     version: '2.1.1',
     date: '2026-08-24',
     summary: 'Headings no longer run through the text underneath them.',

@@ -170,6 +170,24 @@ const ramp = accentRamp('2563EB');
 if (fullKit.accent.base !== ramp.base) fail('kit type does not disturb the colour ramp', fullKit.accent.base);
 else pass('kit type does not disturb the colour ramp');
 
+// --- the client pill in the deck library reads on every kit -------------------
+
+// It paints `accent.deep` on `accent.tint`, which assumed every tint is a pale
+// wash. AI-Native's is a dark violet (1E1338), so its own name came out dark on
+// dark and could not be read at all. The ink is now picked against the pill's
+// real background, and this is the check that it stays legible.
+const { BUILT_IN_THEMES } = await jiti.import('../src/features/theme/deckTheme.ts');
+const { hexIsDark, readableInk, contrastRatio } = await jiti.import('../src/features/deck/slideBackground.ts');
+
+for (const theme of BUILT_IN_THEMES) {
+  const bg = theme.accent.tint;
+  const ink = readableInk(bg, hexIsDark(bg) ? theme.accent.bright : theme.accent.deep);
+  const ratio = contrastRatio(ink, bg);
+  // 4.5:1 is the WCAG AA floor for text this size.
+  if (ratio < 4.5) fail(`${theme.id}: client pill is readable`, `${ink} on ${bg} is ${ratio.toFixed(2)}:1`);
+  else pass(`${theme.id}: client pill is readable (${ratio.toFixed(1)}:1)`);
+}
+
 console.log('');
 console.log(failed === 0 ? 'All brand kit checks passed.' : `${failed} check(s) failed.`);
 process.exit(failed === 0 ? 0 : 1);

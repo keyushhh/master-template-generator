@@ -26,19 +26,20 @@ interface SourceMaterialModalProps {
   hasSource: boolean;
 }
 
-type Tab = 'prompt' | 'paste' | 'upload' | 'pptx';
+type Tab = 'prompt' | 'paste' | 'upload';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'prompt', label: 'Conversion Prompt' },
   { id: 'paste', label: 'Paste .md' },
-  { id: 'upload', label: 'Upload .md' },
-  { id: 'pptx', label: 'Upload .pptx' },
+  { id: 'upload', label: 'Upload' },
 ];
 
-/** How an uploaded .pptx should be treated.
- *  'keep'    - original layout preserved shape for shape, brand theme applied.
- *  'refresh' - re-flowed onto the 14 master templates (not yet built). */
-type PptxMode = 'keep' | 'refresh';
+/**
+ * Everything the one upload zone takes. There is no format to choose first: a
+ * file already says what it is, and asking the user to set a picker to match
+ * the file they are about to drop is a question with a knowable answer.
+ */
+const UPLOAD_ACCEPT = '.md,.markdown,.txt,.pptx,.pdf';
 
 /**
  * Strip a wrapping ```markdown / ``` code fence if pasted text still carries one
@@ -88,7 +89,7 @@ function synthesizeBusinessRecord(text: string, filename: string): string {
  *  - Conversion Prompt: copy the claude.ai prompt that turns a call transcript into a
  *    Business Record, then jump to Paste.
  *  - Paste .md: drop Claude's markdown straight in - no file needed.
- *  - Upload .md: pick or drag a .md file.
+ *  - Upload: one zone for every format, routed by the file's own extension.
  */
 export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport, onImportDeck, hasSource, deckTheme, presentationTemplateId }: SourceMaterialModalProps) {
   const [tab, setTab] = useState<Tab>('prompt');
@@ -99,9 +100,8 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   const [isDragging, setIsDragging] = useState(false);
   const [rawTranscriptHint, setRawTranscriptHint] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pptxInputRef = useRef<HTMLInputElement>(null);
-  const [pptxMode, setPptxMode] = useState<PptxMode>('keep');
-  const [pptxDragging, setPptxDragging] = useState(false);
+  /** What the zone says while it works, set from the file that arrived. */
+  const [busyLabel, setBusyLabel] = useState('Reading file…');
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open);
 
@@ -207,16 +207,11 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
         : 'Please choose a .pptx file.');
       return;
     }
-    if (pptxMode === 'refresh') {
-      setError('The refreshed-layout option is not available yet - it re-flows your '
-        + 'slides onto the 14 master templates. Use "Keep my layout" for now.');
-      return;
-    }
     setIsValidating(true);
     try {
       const { parsePptx } = await import('../pptx-import/pptxParser');
       const { brandMapFor } = await import('../pptx-import/brandMap');
-      const { slides, warnings, relit } = await parsePptx(file, brandMapFor(deckTheme));
+      const { slides, warnings, relit } = await parsePptx(file, brandMapFor(deckTheme, presentationTemplateId));
       const deck = buildDeckFromImport(slides, { themeId: deckTheme.id, presentationTemplateId });
       onImportDeck(deck, file.name.replace(/\.pptx$/i, ''), warnings, relit);
       onClose();
@@ -227,20 +222,59 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
     }
   };
 
-  const handlePptxDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setPptxDragging(false);
-    if (e.dataTransfer.files?.length) void processPptx(e.dataTransfer.files[0]);
+  /** Reads an uploaded .pdf the same way, page for page. A PDF carries no
+   *  structure, so its text is reconstructed from position rather than read. */
+  const processPdf = async (file: File) => {
+    setError(null);
+    setIsValidating(true);
+    try {
+      const { parsePdf } = await import('../pdf-import/pdfParser');
+      const { brandMapFor } = await import('../pptx-import/brandMap');
+      const { slides, warnings, relit } = await parsePdf(
+        file,
+        brandMapFor(deckTheme, presentationTemplateId),
+        // A PDF is read a page at a time on the main thread, so a long one needs
+        // to be seen counting up rather than sitting on one unchanging word.
+        (page, total) => setBusyLabel(`Reading PDF… page ${page} of ${total}`)
+      );
+      const deck = buildDeckFromImport(slides, { themeId: deckTheme.id, presentationTemplateId });
+      onImportDeck(deck, file.name.replace(/\.pdf$/i, ''), warnings, relit);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'This PDF could not be read.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  /** One entry point for every upload, routed by the file's own extension so a
+   *  dropped file lands in the right reader whatever the picker happens to say. */
+  const routeFile = (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'pptx') { setBusyLabel('Reading presentation…'); return void processPptx(file); }
+    if (ext === 'pdf') { setBusyLabel('Reading PDF…'); return void processPdf(file); }
+    if (ext === 'ppt') {
+      setError('Legacy .ppt files are not supported. Save it as .pptx in PowerPoint and try again.');
+      return;
+    }
+    if (ext === 'key') {
+      setError('Keynote files are not supported. Export it as .pptx or .pdf and try again.');
+      return;
+    }
+    setBusyLabel('Parsing document…');
+    processFile(file);
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files?.length) processFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files?.length) routeFile(e.dataTransfer.files[0]);
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) processFile(e.target.files[0]);
+    if (e.target.files?.length) routeFile(e.target.files[0]);
+    // Clear it, or choosing the same file twice in a row fires no change event.
+    e.target.value = '';
   };
 
   return (
@@ -308,6 +342,19 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* Above the panel, not below it. This used to sit under a drop zone
+              30vh tall, so a failed upload wrote its reason off the bottom of a
+              scrolling modal and the upload read as having done nothing at all.
+              The paste tab shows the same text inline against the offending
+              markdown, so it is not repeated here. */}
+          {error && tab !== 'paste' && (
+            <div
+              role="alert"
+              className="mb-4 p-3 text-[12px] text-red-700 bg-red-50 border border-red-200 leading-relaxed rounded-[var(--radius-sharp)]"
+            >
+              {error}
+            </div>
+          )}
           {tab === 'prompt' && (
             <div className="flex flex-col gap-3">
               <ol className="flex flex-col gap-1.5 text-[12.5px] text-neutral-600 leading-relaxed list-decimal pl-4">
@@ -371,7 +418,11 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
           {tab === 'upload' && (
             <div className="flex flex-col gap-3">
               <p className="text-[12.5px] text-neutral-600 leading-relaxed">
-                Already have a Business Record, or a plain <span className="font-mono text-[11px]">.md</span>/<span className="font-mono text-[11px]">.txt</span> outline with headings? Drop it here or browse. A wrapping <span className="font-mono text-[11px]">```markdown</span> fence is fine, it’s stripped automatically.
+                Drop in a Business Record, a plain outline with headings, or a deck you already
+                have. A <span className="font-mono text-[11px]">.md</span> or <span className="font-mono text-[11px]">.txt</span> file
+                builds a deck on your chosen template. A <span className="font-mono text-[11px]">.pptx</span> or <span className="font-mono text-[11px]">.pdf</span> comes
+                in slide for slide, keeping your layout and your words, restyled to this deck’s
+                theme.
               </p>
               <div
                 className={`upload-zone rounded-[var(--radius-sharp)] ${isDragging ? ' dragging' : ''}`}
@@ -381,83 +432,19 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
               >
-                <input type="file" ref={fileInputRef} className="hidden" accept=".md,.markdown,.txt" onChange={handleFileChange} />
-                <span className={`mb-3 transition-colors ${isDragging ? 'text-emerald-500' : 'text-neutral-400'}`}><CloudUploadIcon size={26} /></span>
-                <div className="text-[13px] font-bold text-neutral-900 mb-1.5">
-                  {isValidating ? 'Parsing Document…' : 'Drop or click to upload'}
-                </div>
-                <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-500">Markdown (.md) or plain text (.txt)</div>
-              </div>
-            </div>
-          )}
-
-          {tab === 'pptx' && (
-            <div className="flex flex-col gap-3">
-              <p className="text-[12.5px] text-neutral-600 leading-relaxed">
-                Upload an existing deck and it comes back on this deck's theme - grid, ambient
-                orbs, brand type and palette. <span className="font-semibold text-neutral-900">Your
-                words are never changed</span>, and every slide stays editable here afterwards.
-              </p>
-
-              <div className="flex flex-col gap-2">
-                <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-500">
-                  Layout
-                </div>
-                {([
-                  { id: 'keep' as PptxMode, title: 'Keep my layout',
-                    body: 'Every slide keeps its original arrangement, shape for shape. Only the theme changes.' },
-                  { id: 'refresh' as PptxMode, title: 'Give me a refreshed look',
-                    body: 'Re-flows your content onto the 14 master templates.' },
-                ]).map((opt) => (
-                  <button
-                    key={opt.id}
-                    // Unbuilt options are disabled, not merely labelled. A
-                    // clickable control that silently does nothing reads as a
-                    // bug, and "Coming soon" in the body text is easy to miss.
-                    disabled={opt.id === 'refresh'}
-                    onClick={() => opt.id !== 'refresh' && setPptxMode(opt.id)}
-                    className={`text-left p-3 border transition-colors rounded-[var(--radius-sharp)] ${
-                      opt.id === 'refresh'
-                        ? 'border-neutral-150 bg-neutral-50 opacity-60 cursor-not-allowed'
-                        : pptxMode === opt.id
-                          ? 'border-emerald-500 bg-emerald-50 cursor-pointer'
-                          : 'border-neutral-200 hover:border-neutral-300 cursor-pointer'
-                    }`}
-                  >
-                    <div className="text-[13px] font-bold text-neutral-900 flex items-center gap-2">
-                      {opt.title}
-                      {opt.id === 'refresh' && (
-                        <span className="px-1.5 py-0.5 text-[9.5px] font-mono font-bold uppercase tracking-[0.12em] text-neutral-500 bg-neutral-200 rounded-[var(--radius-sharp)]">
-                          Coming soon
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[12px] text-neutral-600 leading-relaxed mt-0.5">{opt.body}</div>
-                  </button>
-                ))}
-              </div>
-
-              <div
-                className={`upload-zone rounded-[var(--radius-sharp)] ${pptxDragging ? ' dragging' : ''}`}
-                style={{ minHeight: '20vh' }}
-                onDragOver={(e) => { e.preventDefault(); setPptxDragging(true); }}
-                onDragLeave={() => setPptxDragging(false)}
-                onDrop={handlePptxDrop}
-                onClick={() => pptxInputRef.current?.click()}
-              >
                 <input
                   type="file"
-                  ref={pptxInputRef}
+                  ref={fileInputRef}
                   className="hidden"
-                  accept=".pptx"
-                  onChange={(e) => { if (e.target.files?.length) void processPptx(e.target.files[0]); }}
+                  accept={UPLOAD_ACCEPT}
+                  onChange={handleFileChange}
                 />
-                <span className={`mb-3 transition-colors ${pptxDragging ? 'text-emerald-500' : 'text-neutral-400'}`}><CloudUploadIcon size={26} /></span>
+                <span className={`mb-3 transition-colors ${isDragging ? 'text-emerald-500' : 'text-neutral-400'}`}><CloudUploadIcon size={26} /></span>
                 <div className="text-[13px] font-bold text-neutral-900 mb-1.5">
-                  {isValidating ? 'Reading presentation…' : 'Drop or click to upload'}
+                  {isValidating ? busyLabel : 'Drop or click to upload'}
                 </div>
                 <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-500">
-                  PowerPoint (.pptx)
+                  Markdown (.md), text (.txt), presentation (.pptx) or PDF
                 </div>
               </div>
             </div>
@@ -477,12 +464,6 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
             </div>
           )}
 
-          {/* The paste tab renders the same error as an inline pill under its
-              code editor, right where the offending markdown is - showing it
-              here as well would report one failure twice. */}
-          {error && tab !== 'paste' && (
-            <div className="mt-3 text-[12px] text-red-500 leading-relaxed">{error}</div>
-          )}
         </div>
       </div>
     </div>
