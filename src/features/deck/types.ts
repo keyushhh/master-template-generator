@@ -275,6 +275,23 @@ export interface MobileScreenAsset {
   alt?: string;
 }
 
+/** A slide's own background, overriding its template's default (and, on the
+ *  classic Wozku Master template, hiding the hairline grid). Only 'color' and
+ *  'gradient' export as a fully native PowerPoint fill; 'image' and 'gradient'
+ *  both end up flattened to a picture on export, since pptxgenjs has no native
+ *  gradient-fill API - see `applyBackground` in pptxNative.ts. */
+export interface SlideBackground {
+  kind: 'color' | 'gradient' | 'image' | 'none';
+  /** Hex, no '#'. For kind 'color'. */
+  color?: string;
+  /** Hex, no '#'. For kind 'gradient'. */
+  gradientFrom?: string;
+  gradientTo?: string;
+  gradientAngle?: number;
+  /** Data URL (downscaled JPEG, same path as every other deck image). For kind 'image'. */
+  imageUrl?: string;
+}
+
 /** Flat bag of every slot the 14 templates expose. Renderers read only the
  *  fields relevant to their template. */
 export interface SlideContent {
@@ -283,6 +300,11 @@ export interface SlideContent {
   heading?: string;
   body?: string;
   hudLabel?: string;
+  /** Per-slide background override. Undefined means "use the template's own
+   *  default" - currently only honored on the classic Wozku Master template's
+   *  slide types (s1-s14, blank, imported); absent elsewhere so the control
+   *  stays hidden rather than silently doing nothing. */
+  background?: SlideBackground;
 
   // s1 Cover
   headingLines?: string[];
@@ -440,4 +462,10 @@ export interface Deck {
    *  thing, and a deck that inlined its colours would not follow an edit to the
    *  brand kit it came from. */
   themeId?: string;
+  /** Which `PRESENTATION_TEMPLATES` entry built this deck (eg. 'editorial',
+   *  'ux-journey'). Absent means the classic Wozku Master template, which is
+   *  what every existing deck gets. Lets a Business Record import target the
+   *  active template's own slide types instead of always falling back to the
+   *  classic s1-s14 set. */
+  presentationTemplateId?: string;
 }

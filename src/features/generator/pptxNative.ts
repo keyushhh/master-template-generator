@@ -1,5 +1,6 @@
 import type pptxgen from 'pptxgenjs';
-import type { SlideInstance, ComparisonRow, OverlayShape, SlotOffset, SlotStyle } from '../deck/types';
+import type { SlideInstance, ComparisonRow, OverlayShape, SlideBackground, SlotOffset, SlotStyle } from '../deck/types';
+import { canCustomizeBackground } from '../deck/slideBackground';
 import { getVideo } from '../deck/mediaStore';
 import { parseVideoSource } from '../formatting/videoSource';
 import { applyToPptx, caseText, offsetFor, styleFor } from '../formatting/resolve';
@@ -224,6 +225,50 @@ function buildDecorBackground(cfg: DecorConfig): string | undefined {
 function applyBackground(slide: pptxgen.Slide, cfg: DecorConfig) {
   const data = buildDecorBackground(cfg);
   slide.background = data ? { data } : { color: cfg.base };
+}
+
+/** Renders a linear gradient to a flattened PNG, matching the CSS
+ *  `linear-gradient(angleDeg, from, to)` convention used on canvas (0deg =
+ *  bottom-to-top, increasing clockwise). pptxgenjs has no native gradient-fill
+ *  API, so this is the same "bake it as an image" approach the grid/glow
+ *  background already uses. */
+function renderGradientPng(fromHex: string, toHex: string, angleDeg: number): string | undefined {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1920;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return undefined;
+  const rad = (angleDeg * Math.PI) / 180;
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const len = Math.sqrt(canvas.width ** 2 + canvas.height ** 2) / 2;
+  const dx = Math.sin(rad) * len;
+  const dy = -Math.cos(rad) * len;
+  const grad = ctx.createLinearGradient(cx - dx, cy - dy, cx + dx, cy + dy);
+  grad.addColorStop(0, `#${fromHex}`);
+  grad.addColorStop(1, `#${toHex}`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/png');
+}
+
+/** A user-set slide background overrides the template's own decoration
+ *  entirely. Solid color exports as a real, editable PowerPoint background
+ *  fill; gradient and image both flatten to a picture, since pptxgenjs has no
+ *  native gradient-fill API - `exportHelper.ts` surfaces a note for those so
+ *  it's never a silent surprise when the file doesn't look "native" there. */
+function applyCustomBackground(slide: pptxgen.Slide, bg: SlideBackground) {
+  if (bg.kind === 'gradient') {
+    const data = renderGradientPng(bg.gradientFrom ?? 'FFFFFF', bg.gradientTo ?? '10B981', bg.gradientAngle ?? 135);
+    slide.background = data ? { data } : { color: (bg.gradientFrom ?? 'FFFFFF').toUpperCase() };
+    mediaNotes.push('A gradient slide background was exported as a flattened image - open the deck here to change its colors, not in PowerPoint.');
+    return;
+  }
+  if (bg.kind === 'image' && bg.imageUrl) {
+    slide.background = { data: bg.imageUrl };
+    return;
+  }
+  slide.background = { color: (bg.color ?? 'FFFFFF').toUpperCase() };
 }
 
 /** Per-template background treatment. A function rather than a const table:
@@ -1577,7 +1622,9 @@ async function buildSlideBody(
   // Speaker notes land in PowerPoint's own notes pane, never on the slide.
   if (instance.notes?.trim()) slide.addNotes(instance.notes);
 
-  if (instance.templateId === 'imported') {
+  if (c.background && canCustomizeBackground(instance.templateId)) {
+    applyCustomBackground(slide, c.background);
+  } else if (instance.templateId === 'imported') {
     const base = (c.importedBase ?? WHITE()).replace('#', '').toUpperCase();
     const lum = (0.2126 * parseInt(base.slice(0, 2), 16)
       + 0.7152 * parseInt(base.slice(2, 4), 16)

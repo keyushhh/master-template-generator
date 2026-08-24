@@ -14,6 +14,42 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '2.0.3',
+    date: '2026-08-24',
+    summary: 'Per-slide backgrounds on Wozku Master Classic, and cleaner changelog timeline markers.',
+    added: [
+      'Wozku Master Classic slides now have their own Background control in the toolbar: a solid color, a two-color gradient, or an uploaded image. "Remove background" clears it to plain white, and "Reset to template default" always brings the original background and hairline grid back.',
+    ],
+    improved: [
+      'Changelog timeline markers are now solid filled circles, precisely centered on the timeline’s vertical line instead of sitting slightly off it.',
+    ],
+  },
+  {
+    version: '2.0.2',
+    date: '2026-08-24',
+    summary: 'Lighter background grid on Wozku Master Classic slides.',
+    improved: [
+      'The hairline background grid on Wozku Master Classic is noticeably fainter, on screen and in exports, so it stays a texture instead of competing with slide content.',
+    ],
+  },
+  {
+    version: '2.0.1',
+    date: '2026-08-24',
+    summary: 'Plain .md outlines from teammates now upload and generate directly, and Wozku Master Classic leads the template gallery.',
+    added: [
+      'Upload .md now accepts any markdown outline with headings, not only a formatted Business Record. Share a plain slide-by-slide .md between teammates and it builds straight into a deck, no Conversion Prompt round-trip required.',
+      'Generating from a Business Record now respects the active presentation template. The Editorial, Swiss Enterprise Minimal, and Wave Organic templates build their own slide types from your source instead of always falling back to Wozku Master Classic. Templates built entirely from screenshots (UX Journey & Flow, Product Showcase) or without a mapping yet now ask before switching to Classic, instead of silently discarding the template.',
+    ],
+    improved: [
+      'Wozku Master Classic now shows first in the template gallery instead of near the bottom of the list.',
+      'A generic content slide built from an imported document no longer shows an empty image placeholder that pushed real text into a narrow column and caused overflow. It uses the full slide width; the image area can still be brought back from the slide’s own controls.',
+    ],
+    fixed: [
+      'Uploading a Business Record .md file that still had a wrapping ```markdown fence, the way a downloaded Claude reply or a Slack file often looks, no longer triggers the raw-transcript warning.',
+      'A "Next Steps" or similar closing section with plain bullet points no longer disappears from the final slide; its bullets now show in the closing slide body.',
+    ],
+  },
+  {
     version: '2.0.0',
     date: '2026-08-14',
     summary: 'Dedicated Presentation Template Architecture, Native Mobile Screen Mockups, and Template-Specific Visual Systems.',

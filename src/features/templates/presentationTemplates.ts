@@ -71,6 +71,31 @@ function makeSlide(
 
 export const PRESENTATION_TEMPLATES: TemplateDefinition[] = [
   {
+    id: 'default',
+    name: 'Wozku Master Classic',
+    category: 'pitch',
+    categoryLabel: 'Pitch deck',
+    author: 'Wozku Studio',
+    description: 'All 14 canonical Wozku presentation layouts in order. Cover, agenda, executive summary, dashboards, and closing.',
+    slideCountText: '14 slides',
+    fonts: {
+      display: 'Space Grotesk',
+      sans: 'DM Sans',
+      mono: 'JetBrains Mono',
+    },
+    preview: {
+      accentColor: '10B981',
+      bgGradient: 'linear-gradient(135deg, #022C22 0%, #064E3B 50%, #047857 100%)',
+      titleColor: '#ECFDF5',
+      tagBg: 'rgba(16, 185, 129, 0.25)',
+      tagColor: '#6EE7B7',
+      subtitle: 'The comprehensive 14-slide master system for any pitch.',
+    },
+    defaultThemeId: 'wozku',
+    defaultAccent: '10B981',
+    build: createTemplateDeck,
+  },
+  {
     id: 'product-showcase',
     name: 'Product Showcase',
     category: 'product',
@@ -732,31 +757,6 @@ export const PRESENTATION_TEMPLATES: TemplateDefinition[] = [
         }),
       ],
     }),
-  },
-  {
-    id: 'default',
-    name: 'Wozku Master Classic',
-    category: 'pitch',
-    categoryLabel: 'Pitch deck',
-    author: 'Wozku Studio',
-    description: 'All 14 canonical Wozku presentation layouts in order. Cover, agenda, executive summary, dashboards, and closing.',
-    slideCountText: '14 slides',
-    fonts: {
-      display: 'Space Grotesk',
-      sans: 'DM Sans',
-      mono: 'JetBrains Mono',
-    },
-    preview: {
-      accentColor: '10B981',
-      bgGradient: 'linear-gradient(135deg, #022C22 0%, #064E3B 50%, #047857 100%)',
-      titleColor: '#ECFDF5',
-      tagBg: 'rgba(16, 185, 129, 0.25)',
-      tagColor: '#6EE7B7',
-      subtitle: 'The comprehensive 14-slide master system for any pitch.',
-    },
-    defaultThemeId: 'wozku',
-    defaultAccent: '10B981',
-    build: createTemplateDeck,
   },
   {
     id: 'blank-canvas',

@@ -110,10 +110,11 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
               
               return (
                 <section key={release.version} className="relative flex gap-6 z-10">
-                  {/* Timeline Node */}
-                  <div className="shrink-0 mt-1.5 relative w-[26px] flex justify-center">
-                    <div className="absolute top-1 w-2.5 h-2.5 rounded-none bg-white border-[2px] border-emerald-500 shadow-sm z-10" />
-                  </div>
+                  {/* Timeline Node spacer - keeps the card indented past the line */}
+                  <div className="shrink-0 mt-1.5 w-[26px]" />
+                  {/* Timeline dot - `left` matches the vertical line's above, so it's
+                      centred on it regardless of the spacer column's own width. */}
+                  <div className="absolute left-[39px] top-[10px] -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm z-10" />
 
                   {/* Release Card */}
                   <div className="flex-1 bg-white border border-neutral-150 rounded-[var(--radius-sharp)] p-6 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-shadow">

@@ -12,6 +12,7 @@ import { ConfirmModal } from '../ui/ConfirmModal';
 import { FitProbe } from '../fit/FitProbe';
 import { FitFixChip } from '../fit/FitFixChip';
 import { css as themeCss, themeCssVars, WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
+import { backgroundCssFor, canCustomizeBackground } from '../deck/slideBackground';
 import {
   EditorialSlideCover,
   EditorialSlideExec,
@@ -624,7 +625,7 @@ export function E({ value, editing, onCommit, multiline, dataField, onActivate, 
 
 /** Downscale an uploaded image to a JPEG data URL so decks stay light in
  *  localStorage and on export. Falls back to the raw data URL if canvas fails. */
-async function fileToDataUrl(file: File, maxDim = 1600, mime: 'image/jpeg' | 'image/png' = 'image/jpeg'): Promise<string> {
+export async function fileToDataUrl(file: File, maxDim = 1600, mime: 'image/jpeg' | 'image/png' = 'image/jpeg'): Promise<string> {
   const raw = await new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result as string);
@@ -797,7 +798,7 @@ export function SlideGrid() {
         backgroundImage:
           'linear-gradient(var(--border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px)',
         backgroundSize: '120px 120px',
-        opacity: 1.0,
+        opacity: 0.5,
         pointerEvents: 'none',
         zIndex: 0,
       }}
@@ -4001,6 +4002,14 @@ export function SlideStage({
           color: (isDark || theme.styleSystem?.isDarkSlideDefault) ? themeCss(theme.ink.onDark) : themeCss(theme.ink.onLight),
         }}
       >
+        {slide.content.background && canCustomizeBackground(slide.templateId) && (
+          <div
+            style={{
+              position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
+              ...backgroundCssFor(slide.content.background),
+            }}
+          />
+        )}
         {Renderer && <Renderer ast={ast} content={slide.content} num={num} editing={false} onEdit={() => { }} logoUrl={logoUrl} />}
         {/* Inserted shapes must appear here too, or Present mode and the Review
             thumbnails would disagree with the editor (and with the export). */}
@@ -4237,6 +4246,14 @@ export function PresentationCanvas({
               zIndex: isCurrent ? 1 : 0,
             }}
           >
+            {slide.content.background && canCustomizeBackground(slide.templateId) && (
+              <div
+                style={{
+                  position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
+                  ...backgroundCssFor(slide.content.background),
+                }}
+              />
+            )}
             <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
               {Renderer && (
                 <SlideSlots

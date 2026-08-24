@@ -209,8 +209,8 @@ export const WOZKU_THEME: DeckTheme = {
   rule: {
     hairline: 'E5E5E5',
     table: 'D9D9D9',
-    gridOnLight: 'rgba(245,245,245,0.8)',
-    gridOnDark: 'rgba(255,255,255,0.06)',
+    gridOnLight: 'rgba(245,245,245,0.4)',
+    gridOnDark: 'rgba(255,255,255,0.03)',
   },
 };
 

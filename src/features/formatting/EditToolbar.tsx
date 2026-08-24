@@ -23,7 +23,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { ImportedShape, OverlayChartType, OverlayShape, SlotStyle } from '../deck/types';
+import type { ImportedShape, OverlayChartType, OverlayShape, SlideBackground, SlotStyle } from '../deck/types';
+import { fileToDataUrl } from '../generator/PresentationCanvas';
 import {
   ACCENT_SWATCHES,
   INDENT_STEP_PX,
@@ -569,6 +570,151 @@ function CaseMenu({
   );
 }
 
+/**
+ * The swatch grid, hex input and eyedropper, with no `Menu` of its own -
+ * `ColorMenu` wraps this in one for its usual toolbar-button-with-dropdown
+ * look, but a caller that's already inside another `Menu`'s panel (the
+ * Background control) embeds this directly instead. Nesting a `Menu` inside
+ * a `Menu`'s panel doesn't work: `Menu` detects outside clicks via a
+ * document-level `mousedown` listener that only recognises its own `wrap`/
+ * `panel` refs, and a second, separately-portalled `Menu` inside the first
+ * is neither - so the outer one reads a click inside the inner one as
+ * "outside" and closes itself on `mousedown`, unmounting the inner menu
+ * before its `onClick` ever fires. Embedding the picker flat sidesteps that
+ * entirely: one panel, one set of refs, no race.
+ */
+function ColorPickerBody({
+  value, onDark, onPick, noneLabel = 'Template colour', paletteLabel = 'Brand palette',
+  noneSwatch, close,
+}: {
+  value?: string; onDark?: boolean; onPick: (hex: string | undefined) => void;
+  noneLabel?: string; paletteLabel?: string; noneSwatch?: boolean;
+  /** Omit when embedded flat in a panel that isn't itself a `Menu` - there's
+   *  nothing of its own to close. */
+  close?: () => void;
+}) {
+  const [hex, setHex] = useState('');
+  const [recent, setRecent] = useState<string[]>(loadRecent);
+  const neutrals = onDark ? [...NEUTRAL_SWATCHES].reverse() : NEUTRAL_SWATCHES;
+  const custom = !!value && !isBrandColor(value);
+
+  /** Every path that sets a colour goes through here, so the memory can't
+   *  miss one (palette chip, typed hex, or eyedropper). */
+  const pick = (h: string) => {
+    onPick(h);
+    setRecent(pushRecent(h));
+    close?.();
+  };
+
+  const chip = (h: string, label: string, light?: boolean) => {
+    const on = value?.toUpperCase() === h.toUpperCase();
+    return (
+      <button
+        key={h}
+        title={label}
+        aria-label={label}
+        onClick={() => pick(h)}
+        style={{
+          width: 22, height: 22, padding: 0, cursor: 'pointer', background: `#${h}`,
+          border: on ? '2px solid var(--emerald-500)'
+            : light ? '1px solid var(--neutral-300)' : '1px solid var(--neutral-200)',
+          borderRadius: 'var(--radius-sharp)',
+        }}
+      />
+    );
+  };
+
+  return (
+    <>
+      <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 8px' }}>{paletteLabel}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
+        {noneSwatch && (
+          <button
+            title={noneLabel}
+            aria-label={noneLabel}
+            onClick={() => { onPick(undefined); close?.(); }}
+            style={{
+              width: 22, height: 22, padding: 0, cursor: 'pointer', position: 'relative',
+              background: 'transparent',
+              border: !value ? '2px solid var(--emerald-500)' : '1px solid var(--neutral-300)',
+              borderRadius: 'var(--radius-sharp)',
+            }}
+          >
+            <svg width="22" height="22" viewBox="0 0 22 22" style={{ position: 'absolute', inset: 0 }} aria-hidden>
+              <line x1="4" y1="18" x2="18" y2="4" stroke="#f87171" strokeWidth="1.6" />
+            </svg>
+          </button>
+        )}
+        {neutrals.map((s) => chip(s.hex, s.label, s.light))}
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, padding: '0 2px' }}>
+        {ACCENT_SWATCHES.map((s) => chip(s.hex, s.label, false))}
+      </div>
+      {/* Colours this deck has actually used, most recent first. */}
+      {recent.length > 0 && (
+        <>
+          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '12px 4px 6px' }}>Recent</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
+            {recent.map((h) => chip(h, `#${h}`, false))}
+          </div>
+        </>
+      )}
+
+      <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', padding: '0 2px' }}>
+        <span style={{ color: 'var(--neutral-400)', fontSize: 12 }}>#</span>
+        <input
+          value={hex}
+          onChange={(e) => setHex(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            const h = normalizeHex(hex);
+            if (h) { pick(h); setHex(''); }
+          }}
+          placeholder={custom ? value : 'custom hex'}
+          spellCheck={false}
+          style={{
+            flex: 1, minWidth: 0, height: 26, padding: '0 6px',
+            fontFamily: 'var(--font-mono)', fontSize: 12,
+            color: 'var(--neutral-900)', background: '#fff',
+            border: '1px solid var(--neutral-200)',
+            borderRadius: 'var(--radius-sharp)',
+          }}
+        />
+        {/* Screen eyedropper. Chromium-only, so it is absent rather than
+            disabled where the API doesn't exist. */}
+        {eyeDropper() && (
+          <button
+            title="Pick a colour from anywhere on screen"
+            aria-label="Pick a colour from screen"
+            onClick={async () => {
+              const Ctor = eyeDropper();
+              if (!Ctor) return;
+              try {
+                const { sRGBHex } = await new Ctor().open();
+                const h = normalizeHex(sRGBHex);
+                if (h) pick(h);
+              } catch {
+                /* the user dismissed the picker - not an error */
+              }
+            }}
+            style={{
+              ...ctl, width: 26, height: 26, padding: 0, flexShrink: 0,
+              border: '1px solid var(--neutral-200)',
+            }}
+          >
+<EyedropIcon size={14} />
+          </button>
+        )}
+      </div>
+      {value && !noneSwatch && (
+        <div style={{ marginTop: 8 }}>
+          <Row label={noneLabel} onClick={() => { onPick(undefined); close?.(); }} />
+        </div>
+      )}
+    </>
+  );
+}
+
 function ColorMenu({
   value, onDark, onPick, title = 'Text colour', noneLabel = 'Template colour',
   paletteLabel = 'Brand palette', noneSwatch, emptySwatch,
@@ -584,37 +730,6 @@ function ColorMenu({
    *  or a plain checkerboard-ish outline when "none" means transparent. */
   emptySwatch?: React.ReactNode;
 }) {
-  const [hex, setHex] = useState('');
-  const [recent, setRecent] = useState<string[]>(loadRecent);
-  const neutrals = onDark ? [...NEUTRAL_SWATCHES].reverse() : NEUTRAL_SWATCHES;
-  const custom = !!value && !isBrandColor(value);
-
-  /** Every path that sets a colour goes through here, so the memory can't
-   *  miss one (palette chip, typed hex, or eyedropper). */
-  const pick = (h: string, close?: () => void) => {
-    onPick(h);
-    setRecent(pushRecent(h));
-    close?.();
-  };
-
-  const chip = (h: string, label: string, light?: boolean, close?: () => void) => {
-    const on = value?.toUpperCase() === h.toUpperCase();
-    return (
-      <button
-        key={h}
-        title={label}
-        aria-label={label}
-        onClick={() => pick(h, close)}
-        style={{
-          width: 22, height: 22, padding: 0, cursor: 'pointer', background: `#${h}`,
-          border: on ? '2px solid var(--emerald-500)'
-            : light ? '1px solid var(--neutral-300)' : '1px solid var(--neutral-200)',
-          borderRadius: 'var(--radius-sharp)',
-        }}
-      />
-    );
-  };
-
   return (
     <Menu
       title={title}
@@ -633,91 +748,150 @@ function ColorMenu({
       }
     >
       {(close) => (
+        <ColorPickerBody
+          value={value} onDark={onDark} onPick={onPick}
+          noneLabel={noneLabel} paletteLabel={paletteLabel} noneSwatch={noneSwatch}
+          close={close}
+        />
+      )}
+    </Menu>
+  );
+}
+
+/**
+ * Per-slide background: solid colour, gradient, an uploaded image, or removed
+ * back to plain white. Only rendered by the caller when the active slide's
+ * template supports a custom background (see `canCustomizeBackground` in
+ * `slideBackground.ts`) - controls that cannot apply are absent, not disabled.
+ */
+const BACKGROUND_TABS = [
+  { id: 'color' as const, label: 'Colour' },
+  { id: 'gradient' as const, label: 'Gradient' },
+  { id: 'image' as const, label: 'Image' },
+];
+
+function BackgroundMenu({
+  background, onSetBackground,
+}: {
+  background?: SlideBackground;
+  onSetBackground: (bg: SlideBackground | undefined) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const kind = background?.kind;
+  const [tab, setTab] = useState<'color' | 'gradient' | 'image'>(
+    kind === 'gradient' ? 'gradient' : kind === 'image' ? 'image' : 'color'
+  );
+
+  const handleFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      onSetBackground({ kind: 'image', imageUrl: dataUrl });
+    } catch {
+      /* ignore unreadable file */
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Menu
+      title="Slide background"
+      label="Background"
+      width={240}
+      active={!!background}
+      icon={
+        <span
+          style={{
+            width: 15, height: 15, flexShrink: 0, borderRadius: 2,
+            border: '1px solid var(--neutral-300)',
+            background:
+              kind === 'color' ? `#${background?.color ?? 'FFFFFF'}`
+              : kind === 'gradient' ? `linear-gradient(135deg, #${background?.gradientFrom ?? 'FFFFFF'}, #${background?.gradientTo ?? '10B981'})`
+              : kind === 'image' && background?.imageUrl ? `center / cover url(${background.imageUrl})`
+              : 'linear-gradient(135deg,#fff 50%,#10B981 50%)',
+          }}
+        />
+      }
+    >
+      {() => (
         <>
-          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 8px' }}>{paletteLabel}</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
-            {noneSwatch && (
+          <div style={{ display: 'flex', gap: 4, padding: '0 0 8px' }}>
+            {BACKGROUND_TABS.map((t) => (
               <button
-                title={noneLabel}
-                aria-label={noneLabel}
-                onClick={() => { onPick(undefined); close(); }}
+                key={t.id}
+                onClick={() => setTab(t.id)}
                 style={{
-                  width: 22, height: 22, padding: 0, cursor: 'pointer', position: 'relative',
-                  background: 'transparent',
-                  border: !value ? '2px solid var(--emerald-500)' : '1px solid var(--neutral-300)',
-                  borderRadius: 'var(--radius-sharp)',
+                  ...ctl, flex: 1, padding: '0 4px', fontSize: 11.5,
+                  ...(tab === t.id ? ctlOn : { border: '1px solid var(--neutral-200)' }),
                 }}
               >
-                <svg width="22" height="22" viewBox="0 0 22 22" style={{ position: 'absolute', inset: 0 }} aria-hidden>
-                  <line x1="4" y1="18" x2="18" y2="4" stroke="#f87171" strokeWidth="1.6" />
-                </svg>
+                {t.label}
               </button>
-            )}
-            {neutrals.map((s) => chip(s.hex, s.label, s.light, close))}
+            ))}
           </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, padding: '0 2px' }}>
-            {ACCENT_SWATCHES.map((s) => chip(s.hex, s.label, false, close))}
-          </div>
-          {/* Colours this deck has actually used, most recent first. */}
-          {recent.length > 0 && (
+
+          {tab === 'color' && (
+            <ColorPickerBody
+              paletteLabel="Background colour"
+              value={background?.color}
+              onPick={(hex) => onSetBackground(hex ? { kind: 'color', color: hex } : undefined)}
+            />
+          )}
+
+          {tab === 'gradient' && (
             <>
-              <div style={{ ...mono, color: 'var(--neutral-400)', padding: '12px 4px 6px' }}>Recent</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
-                {recent.map((h) => chip(h, `#${h}`, false, close))}
-              </div>
+              <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 6px' }}>Start</div>
+              <ColorPickerBody
+                value={background?.gradientFrom}
+                onPick={(hex) =>
+                  onSetBackground({
+                    kind: 'gradient',
+                    gradientFrom: hex ?? background?.gradientFrom ?? 'FFFFFF',
+                    gradientTo: background?.gradientTo ?? '10B981',
+                    gradientAngle: background?.gradientAngle,
+                  })
+                }
+              />
+              <div style={{ ...mono, color: 'var(--neutral-400)', padding: '12px 4px 6px' }}>End</div>
+              <ColorPickerBody
+                value={background?.gradientTo}
+                onPick={(hex) =>
+                  onSetBackground({
+                    kind: 'gradient',
+                    gradientFrom: background?.gradientFrom ?? 'FFFFFF',
+                    gradientTo: hex ?? background?.gradientTo ?? '10B981',
+                    gradientAngle: background?.gradientAngle,
+                  })
+                }
+              />
             </>
           )}
 
-          <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', padding: '0 2px' }}>
-            <span style={{ color: 'var(--neutral-400)', fontSize: 12 }}>#</span>
-            <input
-              value={hex}
-              onChange={(e) => setHex(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return;
-                const h = normalizeHex(hex);
-                if (h) { pick(h, close); setHex(''); }
-              }}
-              placeholder={custom ? value : 'custom hex'}
-              spellCheck={false}
-              style={{
-                flex: 1, minWidth: 0, height: 26, padding: '0 6px',
-                fontFamily: 'var(--font-mono)', fontSize: 12,
-                color: 'var(--neutral-900)', background: '#fff',
-                border: '1px solid var(--neutral-200)',
-                borderRadius: 'var(--radius-sharp)',
-              }}
-            />
-            {/* Screen eyedropper. Chromium-only, so it is absent rather than
-                disabled where the API doesn't exist. */}
-            {eyeDropper() && (
-              <button
-                title="Pick a colour from anywhere on screen"
-                aria-label="Pick a colour from screen"
-                onClick={async () => {
-                  const Ctor = eyeDropper();
-                  if (!Ctor) return;
-                  try {
-                    const { sRGBHex } = await new Ctor().open();
-                    const h = normalizeHex(sRGBHex);
-                    if (h) pick(h, close);
-                  } catch {
-                    /* the user dismissed the picker - not an error */
-                  }
-                }}
-                style={{
-                  ...ctl, width: 26, height: 26, padding: 0, flexShrink: 0,
-                  border: '1px solid var(--neutral-200)',
-                }}
-              >
-<EyedropIcon size={14} />
-              </button>
-            )}
-          </div>
-          {value && !noneSwatch && (
-            <div style={{ marginTop: 8 }}>
-              <Row label={noneLabel} onClick={() => { onPick(undefined); close(); }} />
-            </div>
+          {tab === 'image' && (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }}
+              />
+              <Row
+                label={uploading ? 'Uploading…' : kind === 'image' ? 'Replace image' : 'Upload image'}
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+              />
+            </>
+          )}
+
+          <div style={{ height: 1, background: 'var(--neutral-200)', margin: '10px 4px' }} />
+          {kind !== 'none' && (
+            <Row label="Remove background" onClick={() => onSetBackground({ kind: 'none' })} />
+          )}
+          {background && (
+            <Row label="Reset to template default" onClick={() => onSetBackground(undefined)} />
           )}
         </>
       )}
@@ -837,6 +1011,13 @@ interface EditToolbarProps {
   onSetImportedLine: (line: { color: string; widthPx: number } | undefined) => void;
   onCopyShape?: () => void;
   onDuplicateShape?: () => void;
+
+  /** Per-slide background override. Present only on templates that support it
+   *  (see `canCustomizeBackground` in slideBackground.ts) - the control itself
+   *  is absent, not disabled, everywhere else. */
+  showBackgroundControl?: boolean;
+  background?: SlideBackground;
+  onSetBackground?: (bg: SlideBackground | undefined) => void;
 }
 
 export function EditToolbar({
@@ -876,6 +1057,9 @@ export function EditToolbar({
   onSetImportedLine,
   onCopyShape,
   onDuplicateShape,
+  showBackgroundControl,
+  background,
+  onSetBackground,
 }: EditToolbarProps) {
   // A pending shape/text-box deletion awaiting confirmation. Five delete
   // buttons in this bar share one modal - each just stashes its own label and
@@ -954,6 +1138,15 @@ export function EditToolbar({
       </span>
 
       <Sep />
+
+      {/* Slide-level, not selection-scoped - shown regardless of what's
+          selected below, unlike everything in the contextual middle. */}
+      {showBackgroundControl && onSetBackground && (
+        <>
+          <BackgroundMenu background={background} onSetBackground={onSetBackground} />
+          <Sep />
+        </>
+      )}
 
       {/* Contextual middle. Exactly one of these three renders, so the bar's
           width changes but its structure never does. */}

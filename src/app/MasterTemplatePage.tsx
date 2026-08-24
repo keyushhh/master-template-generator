@@ -65,6 +65,10 @@ import {
   mintInstanceId,
   createBlankSlide,
 } from '../features/deck/deckBuilder';
+import { DOCUMENT_TEMPLATE_BUILDERS, IMAGE_DRIVEN_TEMPLATE_IDS } from '../features/deck/templateDocumentBuilders';
+import { canCustomizeBackground } from '../features/deck/slideBackground';
+import { ConfirmModal } from '../features/ui/ConfirmModal';
+import { PRESENTATION_TEMPLATES } from '../features/templates/presentationTemplates';
 import {
   ensureInitialized,
   listProjects,
@@ -334,35 +338,73 @@ export function MasterTemplatePage() {
     [draft, deck, commitDeck]
   );
 
-  const handleGenerate = useCallback(() => {
-    if (!ast) return;
-    const built = buildDeckFromDocument(ast);
+/** Which template family the active deck was built from decides which
+   *  Business-Record builder should run. A template with no builder of its
+   *  own (image-driven ones, or one that predates this system) falls back to
+   *  the classic Wozku Master mapping. */
+  const builderForActiveTemplate = useCallback(
+    (astDoc: DocumentNode) => {
+      const templateId = deck.presentationTemplateId;
+      const builder = templateId ? DOCUMENT_TEMPLATE_BUILDERS[templateId] : undefined;
+      return builder ? builder(astDoc) : buildDeckFromDocument(astDoc);
+    },
+    [deck.presentationTemplateId]
+  );
+
+  /** True whenever the active template has no Business-Record builder of its
+   *  own - either because it's fundamentally image-driven (screenshots,
+   *  device mockups a document can't supply) or because a mapper hasn't been
+   *  built for it yet. Either way, generating would silently fall back to the
+   *  classic Wozku Master layout, so it's worth a confirmation instead. */
+  const needsClassicSwitchWarning = useCallback(() => {
+    const templateId = deck.presentationTemplateId;
+    return !!templateId && !DOCUMENT_TEMPLATE_BUILDERS[templateId];
+  }, [deck.presentationTemplateId]);
+
+  /** A generate/import that would land on the classic template instead of the
+   *  active one (no Business-Record mapping exists for it) is held here until
+   *  the user confirms the switch. */
+  const [pendingClassicSwitch, setPendingClassicSwitch] = useState<{ ast: DocumentNode; isImport: boolean } | null>(null);
+
+  const runGenerate = useCallback((astDoc: DocumentNode, isImport: boolean) => {
+    if (isImport) setAst(astDoc);
+    const built = builderForActiveTemplate(astDoc);
     commitDeck(built);
     dispatchDraft({ type: 'close' });
     setDirty(false);
     setBaselineDeck(built);
-  }, [ast, commitDeck]);
+    if (isImport) {
+      // If the deck is still unnamed, adopt the source's title so it's easy to find.
+      const current = projects.find((p) => p.id === activeId);
+      if (current && current.name === 'Untitled deck') {
+        const derived = built.slides[0]?.content.heading || built.slides[0]?.title;
+        if (derived) {
+          renameProject(activeId, derived);
+          setProjects(listProjects());
+        }
+      }
+    }
+  }, [builderForActiveTemplate, commitDeck, projects, activeId]);
+
+  const handleGenerate = useCallback(() => {
+    if (!ast) return;
+    if (needsClassicSwitchWarning()) {
+      setPendingClassicSwitch({ ast, isImport: false });
+      return;
+    }
+    runGenerate(ast, false);
+  }, [ast, needsClassicSwitchWarning, runGenerate]);
 
   /** Import path: set the source AND build the deck in one step, so "Import & Load"
    *  in the Source Material modal doubles as Generate (no separate click needed).
    *  Uses the freshly parsed AST directly rather than waiting on `ast` state. */
   const handleImportAndGenerate = useCallback((imported: DocumentNode) => {
-    setAst(imported);
-    const built = buildDeckFromDocument(imported);
-    commitDeck(built);
-    dispatchDraft({ type: 'close' });
-    setDirty(false);
-    setBaselineDeck(built);
-    // If the deck is still unnamed, adopt the source's title so it's easy to find.
-    const current = projects.find((p) => p.id === activeId);
-    if (current && current.name === 'Untitled deck') {
-      const derived = built.slides[0]?.content.heading || built.slides[0]?.title;
-      if (derived) {
-        renameProject(activeId, derived);
-        setProjects(listProjects());
-      }
+    if (needsClassicSwitchWarning()) {
+      setPendingClassicSwitch({ ast: imported, isImport: true });
+      return;
     }
-  }, [commitDeck, projects, activeId]);
+    runGenerate(imported, true);
+  }, [needsClassicSwitchWarning, runGenerate]);
 
   /** Deck built from an uploaded .pptx. There is no Business Record behind it,
    *  so the AST is cleared - the imported slides carry their own shapes and the
@@ -2271,6 +2313,9 @@ export function MasterTemplatePage() {
             onSetImportedLine={handleSetImportedShapeLine}
             onCopyShape={handleCopyCurrentShape}
             onDuplicateShape={handleDuplicateCurrentShape}
+            showBackgroundControl={canCustomizeBackground(targetSlide.templateId)}
+            background={targetSlide.content.background}
+            onSetBackground={(bg) => handleEditSlide(targetSlide.instanceId, (c) => ({ ...c, background: bg }))}
           />
         </div>
       )}
@@ -2323,6 +2368,25 @@ export function MasterTemplatePage() {
         ast={ast}
         logoUrl={displayDeck.logoUrl}
         theme={deckTheme}
+      />
+
+      <ConfirmModal
+        open={!!pendingClassicSwitch}
+        title="Switch to the Classic template?"
+        message={(() => {
+          const templateId = deck.presentationTemplateId;
+          const name = PRESENTATION_TEMPLATES.find((t) => t.id === templateId)?.name ?? 'This template';
+          return templateId && IMAGE_DRIVEN_TEMPLATE_IDS.has(templateId)
+            ? `${name} is built around screenshots and device mockups a document can't supply. Generating from your source will replace it with the Classic Wozku Master layout instead.`
+            : `${name} doesn't support generating from a Business Record yet. Generating from your source will replace it with the Classic Wozku Master layout instead.`;
+        })()}
+        confirmLabel="Switch & Generate"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          if (pendingClassicSwitch) runGenerate(pendingClassicSwitch.ast, pendingClassicSwitch.isImport);
+          setPendingClassicSwitch(null);
+        }}
+        onCancel={() => setPendingClassicSwitch(null)}
       />
 
       {/* Export and deck organization used to be one modal doing both jobs

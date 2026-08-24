@@ -41,16 +41,45 @@ type PptxMode = 'keep' | 'refresh';
 
 /**
  * Strip a wrapping ```markdown / ``` code fence if pasted text still carries one
- * (the parser requires the document to begin with `---`).
+ * (the parser requires the document to begin with `---`). Also drops a leading
+ * UTF-8 BOM, which `.trim()` does not remove and which Slack downloads and
+ * Windows editors commonly leave on saved .md files.
  */
 function stripCodeFence(text: string): string {
-  let t = text.trim();
+  let t = text.replace(/^\uFEFF/, '').trim();
   const nl = t.indexOf('\n');
   if (t.startsWith('```') && nl !== -1) {
     t = t.slice(nl + 1);
     if (t.trimEnd().endsWith('```')) t = t.trimEnd().slice(0, -3);
   }
   return t.trim();
+}
+
+/**
+ * A plain markdown outline (headings, bullets, tables, no YAML frontmatter)
+ * is a different shape from a Business Record, not a raw transcript. If the
+ * text has at least one heading, synthesize the frontmatter the parser
+ * requires and clean up markdown the lexer can't tokenize: stand-alone `---`
+ * rules used as visual separators between slides, and tables/blockquotes
+ * (both come through as unrenderable "unsupported" blocks otherwise).
+ */
+function synthesizeBusinessRecord(text: string, filename: string): string {
+  const h1 = text.match(/^#\s+(.+)$/m)?.[1].trim();
+  const label = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'Untitled';
+  const title = h1 || label;
+
+  const body = text
+    .split('\n')
+    .filter((line) => line.trim() !== '---')
+    .join('\n')
+    .replace(/^>\s?/gm, '')
+    .replace(/^\|(.+)\|\s*$/gm, (row, cellsRaw: string) => {
+      const cells = cellsRaw.split('|').map((c) => c.trim());
+      if (cells.every((c) => /^:?-{1,}:?$/.test(c))) return '';
+      return `- ${cells.join(' | ')}`;
+    });
+
+  return `---\nversion: 1.0\ntype: business-record\nclient: ${label}\ntitle: ${title}\n---\n\n${body}`;
 }
 
 /**
@@ -106,13 +135,22 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   };
 
   /** Shared import path for both paste and file. On success, hand up the AST and close. */
-  const importText = async (text: string, name: string) => {
+  const importText = async (rawText: string, name: string) => {
     setError(null);
     setRawTranscriptHint(false);
-    // A Business Record always opens with a `---` YAML frontmatter fence. If it
-    // doesn't, this is very likely a raw transcript that hasn't been through
-    // the Conversion Prompt yet - say so instead of surfacing a parser error.
-    if (!text.trim().startsWith('---')) {
+    // Uploaded/pasted content may still carry a wrapping ```markdown fence
+    // (how claude.ai's copy button and downloaded .md files render a code
+    // block) - strip it before checking for the Business Record frontmatter.
+    const stripped = stripCodeFence(rawText);
+    // A Business Record always opens with a `---` YAML frontmatter fence. A
+    // plain outline (headings but no frontmatter) is a shared team doc that
+    // never went through the Conversion Prompt - build it directly instead of
+    // making everyone paste it through Claude first. Only text with no
+    // headings at all - a real raw call transcript - gets the warning below.
+    const text = stripped.startsWith('---') || !/^#{1,2}\s/m.test(stripped)
+      ? stripped
+      : synthesizeBusinessRecord(stripped, name);
+    if (!text.startsWith('---')) {
       setRawTranscriptHint(true);
       return;
     }
@@ -133,12 +171,11 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
   };
 
   const handlePasteImport = () => {
-    const cleaned = stripCodeFence(pasteText);
-    if (!cleaned) {
+    if (!pasteText.trim()) {
       setError('Paste the Business Record markdown first.');
       return;
     }
-    importText(cleaned, 'Pasted Business Record');
+    importText(pasteText, 'Pasted Business Record');
   };
 
   const processFile = (file: File) => {
@@ -357,7 +394,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
           {tab === 'upload' && (
             <div className="flex flex-col gap-3">
               <p className="text-[12.5px] text-neutral-600 leading-relaxed">
-                Already have a Business Record <span className="font-mono text-[11px]">.md</span> or <span className="font-mono text-[11px]">.txt</span> file? Drop it here or browse.
+                Already have a Business Record, or a plain <span className="font-mono text-[11px]">.md</span>/<span className="font-mono text-[11px]">.txt</span> outline with headings? Drop it here or browse. A wrapping <span className="font-mono text-[11px]">```markdown</span> fence is fine, it’s stripped automatically.
               </p>
               <div
                 className={`upload-zone rounded-[var(--radius-sharp)] ${isDragging ? ' dragging' : ''}`}
@@ -452,7 +489,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
           {rawTranscriptHint && (
             <div className="mt-3 p-3 flex flex-col gap-2 bg-amber-50 border border-amber-200 rounded-[var(--radius-sharp)]">
               <p className="text-[12px] text-amber-800 leading-relaxed">
-                This doesn’t look like a formatted Business Record (no <span className="font-mono text-[11px]">---</span> frontmatter) - it reads more like a raw transcript. Convert it first with the Conversion Prompt, then paste the result here.
+                This has no headings and no <span className="font-mono text-[11px]">---</span> frontmatter - it reads more like a raw transcript. Convert it first with the Conversion Prompt, then paste the result here.
               </p>
               <button
                 onClick={() => { setTab('prompt'); setRawTranscriptHint(false); }}

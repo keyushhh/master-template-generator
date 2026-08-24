@@ -256,7 +256,7 @@ export function NewDeckModal({
     const target = templateOverride || activeTemplate;
     const deck = target.build();
     const finalThemeId = target.defaultThemeId || deck.themeId;
-    onCreate(name.trim() || target.name, { ...deck, themeId: finalThemeId });
+    onCreate(name.trim() || target.name, { ...deck, themeId: finalThemeId, presentationTemplateId: target.id });
     onClose();
   };
 

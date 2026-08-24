@@ -104,20 +104,20 @@ export function deckIsPristine(deck: Deck): boolean {
 // AST helpers
 // ---------------------------------------------------------------------------
 
-function paragraphsOf(section: SectionNode): string[] {
+export function paragraphsOf(section: SectionNode): string[] {
   return section.children
     .filter((c) => c.type === 'Paragraph')
     .map((c) => (c as { text: string }).text);
 }
 
-function bulletsOf(section: SectionNode): string[] {
+export function bulletsOf(section: SectionNode): string[] {
   return section.children
     .filter((c) => c.type === 'BulletList')
     .flatMap((c) => (c as { items: { text: string }[] }).items.map((it) => it.text));
 }
 
 /** Parse `key: value` bullets into a map; non key-value bullets go to `rest`. */
-function keyValueBullets(section: SectionNode): { kv: Record<string, string>; rest: string[] } {
+export function keyValueBullets(section: SectionNode): { kv: Record<string, string>; rest: string[] } {
   const kv: Record<string, string> = {};
   const rest: string[] = [];
   for (const bullet of bulletsOf(section)) {
@@ -132,7 +132,7 @@ function keyValueBullets(section: SectionNode): { kv: Record<string, string>; re
 }
 
 /** Bullets of the shape `prefix: a | b | c` → array of pipe-split parts. */
-function prefixedPipeBullets(section: SectionNode, prefix: string): string[][] {
+export function prefixedPipeBullets(section: SectionNode, prefix: string): string[][] {
   const out: string[][] = [];
   for (const bullet of bulletsOf(section)) {
     const idx = bullet.indexOf(':');
@@ -143,19 +143,19 @@ function prefixedPipeBullets(section: SectionNode, prefix: string): string[][] {
   return out;
 }
 
-function chunk<T>(arr: T[], size: number): T[][] {
+export function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
 
-function ensurePeriod(text: string): string {
+export function ensurePeriod(text: string): string {
   const t = text.trim();
   return /[.!?"']$/.test(t) ? t : `${t}.`;
 }
 
 /** Split a title into up to 3 visually balanced lines for the cover slide. */
-function splitTitleLines(title: string): string[] {
+export function splitTitleLines(title: string): string[] {
   const words = title.trim().split(/\s+/);
   if (words.length <= 1) return [ensurePeriod(title)];
   if (words.length <= 3) {
@@ -174,11 +174,11 @@ function splitTitleLines(title: string): string[] {
 // Section → template routing
 // ---------------------------------------------------------------------------
 
-type SectionKind =
+export type SectionKind =
   | 'summary' | 'divider' | 'context' | 'monument' | 'metrics' | 'comparison'
   | 'roadmap' | 'insight' | 'process' | 'regions' | 'quote' | 'closing' | 'preamble';
 
-function classifySection(section: SectionNode): SectionKind {
+export function classifySection(section: SectionNode): SectionKind {
   const h = section.heading.text.trim().toLowerCase();
   if (h === '') return 'preamble';
   if (section.heading.level === 1) return 'divider';
@@ -249,6 +249,38 @@ export function analyzeCoverage(ast: DocumentNode, deck: Deck): CoverageReport {
   }
 
   return { filled, total: deck.slides.length, emptySlides, insightSections, unmatchedBullets };
+}
+
+/** A slide instance not tied to `TEMPLATE_SLIDES` - for template families whose
+ *  slide types (eg. `editorial_cover`) aren't part of the classic s1-s14 set. */
+export function makeSlideInstance(
+  templateId: SlideTemplateId,
+  group: string,
+  title: string,
+  content: SlideContent,
+  hidden = false
+): SlideInstance {
+  return {
+    instanceId: mintInstanceId(templateId),
+    templateId,
+    group,
+    title,
+    hidden,
+    content,
+  };
+}
+
+/** Bucket every section of a parsed Business Record by the template family
+ *  it feeds. Shared by every per-template document builder. */
+export function bucketSections(ast: DocumentNode): (kind: SectionKind) => SectionNode[] {
+  const buckets = new Map<SectionKind, SectionNode[]>();
+  for (const section of ast.sections) {
+    const kind = classifySection(section);
+    const list = buckets.get(kind) ?? [];
+    list.push(section);
+    buckets.set(kind, list);
+  }
+  return (kind: SectionKind) => buckets.get(kind) ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -445,6 +477,10 @@ export function buildDeckFromDocument(ast: DocumentNode): Deck {
           eyebrow: 'Insight',
           heading: ensurePeriod(s.heading.text),
           body: [...paragraphsOf(s), ...bulletsOf(s)].join('\n\n'),
+          // The source document has no image for this section - full-width
+          // text reads better than a blank placeholder. The user can bring
+          // the image column back from the slide's own controls.
+          hideImage: true,
         })
       );
     }
@@ -506,12 +542,16 @@ export function buildDeckFromDocument(ast: DocumentNode): Deck {
 
   // --- s14 Exit -------------------------------------------------------------
   const closing = take('closing')[0];
-  const closingKv = closing ? keyValueBullets(closing).kv : {};
+  const closingBullets = closing ? keyValueBullets(closing) : { kv: {}, rest: [] };
   slides.push(
     make('s14', 'Exit / Thank You', {
-      body: closing ? paragraphsOf(closing)[0] : undefined,
+      // Plain bullets (eg. a "Next Steps" list) have no email/social/web prefix
+      // to land on, so fold them into the body instead of dropping them.
+      body: closing
+        ? [paragraphsOf(closing)[0], ...closingBullets.rest].filter(Boolean).join('\n')
+        : undefined,
       contacts: closing
-        ? [closingKv.email, closingKv.social, closingKv.web].filter((c): c is string => !!c)
+        ? [closingBullets.kv.email, closingBullets.kv.social, closingBullets.kv.web].filter((c): c is string => !!c)
         : undefined,
     })
   );
