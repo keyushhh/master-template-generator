@@ -32,12 +32,38 @@ export interface CollabPeer {
   at: number;
 }
 
+export interface LaserPoint {
+  x: number;
+  y: number;
+  at: number;
+}
+
+export interface RemoteLaserEvent {
+  clientId: string;
+  userId: string;
+  userName: string;
+  color: string;
+  points: LaserPoint[];
+}
+
+export interface SummonEvent {
+  clientId: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  slideId: string;
+  slideIndex: number;
+  sentAt: number;
+}
+
 export type CollabMessage =
   | { kind: 'edit'; clientId: string; deck: Deck; userId: string }
   | { kind: 'presence'; peer: CollabPeer }
   | { kind: 'chat'; clientId: string; chat?: { text: string; sentAt: number } }
   | { kind: 'selection'; clientId: string; slideId?: string; selectedIds: string[] }
   | { kind: 'reaction'; reaction: ReactionEvent }
+  | { kind: 'laser'; laser: RemoteLaserEvent }
+  | { kind: 'summon'; summon: SummonEvent }
   | { kind: 'comment'; clientId: string; action: CommentAction }
   | { kind: 'leave'; clientId: string };
 

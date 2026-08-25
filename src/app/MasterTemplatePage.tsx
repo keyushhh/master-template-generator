@@ -109,9 +109,10 @@ import { addNotification } from '../features/notifications/notificationStore';
 import { PeerSelectionsLayer } from '../features/collab/PeerSelectionsLayer';
 import { ReactionPicker } from '../features/collab/ReactionPicker';
 import { ReactionBursts } from '../features/collab/ReactionBursts';
+import { LaserLayer } from '../features/collab/LaserLayer';
 import { ActivityPanel } from '../features/activity/ActivityPanel';
 import { logDeckActivity } from '../features/activity/activityStore';
-import type { ReactionEvent } from '../features/collab/collabChannel';
+import type { ReactionEvent, LaserPoint, RemoteLaserEvent, SummonEvent } from '../features/collab/collabChannel';
 
 // Undo/redo history for the committed deck.
 const HISTORY_LIMIT = 50;
@@ -356,6 +357,11 @@ export function MasterTemplatePage() {
   const [activityPanelOpen, setActivityPanelOpen] = useState(false);
   const [reactions, setReactions] = useState<ReactionEvent[]>([]);
   const [reactionPickerPos, setReactionPickerPos] = useState<{ x: number; y: number } | null>(null);
+  const [isLaserActive, setIsLaserActive] = useState(false);
+  const [localLaserPoints, setLocalLaserPoints] = useState<LaserPoint[]>([]);
+  const [remoteLasers, setRemoteLasers] = useState<RemoteLaserEvent[]>([]);
+  const [activeSummon, setActiveSummon] = useState<SummonEvent | null>(null);
+
   const mouseClientPosRef = useRef<{ x: number; y: number; normX: number; normY: number }>({
     x: 0,
     y: 0,
@@ -384,6 +390,14 @@ export function MasterTemplatePage() {
     setReactions((prev) => [...prev.slice(-20), rxn]);
   }, []);
 
+  const handleRemoteLaser = useCallback((laser: RemoteLaserEvent) => {
+    setRemoteLasers((prev) => [...prev.filter((l) => l.clientId !== laser.clientId), laser]);
+  }, []);
+
+  const handleRemoteSummon = useCallback((summon: SummonEvent) => {
+    setActiveSummon(summon);
+  }, []);
+
   const {
     peers,
     broadcastDeck,
@@ -392,6 +406,8 @@ export function MasterTemplatePage() {
     reportSelection,
     reportChat,
     sendReaction,
+    sendLaserPoints,
+    sendSummon,
     broadcastComment,
   } = useCollab({
     projectId: activeId,
@@ -399,6 +415,8 @@ export function MasterTemplatePage() {
     onRemoteDeck: applyRemoteDeck,
     onRemoteComment: handleRemoteComment,
     onRemoteReaction: handleRemoteReaction,
+    onRemoteLaser: handleRemoteLaser,
+    onRemoteSummon: handleRemoteSummon,
   });
 
   // Follow Mode user memo
@@ -407,7 +425,7 @@ export function MasterTemplatePage() {
     [followingUserId, peers]
   );
 
-  // Keyboard shortcut for Reaction Picker ('E')
+  // Keyboard shortcuts for Reaction Picker ('E') and Laser ('L')
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -427,13 +445,18 @@ export function MasterTemplatePage() {
           x: mouseClientPosRef.current.x || window.innerWidth / 2,
           y: mouseClientPosRef.current.y || window.innerHeight / 2,
         });
-      } else if (e.key === 'Escape' && followingUserId) {
-        setFollowingUserId(null);
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        setIsLaserActive((v) => !v);
+      } else if (e.key === 'Escape') {
+        if (followingUserId) setFollowingUserId(null);
+        if (isLaserActive) setIsLaserActive(false);
+        if (activeSummon) setActiveSummon(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [followingUserId]);
+  }, [followingUserId, isLaserActive, activeSummon]);
 
   const handleSaveComment = useCallback(
     (slideId: string, x: number, y: number, content: string) => {
@@ -903,6 +926,29 @@ function pristineDeckFor(templateId: string | undefined): Deck {
       }
     }
   }, [followingUserId, peers, currentSlideId, displayDeck.slides]);
+
+  // Handle summon action from local user
+  const handleSummonEveryone = useCallback(() => {
+    if (!currentSlideId) return;
+    const sIndex = displayDeck.slides.findIndex((s) => s.instanceId === currentSlideId);
+    sendSummon(currentSlideId, sIndex >= 0 ? sIndex : 0);
+    showToast(`Gathered everyone to Slide ${(sIndex >= 0 ? sIndex : 0) + 1}`);
+  }, [currentSlideId, displayDeck.slides, sendSummon, showToast]);
+
+  // Handle incoming summon auto-navigation
+  useEffect(() => {
+    if (!activeSummon) return;
+    const timer = setTimeout(() => {
+      if (activeSummon) {
+        const found = displayDeck.slides.find((s) => s.instanceId === activeSummon.slideId);
+        if (found) {
+          setCurrentSlideId(activeSummon.slideId);
+        }
+        setActiveSummon(null);
+      }
+    }, 3800);
+    return () => clearTimeout(timer);
+  }, [activeSummon, displayDeck.slides]);
 
   const handleEditSlide = useCallback(
     (instanceId: string, updater: (content: SlideContent) => SlideContent) => {
@@ -2315,6 +2361,21 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     [activeId, flushCurrent, hydrate]
   );
 
+  // Listen for 'wozku:switch-deck' custom event dispatched from notifications
+  useEffect(() => {
+    const onSwitchEvent = (e: Event) => {
+      const custom = e as CustomEvent<{ projectId?: string; slideId?: string }>;
+      if (custom.detail?.projectId && custom.detail.projectId !== activeId) {
+        handleSwitchDeck(custom.detail.projectId);
+      }
+      if (custom.detail?.slideId) {
+        setCurrentSlideId(custom.detail.slideId);
+      }
+    };
+    window.addEventListener('wozku:switch-deck', onSwitchEvent);
+    return () => window.removeEventListener('wozku:switch-deck', onSwitchEvent);
+  }, [activeId, handleSwitchDeck]);
+
   /**
    * Create a deck from the starter and brand chosen on the new-deck screen.
    *
@@ -2333,6 +2394,14 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     },
     [flushCurrent, hydrate]
   );
+
+  const handleDuplicateCurrentDeck = useCallback(() => {
+    if (!activeId) return;
+    const currentProj = projects.find((p) => p.id === activeId);
+    const name = `${currentProj?.name || 'Deck'} (Copy)`;
+    handleCreateDeck(name, JSON.parse(JSON.stringify(displayDeck)));
+    showToast(`Duplicated as "${name}"`);
+  }, [activeId, projects, displayDeck, handleCreateDeck, showToast]);
 
   const handleRenameDeck = useCallback((id: string, name: string) => {
     renameProject(id, name);
@@ -2589,6 +2658,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     <div className="wg-doc">
       <GeneratorSidebar
         hasPresentation={!!ast}
+        peers={peers}
         ast={ast}
         deck={displayDeck}
         deckGenerated={deck.generated}
@@ -2651,15 +2721,89 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onToggleFollow={(uid) => setFollowingUserId((prev) => (prev === uid ? null : uid))}
         onToggleActivity={() => setActivityPanelOpen((v) => !v)}
         onFollowPeer={setCurrentSlideId}
+        onSummon={handleSummonEveryone}
         reachableSlideIds={followableSlideIds}
         canEditDeck={mayEdit}
         projects={projects}
         activeId={activeId}
         onSwitchDeck={handleSwitchDeck}
         onNewDeck={() => setNewDeckOpen(true)}
+        onDuplicateDeck={handleDuplicateCurrentDeck}
         onRenameDeck={handleRenameDeck}
         onDeleteDeck={handleDeleteDeck}
       />
+
+      {/* Summon Banner ("Gather Everyone") */}
+      {activeSummon && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 76,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 160,
+            backgroundColor: '#1E1E1E',
+            color: '#FFFFFF',
+            padding: '6px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            border: '1px solid #333333',
+            borderRadius: 0,
+            boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
+          }}
+          className="animate-in fade-in slide-in-from-top-2 duration-150"
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              backgroundColor: activeSummon.userColor || '#10B981',
+              borderRadius: 0,
+            }}
+            className="animate-pulse"
+          />
+          <span style={{ fontSize: 12, fontWeight: 700 }}>
+            {activeSummon.userName} gathered everyone to Slide {activeSummon.slideIndex + 1}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentSlideId(activeSummon.slideId);
+              setActiveSummon(null);
+            }}
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              backgroundColor: '#FFFFFF',
+              color: '#000000',
+              padding: '2px 8px',
+              borderRadius: 0,
+              border: 'none',
+              cursor: 'pointer',
+              marginLeft: 4,
+            }}
+          >
+            Jump Now
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSummon(null)}
+            style={{
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              color: '#A3A3A3',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              marginLeft: 4,
+            }}
+            className="hover:text-white transition-colors"
+          >
+            Dismiss (Esc)
+          </button>
+        </div>
+      )}
 
       {/* Spotlight / Follow Mode Banner */}
       {followingUser && (
@@ -2716,20 +2860,39 @@ function pristineDeckFor(templateId: string | undefined): Deck {
 
       <div
         ref={slideContainerRef}
-        style={{ cursor: isCommentMode ? 'crosshair' : undefined, position: 'relative' }}
+        style={{
+          cursor: isLaserActive ? 'crosshair' : isCommentMode ? 'crosshair' : undefined,
+          position: 'relative',
+        }}
         onPointerMove={(e) => {
           const stage = (e.target as HTMLElement).closest?.('[data-slide]')
             ?? document.querySelector('[data-slide]');
           const rect = (stage as HTMLElement | null)?.getBoundingClientRect();
+          const normX = rect && rect.width > 0 ? (e.clientX - rect.left) / (rect.width / 1920) : 0;
+          const normY = rect && rect.width > 0 ? (e.clientY - rect.top) / (rect.width / 1920) : 0;
+
           mouseClientPosRef.current = {
             x: e.clientX,
             y: e.clientY,
-            normX: rect && rect.width > 0 ? (e.clientX - rect.left) / (rect.width / 1920) : 0,
-            normY: rect && rect.width > 0 ? (e.clientY - rect.top) / (rect.width / 1920) : 0,
+            normX,
+            normY,
           };
           if (!rect || rect.width <= 0) return;
           const scale = rect.width / 1920;
           reportPointer((e.clientX - rect.left) / scale, (e.clientY - rect.top) / scale);
+
+          if (isLaserActive) {
+            const pt: LaserPoint = {
+              x: (e.clientX - rect.left) / scale,
+              y: (e.clientY - rect.top) / scale,
+              at: Date.now(),
+            };
+            setLocalLaserPoints((prev) => {
+              const next = [...prev.slice(-30), pt];
+              sendLaserPoints(next);
+              return next;
+            });
+          }
         }}
         onPointerLeave={() => reportPointer()}
       >
@@ -2819,6 +2982,64 @@ function pristineDeckFor(templateId: string | undefined): Deck {
           userColor={user.color}
           userName={user.name}
         />
+      )}
+
+      {/* Live Laser Pointer Canvas Layer */}
+      {(() => {
+        const stage = document.querySelector('[data-slide]');
+        const rect = (stage as HTMLElement | null)?.getBoundingClientRect() ?? null;
+        const scale = rect && rect.width > 0 ? rect.width / 1920 : 1;
+        return (
+          <LaserLayer
+            localPoints={isLaserActive ? localLaserPoints : []}
+            remoteLasers={remoteLasers}
+            slideRect={rect}
+            scale={scale}
+          />
+        );
+      })()}
+
+      {/* Laser Active Floating Banner */}
+      {isLaserActive && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 84,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 160,
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '6px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            borderRadius: 0,
+            boxShadow: '0 8px 24px rgba(220,38,38,0.35)',
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+          className="animate-in fade-in slide-in-from-bottom-2 duration-150 select-none"
+        >
+          <span className="w-2 h-2 bg-white rounded-none animate-ping" />
+          <span>Laser Pointer Active · Move or Drag to Point</span>
+          <button
+            type="button"
+            onClick={() => setIsLaserActive(false)}
+            style={{
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              color: '#FEE2E2',
+              textDecoration: 'underline',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              marginLeft: 6,
+            }}
+          >
+            Exit (L / Esc)
+          </button>
+        </div>
       )}
 
       {/* Live Cursor Reaction Bursts (Hardware-Accelerated 60fps Canvas) */}

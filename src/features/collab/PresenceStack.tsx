@@ -6,6 +6,7 @@ interface Props {
   followingUserId?: string | null;
   onToggleFollow?: (userId: string) => void;
   reachableSlideIds?: Set<string>;
+  onSummon?: () => void;
 }
 
 /** Who else is in this deck, as overlapping avatars in the top bar. */
@@ -14,6 +15,7 @@ export function PresenceStack({
   followingUserId,
   onToggleFollow,
   reachableSlideIds,
+  onSummon,
 }: Props) {
   if (!peers.length) return null;
 
@@ -76,6 +78,17 @@ export function PresenceStack({
         >
           +{unique.length - 4}
         </span>
+      )}
+
+      {onSummon && unique.length > 0 && (
+        <button
+          type="button"
+          onClick={onSummon}
+          title="Gather everyone to this slide"
+          className="ml-2 px-2 h-[26px] flex items-center gap-1 bg-white hover:bg-neutral-50 border border-neutral-300 text-[11px] font-mono font-bold text-neutral-700 rounded-none shadow-xs transition-colors cursor-pointer"
+        >
+          <span>Gather</span>
+        </button>
       )}
     </div>
   );

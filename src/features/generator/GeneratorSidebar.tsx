@@ -2,10 +2,10 @@ import { useRef, useState } from 'react';
 import { SlideNavList } from './SlideNavList';
 import { SourceMaterialModal } from './SourceMaterialModal';
 import { AddIcon, DocumentIcon, FlashIcon } from '../ui/icons';
-// Sidebar for presenting the generated slides list and actions
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, SlideTransition } from '../deck/types';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
+import type { CollabPeer } from '../collab/collabChannel';
 
 /** How many px off a scroll extreme still counts as "at the top" / "at the
  *  bottom". Sub-pixel scroll heights mean an exact comparison never matches. */
@@ -13,6 +13,7 @@ const SCROLL_EDGE_SLOP = 4;
 
 interface GeneratorSidebarProps {
   hasPresentation: boolean;
+  peers?: CollabPeer[];
   /** Parsed document - carried into PDF export so the client logo renders. */
   ast: DocumentNode | null;
   deck: Deck;
@@ -48,6 +49,7 @@ interface GeneratorSidebarProps {
 
 export function GeneratorSidebar({
   hasPresentation,
+  peers,
   ast,
   deck,
   deckGenerated,
@@ -151,6 +153,7 @@ export function GeneratorSidebar({
           >
             <SlideNavList
               slides={deck.slides}
+              peers={peers}
               ast={ast}
               logoUrl={deck.logoUrl}
               theme={theme}

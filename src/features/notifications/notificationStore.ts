@@ -18,6 +18,8 @@ export interface NotificationItem {
   description?: string;
   deckName?: string;
   projectId?: string;
+  slideId?: string;
+  commentId?: string;
   createdAt: number;
   read: boolean;
   inviteStatus?: 'pending' | 'accepted' | 'declined';

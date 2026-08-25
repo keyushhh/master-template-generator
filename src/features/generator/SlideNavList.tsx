@@ -9,9 +9,12 @@ import { describeIssue, SEVERE_BY } from '../fit/fitScan';
 import { pruneFit, useSlideFit } from '../fit/fitStore';
 import { ConfirmModal, cannotBeUndone } from '../ui/ConfirmModal';
 import { TRANSITIONS } from '../deck/slideTransitions';
+import type { CollabPeer } from '../collab/collabChannel';
+import { initialsOf } from '../auth/demoUsers';
 
 interface SlideNavListProps {
   slides: SlideInstance[];
+  peers?: CollabPeer[];
   /** Parsed document - the renderers need it to draw the client logo, so the
    *  thumbnail matches what the canvas and the export show. */
   ast: DocumentNode | null;
@@ -253,7 +256,7 @@ function CardAction({
   );
 }
 
-export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDuplicate, onChangeLayout, onDelete, onSetTransition, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
+export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidden, onDuplicate, onChangeLayout, onDelete, onSetTransition, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
   // Double-click-to-rename state: which row is being renamed + its draft text.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -446,6 +449,26 @@ export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDu
                             zIndex: 15,
                           }}
                         />
+
+                        {/* Multiplayer Collaborator Presence Chips on Slide */}
+                        {(() => {
+                          const peersOnThisSlide = peers?.filter((p) => p.slideId === slide.instanceId) ?? [];
+                          if (!peersOnThisSlide.length) return null;
+                          return (
+                            <div className="absolute top-1 right-1 z-20 flex items-center -space-x-1 pointer-events-none">
+                              {peersOnThisSlide.map((p) => (
+                                <span
+                                  key={p.clientId}
+                                  title={`${p.name} is on Slide ${numbering.get(slide.instanceId) ?? ''}`}
+                                  className="w-[17px] h-[17px] rounded-none flex items-center justify-center text-[7.5px] font-mono font-bold text-white shadow-xs border border-white"
+                                  style={{ backgroundColor: p.color }}
+                                >
+                                  {initialsOf(p.name)}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
 
                         {slide.hidden && (
                           <div

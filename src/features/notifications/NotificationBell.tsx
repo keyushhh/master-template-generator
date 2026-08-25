@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   BellIcon,
   CommentIcon,
@@ -10,6 +11,7 @@ import {
 import { useAuth } from '../auth/authStore';
 import { initialsOf } from '../auth/demoUsers';
 import { useNotifications, type NotificationItem } from './notificationStore';
+import { setActiveId, listProjects } from '../deck/deckStore';
 
 function timeAgo(timestamp: number): string {
   const diffMs = Date.now() - timestamp;
@@ -76,10 +78,39 @@ function getActionText(notif: NotificationItem) {
 
 export function NotificationBell() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { notifications, unreadCount, markAllRead, markSingleRead, respondToInvite } =
     useNotifications(user?.id);
+
+  const handleNotificationClick = (notif: NotificationItem) => {
+    markSingleRead(notif.id);
+    setOpen(false);
+
+    let targetProjectId = notif.projectId;
+    if (!targetProjectId && notif.deckName) {
+      const all = listProjects();
+      const found = all.find(
+        (p) => p.name.toLowerCase() === notif.deckName?.toLowerCase()
+      );
+      if (found) targetProjectId = found.id;
+    }
+
+    if (targetProjectId) {
+      setActiveId(targetProjectId);
+      if (location.pathname !== '/studio') {
+        navigate('/studio');
+      } else {
+        window.dispatchEvent(
+          new CustomEvent('wozku:switch-deck', {
+            detail: { projectId: targetProjectId, slideId: notif.slideId },
+          })
+        );
+      }
+    }
+  };
 
   // One frame at data-open="false" so an incoming notification replays the pop-in.
   const [gap, setGap] = useState(false);
@@ -182,7 +213,7 @@ export function NotificationBell() {
                 return (
                   <div
                     key={notif.id}
-                    onClick={() => markSingleRead(notif.id)}
+                    onClick={() => handleNotificationClick(notif)}
                     className={`p-3.5 flex items-start gap-3 transition-colors text-left cursor-pointer ${
                       notif.read ? 'bg-white hover:bg-neutral-50' : 'bg-neutral-50/70 hover:bg-neutral-100/60'
                     }`}

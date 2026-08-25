@@ -9,6 +9,9 @@ import {
   type CollabMessage,
   type CollabPeer,
   type ReactionEvent,
+  type LaserPoint,
+  type RemoteLaserEvent,
+  type SummonEvent,
 } from './collabChannel';
 
 import type { CommentAction } from '../comments/types';
@@ -25,6 +28,10 @@ interface Options {
   onRemoteComment?: (action: CommentAction) => void;
   /** Applied when another peer triggers a live reaction burst. */
   onRemoteReaction?: (reaction: ReactionEvent) => void;
+  /** Applied when another peer draws with the live laser pointer. */
+  onRemoteLaser?: (laser: RemoteLaserEvent) => void;
+  /** Applied when a peer summons everyone to their slide. */
+  onRemoteSummon?: (summon: SummonEvent) => void;
 }
 
 interface Collab {
@@ -42,6 +49,10 @@ interface Collab {
   reportChat: (text?: string) => void;
   /** Broadcast particle reaction burst. */
   sendReaction: (emoji: string, x: number, y: number) => void;
+  /** Broadcast live laser pointer drawing points. */
+  sendLaserPoints: (points: LaserPoint[]) => void;
+  /** Broadcast summon request to bring everyone to a slide. */
+  sendSummon: (slideId: string, slideIndex: number) => void;
   /** Broadcast comment creation/reply/resolve/delete. */
   broadcastComment: (action: CommentAction) => void;
 }
@@ -52,6 +63,8 @@ export function useCollab({
   onRemoteDeck,
   onRemoteComment,
   onRemoteReaction,
+  onRemoteLaser,
+  onRemoteSummon,
 }: Options): Collab {
   const clientId = useMemo(newClientId, []);
   const [peers, setPeers] = useState<CollabPeer[]>([]);
@@ -71,6 +84,12 @@ export function useCollab({
 
   const onRemoteReactionRef = useRef(onRemoteReaction);
   onRemoteReactionRef.current = onRemoteReaction;
+
+  const onRemoteLaserRef = useRef(onRemoteLaser);
+  onRemoteLaserRef.current = onRemoteLaser;
+
+  const onRemoteSummonRef = useRef(onRemoteSummon);
+  onRemoteSummonRef.current = onRemoteSummon;
 
   useEffect(() => {
     if (!user) return;
@@ -99,6 +118,10 @@ export function useCollab({
         );
       } else if (msg.kind === 'reaction') {
         onRemoteReactionRef.current?.(msg.reaction);
+      } else if (msg.kind === 'laser' && msg.laser.clientId !== clientId) {
+        onRemoteLaserRef.current?.(msg.laser);
+      } else if (msg.kind === 'summon' && msg.summon.clientId !== clientId) {
+        onRemoteSummonRef.current?.(msg.summon);
       } else if (msg.kind === 'comment' && msg.clientId !== clientId) {
         onRemoteCommentRef.current?.(msg.action);
       } else if (msg.kind === 'leave') {
@@ -233,6 +256,44 @@ export function useCollab({
     [clientId, user]
   );
 
+  const sendLaserPoints = useCallback(
+    (points: LaserPoint[]) => {
+      if (!user) return;
+      const laser: RemoteLaserEvent = {
+        clientId,
+        userId: user.id,
+        userName: user.name,
+        color: user.color || '#EF4444',
+        points,
+      };
+      channelRef.current?.postMessage({
+        kind: 'laser',
+        laser,
+      } satisfies CollabMessage);
+    },
+    [clientId, user]
+  );
+
+  const sendSummon = useCallback(
+    (slideId: string, slideIndex: number) => {
+      if (!user) return;
+      const summon: SummonEvent = {
+        clientId,
+        userId: user.id,
+        userName: user.name,
+        userColor: user.color,
+        slideId,
+        slideIndex,
+        sentAt: Date.now(),
+      };
+      channelRef.current?.postMessage({
+        kind: 'summon',
+        summon,
+      } satisfies CollabMessage);
+    },
+    [clientId, user]
+  );
+
   const broadcastComment = useCallback(
     (action: CommentAction) => {
       channelRef.current?.postMessage({
@@ -252,6 +313,8 @@ export function useCollab({
     reportSelection,
     reportChat,
     sendReaction,
+    sendLaserPoints,
+    sendSummon,
     broadcastComment,
   };
 }

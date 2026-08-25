@@ -83,10 +83,12 @@ interface StudioHeaderProps {
   onToggleFollow?: (userId: string) => void;
   onToggleActivity?: () => void;
   onFollowPeer?: (slideId: string) => void;
+  onSummon?: () => void;
   /** Slides a peer can actually be followed to. */
   reachableSlideIds?: Set<string>;
   /** False for someone invited to view: the Edit tab is theirs to see, not use. */
   canEditDeck?: boolean;
+  onDuplicateDeck?: () => void;
   /** Deck management, moved here from under the sidebar logo so the deck you
    *  have open and its name live in the same place. */
   projects: ProjectMeta[];
@@ -180,8 +182,10 @@ export function StudioHeader({
   onToggleFollow,
   onToggleActivity,
   onFollowPeer,
+  onSummon,
   reachableSlideIds,
   canEditDeck = true,
+  onDuplicateDeck,
   projects,
   activeId,
   onSwitchDeck,
@@ -340,6 +344,21 @@ export function StudioHeader({
             onNew={onNewDeck}
             onRename={onRenameDeck}
             onDelete={onDeleteDeck}
+            onDuplicate={onDuplicateDeck}
+            onOpenHistory={onOpenHistory}
+            onOpenActivity={onToggleActivity}
+            onOpenShare={onOpenShare}
+            onOpenExport={() => canExport && onOpenReview()}
+            onReset={canReset ? onResetClick : undefined}
+            canReset={canReset}
+            onTriggerRenameActive={() => {
+              setDraftName(projectName);
+              setRenaming(true);
+            }}
+            isEditMode={mode === 'edit'}
+            isDirty={dirty}
+            onSave={onExitEdit}
+            onDiscard={onDiscard}
           />
           </div>
         )}
@@ -448,6 +467,7 @@ export function StudioHeader({
               followingUserId={followingUserId}
               onToggleFollow={onToggleFollow}
               reachableSlideIds={reachableSlideIds}
+              onSummon={onSummon}
             />
             <span style={{ width: 1, height: 20, background: 'var(--neutral-200)', margin: '0 6px' }} />
           </>
@@ -458,43 +478,6 @@ export function StudioHeader({
         <IconBtn onClick={onRedo} disabled={!canRedo} title="Redo (⌘⇧Z)" label="Redo">
           <RedoIcon size={16} />
         </IconBtn>
-
-        <button
-          onClick={onResetClick}
-          disabled={!canReset}
-          title="Revert the deck to its imported baseline"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            height: 30,
-            padding: '0 11px',
-            borderRadius: 'var(--radius-sharp)',
-            borderWidth: 1,
-            borderStyle: 'solid',
-            borderColor: resetArmed ? '#fecaca' : 'transparent',
-            background: resetArmed ? '#fef2f2' : 'transparent',
-            color: resetArmed ? '#dc2626' : canReset ? 'var(--neutral-600)' : 'var(--neutral-300)',
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: canReset ? 'pointer' : 'not-allowed',
-            transition: 'background .15s, color .15s, border-color .15s',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {!resetArmed && <RefreshIcon size={14} />}
-          {resetArmed ? 'Confirm reset?' : 'Reset'}
-        </button>
-
-        <IconBtn onClick={() => onOpenHistory?.()} title="Version history" label="Version history">
-          <HistoryIcon size={15} />
-        </IconBtn>
-
-        {onToggleActivity && (
-          <IconBtn onClick={onToggleActivity} title="Deck activity stream" label="Deck activity">
-            <LightningIcon size={14} />
-          </IconBtn>
-        )}
 
         {/* Single Comments Toggle Icon Button */}
         {onToggleShowComments && (
@@ -573,52 +556,6 @@ export function StudioHeader({
           <DownloadIcon size={14} />
           Export
         </button>
-
-        {/* Session actions. Present only while the deck is forked, so the bar
-            has a fixed shape the rest of the time. */}
-        {mode === 'edit' && (
-          <>
-            <button
-              onClick={onExitEdit}
-              title="Keep these edits and return to view mode"
-              style={{
-                height: 30,
-                padding: '0 14px',
-                borderRadius: 'var(--radius-sharp)',
-                border: 'none',
-                cursor: 'pointer',
-                background: dirty ? 'var(--neutral-900)' : 'var(--neutral-200)',
-                color: dirty ? '#fff' : 'var(--neutral-500)',
-                fontSize: 12,
-                fontWeight: 700,
-                whiteSpace: 'nowrap',
-                transition: 'background .15s, color .15s',
-              }}
-            >
-              Save
-            </button>
-            <button
-              onClick={onDiscard}
-              title={dirty ? 'Throw away every change since you entered edit mode' : 'Leave edit mode'}
-              style={{
-                height: 30,
-                padding: '0 12px',
-                borderRadius: 'var(--radius-sharp)',
-                borderWidth: 1,
-                borderStyle: 'solid',
-                borderColor: 'var(--neutral-200)',
-                background: '#fff',
-                color: 'var(--neutral-600)',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {dirty ? 'Discard' : 'Done'}
-            </button>
-          </>
-        )}
       </div>
     </header>
   );
