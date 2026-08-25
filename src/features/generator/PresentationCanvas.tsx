@@ -439,6 +439,15 @@ export function E({ value, editing, onCommit, multiline, dataField, onActivate, 
   /** Whether the click currently in progress held Shift - set on mousedown and
    *  read on mouseup, because only mouse events carry modifier state. */
   const additiveClick = useRef(false);
+  const spanRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    if (spanRef.current && document.activeElement !== spanRef.current) {
+      if (spanRef.current.innerText !== value) {
+        spanRef.current.innerText = value;
+      }
+    }
+  }, [value]);
 
   // translate() rather than left/top: the slot is laid out by its template
   // (flex, padding, computed sizes), so nudging it must not take it out of that
@@ -472,6 +481,7 @@ export function E({ value, editing, onCommit, multiline, dataField, onActivate, 
 
   return (
     <span
+      ref={spanRef}
       // Changing the key discards this node and builds a fresh one from `value`.
       //
       // A contentEditable is uncontrolled: the user's keystrokes mutate the DOM
@@ -489,6 +499,10 @@ export function E({ value, editing, onCommit, multiline, dataField, onActivate, 
       suppressContentEditableWarning
       spellCheck={false}
       title="Shift-click to add to the selection · Esc reverts this field"
+      onInput={(e) => {
+        const text = (e.currentTarget as HTMLElement).innerText.replace(/ /g, ' ');
+        onCommit(text);
+      }}
       // Focus fires between mousedown and mouseup, so on a shift-click it would
       // report a plain selection first and the mouseup would then toggle that
       // single member straight back off. Deferring to mouseup keeps the gesture

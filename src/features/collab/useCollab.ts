@@ -8,6 +8,7 @@ import {
   PRESENCE_INTERVAL_MS,
   type CollabMessage,
   type CollabPeer,
+  type ReactionEvent,
 } from './collabChannel';
 
 import type { CommentAction } from '../comments/types';
@@ -22,6 +23,8 @@ interface Options {
   onRemoteDeck: (deck: Deck) => void;
   /** Applied when another tab creates, replies to, or resolves a comment. */
   onRemoteComment?: (action: CommentAction) => void;
+  /** Applied when another peer triggers a live reaction burst. */
+  onRemoteReaction?: (reaction: ReactionEvent) => void;
 }
 
 interface Collab {
@@ -33,32 +36,41 @@ interface Collab {
   reportSlide: (slideId: string | undefined) => void;
   /** Tell the others where this cursor is, or nothing once it leaves. */
   reportPointer: (x?: number, y?: number) => void;
+  /** Tell others which elements are currently selected on the canvas. */
+  reportSelection: (selectedIds: string[]) => void;
   /** Broadcast live cursor chat message (Figma-style ephemeral chat). */
   reportChat: (text?: string) => void;
+  /** Broadcast particle reaction burst. */
+  sendReaction: (emoji: string, x: number, y: number) => void;
   /** Broadcast comment creation/reply/resolve/delete. */
   broadcastComment: (action: CommentAction) => void;
 }
 
-export function useCollab({ projectId, user, onRemoteDeck, onRemoteComment }: Options): Collab {
+export function useCollab({
+  projectId,
+  user,
+  onRemoteDeck,
+  onRemoteComment,
+  onRemoteReaction,
+}: Options): Collab {
   const clientId = useMemo(newClientId, []);
   const [peers, setPeers] = useState<CollabPeer[]>([]);
   const channelRef = useRef<BroadcastChannel | null>(null);
-  // Which slide someone is on outlives where their pointer is: they stay on the
-  // slide when the cursor leaves the canvas, and that is the thing worth
-  // following them to.
   const slideRef = useRef<string | undefined>(undefined);
+  const selectedIdsRef = useRef<string[]>([]);
   const pointerRef = useRef<{ x?: number; y?: number }>({});
   const chatRef = useRef<{ text: string; sentAt: number } | undefined>(undefined);
   const announceRef = useRef<() => void>(() => {});
   const lastPointerSendRef = useRef(0);
 
-  // Read through a ref so the subscribe effect does not tear down and rebuild
-  // the channel every time the parent re-renders with a new callback.
   const onRemoteDeckRef = useRef(onRemoteDeck);
   onRemoteDeckRef.current = onRemoteDeck;
 
   const onRemoteCommentRef = useRef(onRemoteComment);
   onRemoteCommentRef.current = onRemoteComment;
+
+  const onRemoteReactionRef = useRef(onRemoteReaction);
+  onRemoteReactionRef.current = onRemoteReaction;
 
   useEffect(() => {
     if (!user) return;
@@ -77,6 +89,16 @@ export function useCollab({ projectId, user, onRemoteDeck, onRemoteComment }: Op
         setPeers((prev) =>
           prev.map((p) => (p.clientId === msg.clientId ? { ...p, chat: msg.chat } : p))
         );
+      } else if (msg.kind === 'selection' && msg.clientId !== clientId) {
+        setPeers((prev) =>
+          prev.map((p) =>
+            p.clientId === msg.clientId
+              ? { ...p, slideId: msg.slideId, selectedIds: msg.selectedIds }
+              : p
+          )
+        );
+      } else if (msg.kind === 'reaction') {
+        onRemoteReactionRef.current?.(msg.reaction);
       } else if (msg.kind === 'comment' && msg.clientId !== clientId) {
         onRemoteCommentRef.current?.(msg.action);
       } else if (msg.kind === 'leave') {
@@ -91,6 +113,7 @@ export function useCollab({ projectId, user, onRemoteDeck, onRemoteComment }: Op
         name: user.name,
         color: user.color,
         slideId: slideRef.current,
+        selectedIds: selectedIdsRef.current,
         ...pointerRef.current,
         chat: chatRef.current,
         at: Date.now(),
@@ -98,85 +121,137 @@ export function useCollab({ projectId, user, onRemoteDeck, onRemoteComment }: Op
       try {
         channel.postMessage({ kind: 'presence', peer } satisfies CollabMessage);
       } catch {
-        // A closed channel just means this tab is on its way out.
+        // Channel closed while tearing down; ignore.
       }
     };
     announceRef.current = announce;
     announce();
-    const timer = setInterval(announce, PRESENCE_INTERVAL_MS);
 
-    // Drop anyone whose tab closed without saying so.
-    const sweep = setInterval(() => {
-      const cutoff = Date.now() - PEER_TIMEOUT_MS;
-      setPeers((prev) => (prev.some((p) => p.at < cutoff) ? prev.filter((p) => p.at >= cutoff) : prev));
-    }, PEER_TIMEOUT_MS / 2);
+    const interval = window.setInterval(() => {
+      setPeers((prev) => prev.filter((p) => Date.now() - p.at < PEER_TIMEOUT_MS));
+      announce();
+    }, PRESENCE_INTERVAL_MS);
 
-    const leave = () => {
+    const onBeforeUnload = () => {
       try {
         channel.postMessage({ kind: 'leave', clientId } satisfies CollabMessage);
       } catch {
-        // ignore
+        // Ignore unload failures.
       }
     };
-    window.addEventListener('pagehide', leave);
+    window.addEventListener('beforeunload', onBeforeUnload);
 
     return () => {
-      leave();
-      window.removeEventListener('pagehide', leave);
-      clearInterval(timer);
-      clearInterval(sweep);
-      channel.close();
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.clearInterval(interval);
+      try {
+        channel.postMessage({ kind: 'leave', clientId } satisfies CollabMessage);
+        channel.close();
+      } catch {
+        // Ignore teardown failures.
+      }
       channelRef.current = null;
-      setPeers([]);
     };
   }, [projectId, user, clientId]);
 
-  const broadcastDeck = useCallback((deck: Deck) => {
-    if (!user) return;
-    try {
-      channelRef.current?.postMessage({ kind: 'edit', clientId, deck, userId: user.id } satisfies CollabMessage);
-    } catch {
-      // A deck too large to structured-clone is still edited locally.
-    }
-  }, [clientId, user]);
+  const broadcastDeck = useCallback(
+    (deck: Deck) => {
+      if (!user) return;
+      channelRef.current?.postMessage({
+        kind: 'edit',
+        clientId,
+        deck,
+        userId: user.id,
+      } satisfies CollabMessage);
+    },
+    [clientId, user]
+  );
 
-  const broadcastComment = useCallback((action: CommentAction) => {
-    if (!user) return;
-    try {
-      channelRef.current?.postMessage({ kind: 'comment', clientId, action } satisfies CollabMessage);
-    } catch {
-      // ignore
-    }
-  }, [clientId, user]);
-
-  // Rare enough to send the moment it happens, and the others need it promptly
-  // to be able to follow.
   const reportSlide = useCallback((slideId: string | undefined) => {
     if (slideRef.current === slideId) return;
     slideRef.current = slideId;
     announceRef.current();
   }, []);
 
-  // Sent as it moves rather than on the presence heartbeat, or a remote cursor
-  // would jump once every couple of seconds instead of tracking.
-  const reportPointer = useCallback((x?: number, y?: number) => {
-    pointerRef.current = { x, y };
-    const now = Date.now();
-    if (now - lastPointerSendRef.current < POINTER_THROTTLE_MS) return;
-    lastPointerSendRef.current = now;
-    announceRef.current();
-  }, []);
+  const reportSelection = useCallback(
+    (selectedIds: string[]) => {
+      selectedIdsRef.current = selectedIds;
+      channelRef.current?.postMessage({
+        kind: 'selection',
+        clientId,
+        slideId: slideRef.current,
+        selectedIds,
+      } satisfies CollabMessage);
+    },
+    [clientId]
+  );
 
-  const reportChat = useCallback((text?: string) => {
-    const chat = text ? { text, sentAt: Date.now() } : undefined;
-    chatRef.current = chat;
-    try {
-      channelRef.current?.postMessage({ kind: 'chat', clientId, chat } satisfies CollabMessage);
-    } catch {
-      // ignore
-    }
-    announceRef.current();
-  }, [clientId]);
+  const reportPointer = useCallback(
+    (x?: number, y?: number) => {
+      pointerRef.current = { x, y };
+      const now = Date.now();
+      if (now - lastPointerSendRef.current < POINTER_THROTTLE_MS) return;
+      lastPointerSendRef.current = now;
+      announceRef.current();
+    },
+    []
+  );
 
-  return { peers, broadcastDeck, reportSlide, reportPointer, reportChat, broadcastComment };
+  const reportChat = useCallback(
+    (text?: string) => {
+      chatRef.current = text ? { text, sentAt: Date.now() } : undefined;
+      channelRef.current?.postMessage({
+        kind: 'chat',
+        clientId,
+        chat: chatRef.current,
+      } satisfies CollabMessage);
+      announceRef.current();
+    },
+    [clientId]
+  );
+
+  const sendReaction = useCallback(
+    (emoji: string, x: number, y: number) => {
+      if (!user) return;
+      const reaction: ReactionEvent = {
+        id: `rxn_${crypto.randomUUID()}`,
+        clientId,
+        emoji,
+        x,
+        y,
+        userName: user.name,
+        userColor: user.color,
+        createdAt: Date.now(),
+      };
+      channelRef.current?.postMessage({
+        kind: 'reaction',
+        reaction,
+      } satisfies CollabMessage);
+      // Also apply locally
+      onRemoteReactionRef.current?.(reaction);
+    },
+    [clientId, user]
+  );
+
+  const broadcastComment = useCallback(
+    (action: CommentAction) => {
+      channelRef.current?.postMessage({
+        kind: 'comment',
+        clientId,
+        action,
+      } satisfies CollabMessage);
+    },
+    [clientId]
+  );
+
+  return {
+    peers,
+    broadcastDeck,
+    reportSlide,
+    reportPointer,
+    reportSelection,
+    reportChat,
+    sendReaction,
+    broadcastComment,
+  };
 }

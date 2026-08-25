@@ -81,6 +81,20 @@ export function NotificationBell() {
   const { notifications, unreadCount, markAllRead, markSingleRead, respondToInvite } =
     useNotifications(user?.id);
 
+  // One frame at data-open="false" so an incoming notification replays the pop-in.
+  const [gap, setGap] = useState(false);
+  const prevCount = useRef(unreadCount);
+  useEffect(() => {
+    if (unreadCount > prevCount.current) {
+      setGap(true);
+      // Not rAF: a backgrounded tab never runs it, and the badge would stay hidden.
+      const id = window.setTimeout(() => setGap(false), 16);
+      prevCount.current = unreadCount;
+      return () => window.clearTimeout(id);
+    }
+    prevCount.current = unreadCount;
+  }, [unreadCount]);
+
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -104,15 +118,15 @@ export function NotificationBell() {
         aria-label="Notifications"
         className="relative flex items-center justify-center w-[34px] h-[34px] border border-neutral-200 bg-white hover:bg-neutral-50 rounded-none transition-colors cursor-pointer outline-none focus:border-neutral-900"
       >
-        <BellIcon size={15} />
+        <span key={unreadCount} className="t-bell" data-ring={unreadCount > 0}>
+          <BellIcon size={15} />
+        </span>
 
-        {unreadCount > 0 && (
-          <span
-            className="absolute -top-1.5 -right-1.5 min-w-[17px] h-[17px] px-1 bg-rose-600 text-white text-[9px] font-mono font-bold flex items-center justify-center rounded-none shadow-xs border border-white"
-          >
+        <span className="t-badge -top-1.5 -right-1.5" data-open={unreadCount > 0 && !gap}>
+          <span className="t-badge-dot min-w-[17px] h-[17px] px-1 bg-rose-600 text-white text-[9px] font-mono font-bold items-center justify-center rounded-none shadow-xs border border-white">
             {unreadCount}
           </span>
-        )}
+        </span>
       </button>
 
       {/* ── Dedicated Notifications Popover ── */}
@@ -247,7 +261,7 @@ export function NotificationBell() {
                       {isInvite && notif.inviteStatus === 'accepted' && (
                         <div className="mt-2 text-[11px] font-bold text-emerald-700 flex items-center gap-1">
                           <CheckCircleIcon size={12} />
-                          <span>Accepted — access enabled</span>
+                          <span>Accepted, access enabled</span>
                         </div>
                       )}
 

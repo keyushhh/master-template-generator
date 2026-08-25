@@ -1,15 +1,16 @@
 import type { Deck } from '../deck/types';
-
-/**
- * Live editing between tabs of the same browser.
- *
- * BroadcastChannel reaches every tab on this origin and nothing beyond it, so
- * two people on two machines cannot see each other. That is the deliberate
- * limit of a build with no backend: the seam is this file, and a real server
- * would replace its transport without the callers noticing.
- */
-
 import type { CommentAction } from '../comments/types';
+
+export interface ReactionEvent {
+  id: string;
+  clientId: string;
+  emoji: string;
+  x: number;
+  y: number;
+  userName: string;
+  userColor: string;
+  createdAt: number;
+}
 
 export interface CollabPeer {
   clientId: string;
@@ -18,6 +19,8 @@ export interface CollabPeer {
   color: string;
   /** Slide the peer is looking at, so presence can be shown per slide. */
   slideId?: string;
+  /** Currently selected shape or slot IDs on that slide. */
+  selectedIds?: string[];
   /** Pointer position in the 1920x1080 design space, absent when off-canvas. */
   x?: number;
   y?: number;
@@ -33,6 +36,8 @@ export type CollabMessage =
   | { kind: 'edit'; clientId: string; deck: Deck; userId: string }
   | { kind: 'presence'; peer: CollabPeer }
   | { kind: 'chat'; clientId: string; chat?: { text: string; sentAt: number } }
+  | { kind: 'selection'; clientId: string; slideId?: string; selectedIds: string[] }
+  | { kind: 'reaction'; reaction: ReactionEvent }
   | { kind: 'comment'; clientId: string; action: CommentAction }
   | { kind: 'leave'; clientId: string };
 

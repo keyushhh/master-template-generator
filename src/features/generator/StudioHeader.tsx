@@ -33,6 +33,7 @@ import {
   EyeIcon,
   EyeOffIcon,
   HistoryIcon,
+  LightningIcon,
   RedoIcon,
   RefreshIcon,
   ShareIcon,
@@ -78,7 +79,9 @@ interface StudioHeaderProps {
   openCommentsCount?: number;
   /** Everyone else with this deck open, shown as avatars beside the actions. */
   peers?: CollabPeer[];
-  /** Jump to the slide a peer is on. */
+  followingUserId?: string | null;
+  onToggleFollow?: (userId: string) => void;
+  onToggleActivity?: () => void;
   onFollowPeer?: (slideId: string) => void;
   /** Slides a peer can actually be followed to. */
   reachableSlideIds?: Set<string>;
@@ -173,6 +176,9 @@ export function StudioHeader({
   onToggleShowComments,
   openCommentsCount = 0,
   peers = [],
+  followingUserId,
+  onToggleFollow,
+  onToggleActivity,
   onFollowPeer,
   reachableSlideIds,
   canEditDeck = true,
@@ -437,7 +443,12 @@ export function StudioHeader({
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
         {peers.length > 0 && (
           <>
-            <PresenceStack peers={peers} onFollow={onFollowPeer} reachableSlideIds={reachableSlideIds} />
+            <PresenceStack
+              peers={peers}
+              followingUserId={followingUserId}
+              onToggleFollow={onToggleFollow}
+              reachableSlideIds={reachableSlideIds}
+            />
             <span style={{ width: 1, height: 20, background: 'var(--neutral-200)', margin: '0 6px' }} />
           </>
         )}
@@ -478,6 +489,12 @@ export function StudioHeader({
         <IconBtn onClick={() => onOpenHistory?.()} title="Version history" label="Version history">
           <HistoryIcon size={15} />
         </IconBtn>
+
+        {onToggleActivity && (
+          <IconBtn onClick={onToggleActivity} title="Deck activity stream" label="Deck activity">
+            <LightningIcon size={14} />
+          </IconBtn>
+        )}
 
         {/* Single Comments Toggle Icon Button */}
         {onToggleShowComments && (

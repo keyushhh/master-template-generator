@@ -105,6 +105,12 @@ import type { DeckComment, CommentAction } from '../features/comments/types';
 import { VersionHistoryPanel } from '../features/deck/VersionHistoryPanel';
 import { DEMO_USERS } from '../features/auth/demoUsers';
 import { addNotification } from '../features/notifications/notificationStore';
+import { PeerSelectionsLayer } from '../features/collab/PeerSelectionsLayer';
+import { ReactionPicker } from '../features/collab/ReactionPicker';
+import { ReactionBursts } from '../features/collab/ReactionBursts';
+import { ActivityPanel } from '../features/activity/ActivityPanel';
+import { logDeckActivity } from '../features/activity/activityStore';
+import type { ReactionEvent } from '../features/collab/collabChannel';
 
 // Undo/redo history for the committed deck.
 const HISTORY_LIMIT = 50;
@@ -192,6 +198,7 @@ type DraftAction =
   | { type: 'open'; deck: Deck | null }
   | { type: 'close' }
   | { type: 'edit'; fn: (prev: Deck) => Deck }
+  | { type: 'remote'; deck: Deck }
   | { type: 'undo' }
   | { type: 'redo' };
 
@@ -201,6 +208,9 @@ function draftReducer(state: DraftHistory, action: DraftAction): DraftHistory {
       return { past: [], present: action.deck, future: [] };
     case 'close':
       return { past: [], present: null, future: [] };
+    case 'remote':
+      if (!state.present) return state;
+      return { ...state, present: action.deck };
     case 'edit': {
       if (!state.present) return state;
       const next = action.fn(state.present);
@@ -327,6 +337,7 @@ export function MasterTemplatePage() {
   const applyRemoteDeck = useCallback((incoming: Deck) => {
     applyingRemoteRef.current = true;
     dispatchHistory({ type: 'remote', deck: incoming });
+    dispatchDraft({ type: 'remote', deck: incoming });
     applyingRemoteRef.current = false;
   }, []);
 
@@ -338,6 +349,19 @@ export function MasterTemplatePage() {
   const [showComments, setShowComments] = useState(true);
   const [showResolvedComments, setShowResolvedComments] = useState(false);
   const [cursorChatActive, setCursorChatActive] = useState(false);
+
+  // New Collaboration Features State
+  const [followingUserId, setFollowingUserId] = useState<string | null>(null);
+  const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+  const [reactions, setReactions] = useState<ReactionEvent[]>([]);
+  const [reactionPickerPos, setReactionPickerPos] = useState<{ x: number; y: number } | null>(null);
+  const mouseClientPosRef = useRef<{ x: number; y: number; normX: number; normY: number }>({
+    x: 0,
+    y: 0,
+    normX: 0,
+    normY: 0,
+  });
+  const slideContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Reload comments when activeId changes
   useEffect(() => {
@@ -355,12 +379,60 @@ export function MasterTemplatePage() {
     });
   }, [activeId]);
 
-  const { peers, broadcastDeck, reportSlide, reportPointer, reportChat, broadcastComment } = useCollab({
+  const handleRemoteReaction = useCallback((rxn: ReactionEvent) => {
+    setReactions((prev) => [...prev.slice(-20), rxn]);
+  }, []);
+
+  const {
+    peers,
+    broadcastDeck,
+    reportSlide,
+    reportPointer,
+    reportSelection,
+    reportChat,
+    sendReaction,
+    broadcastComment,
+  } = useCollab({
     projectId: activeId,
     user,
     onRemoteDeck: applyRemoteDeck,
     onRemoteComment: handleRemoteComment,
+    onRemoteReaction: handleRemoteReaction,
   });
+
+  // Follow Mode user memo
+  const followingUser = useMemo(
+    () => (followingUserId ? peers.find((p) => p.userId === followingUserId) : null),
+    [followingUserId, peers]
+  );
+
+  // Keyboard shortcut for Reaction Picker ('E')
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey
+      ) {
+        return;
+      }
+      if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        setReactionPickerPos({
+          x: mouseClientPosRef.current.x || window.innerWidth / 2,
+          y: mouseClientPosRef.current.y || window.innerHeight / 2,
+        });
+      } else if (e.key === 'Escape' && followingUserId) {
+        setFollowingUserId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [followingUserId]);
 
   const handleSaveComment = useCallback(
     (slideId: string, x: number, y: number, content: string) => {
@@ -560,7 +632,14 @@ export function MasterTemplatePage() {
   const mutateDeck = useCallback(
     (fn: (prev: Deck) => Deck) => {
       if (draft !== null) {
-        dispatchDraft({ type: 'edit', fn });
+        dispatchDraft({
+          type: 'edit',
+          fn: (prev) => {
+            const next = fn(prev);
+            if (!applyingRemoteRef.current) broadcastRef.current(next);
+            return next;
+          },
+        });
         setDirty(true);
       } else {
         commitDeck(fn(deck));
@@ -797,16 +876,47 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     };
   })();
 
+  // Sync selection across peers
+  useEffect(() => {
+    if (!selection) {
+      reportSelection([]);
+      return;
+    }
+    if (selection.kind === 'slot') {
+      reportSelection(slotsOf(selection));
+    } else if (selection.kind === 'run') {
+      reportSelection(shapeIdsOf(selection));
+    } else if (selection.kind === 'overlay') {
+      reportSelection([selection.shapeId]);
+    }
+  }, [selection, reportSelection]);
+
+  // Follow Mode sync
+  useEffect(() => {
+    if (!followingUserId) return;
+    const target = peers.find((p) => p.userId === followingUserId);
+    if (target?.slideId && target.slideId !== currentSlideId) {
+      const idx = displayDeck.slides.findIndex((s) => s.instanceId === target.slideId);
+      if (idx >= 0) {
+        setCurrentSlideId(target.slideId);
+      }
+    }
+  }, [followingUserId, peers, currentSlideId, displayDeck.slides]);
+
   const handleEditSlide = useCallback(
     (instanceId: string, updater: (content: SlideContent) => SlideContent) => {
       dispatchDraft({
         type: 'edit',
-        fn: (prev) => ({
-          ...prev,
-          slides: prev.slides.map((s) =>
-            s.instanceId === instanceId ? { ...s, content: updater(s.content) } : s
-          ),
-        }),
+        fn: (prev) => {
+          const next = {
+            ...prev,
+            slides: prev.slides.map((s) =>
+              s.instanceId === instanceId ? { ...s, content: updater(s.content) } : s
+            ),
+          };
+          if (!applyingRemoteRef.current) broadcastRef.current(next);
+          return next;
+        },
       });
       setDirty(true);
     },
@@ -2528,6 +2638,9 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onToggleShowComments={() => setShowComments((v) => !v)}
         openCommentsCount={openCommentsCount}
         peers={peers}
+        followingUserId={followingUserId}
+        onToggleFollow={(uid) => setFollowingUserId((prev) => (prev === uid ? null : uid))}
+        onToggleActivity={() => setActivityPanelOpen((v) => !v)}
         onFollowPeer={setCurrentSlideId}
         reachableSlideIds={followableSlideIds}
         canEditDeck={mayEdit}
@@ -2539,12 +2652,72 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onDeleteDeck={handleDeleteDeck}
       />
 
+      {/* Spotlight / Follow Mode Banner */}
+      {followingUser && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 76,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 150,
+            backgroundColor: '#1E1E1E',
+            color: '#FFFFFF',
+            padding: '6px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            border: '1px solid #333333',
+            borderRadius: 0,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          }}
+          className="animate-in fade-in slide-in-from-top-2 duration-150"
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              backgroundColor: followingUser.color || '#10B981',
+              borderRadius: 0,
+            }}
+            className="animate-pulse"
+          />
+          <span style={{ fontSize: 12, fontWeight: 700 }}>
+            Following {followingUser.name}
+          </span>
+          <button
+            type="button"
+            onClick={() => setFollowingUserId(null)}
+            style={{
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              color: '#A3A3A3',
+              textDecoration: 'underline',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              marginLeft: 6,
+            }}
+            className="hover:text-white transition-colors"
+          >
+            Stop (Esc)
+          </button>
+        </div>
+      )}
+
       <div
-        style={{ cursor: isCommentMode ? 'crosshair' : undefined }}
+        ref={slideContainerRef}
+        style={{ cursor: isCommentMode ? 'crosshair' : undefined, position: 'relative' }}
         onPointerMove={(e) => {
           const stage = (e.target as HTMLElement).closest?.('[data-slide]')
             ?? document.querySelector('[data-slide]');
           const rect = (stage as HTMLElement | null)?.getBoundingClientRect();
+          mouseClientPosRef.current = {
+            x: e.clientX,
+            y: e.clientY,
+            normX: rect && rect.width > 0 ? (e.clientX - rect.left) / (rect.width / 1920) : 0,
+            normY: rect && rect.width > 0 ? (e.clientY - rect.top) / (rect.width / 1920) : 0,
+          };
           if (!rect || rect.width <= 0) return;
           const scale = rect.width / 1920;
           reportPointer((e.clientX - rect.left) / scale, (e.clientY - rect.top) / scale);
@@ -2568,10 +2741,21 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onRenameSlide={handleRename}
         revision={textRevision}
         currentId={currentSlideId}
-        onNavigate={setCurrentSlideId}
+        onNavigate={(id) => {
+          setFollowingUserId(null); // break follow mode on manual navigation
+          setCurrentSlideId(id);
+        }}
         onPickVideo={setVideoPickerFor}
       />
+
+      {/* Multiplayer Selection Bounding Boxes Layer */}
+      <PeerSelectionsLayer
+        peers={peers}
+        currentSlideId={currentSlideId ?? ''}
+        slideContainerRef={slideContainerRef}
+      />
       </div>
+
       <RemoteCursors peers={peers} slideId={currentSlideId} />
 
       {/* Figma-style Canvas Comments Layer */}
@@ -2606,6 +2790,28 @@ function pristineDeckFor(templateId: string | undefined): Deck {
           userName={user.name}
         />
       )}
+
+      {/* Live Cursor Reaction Bursts (Hardware-Accelerated 60fps Canvas) */}
+      <ReactionBursts reactions={reactions} />
+
+      {/* Reaction Picker ('E' key) */}
+      {reactionPickerPos && (
+        <ReactionPicker
+          x={reactionPickerPos.x}
+          y={reactionPickerPos.y}
+          onSelect={(emoji) => {
+            sendReaction(emoji, mouseClientPosRef.current.normX, mouseClientPosRef.current.normY);
+          }}
+          onClose={() => setReactionPickerPos(null)}
+        />
+      )}
+
+      {/* Deck Activity & Audit Stream Panel */}
+      <ActivityPanel
+        open={activityPanelOpen}
+        onClose={() => setActivityPanelOpen(false)}
+        projectId={activeId ?? 'default'}
+      />
 
       {/* One editing toolbar. This used to be three stacked bars (insert,
           format, session); the stack was heavier than the tools we're competing

@@ -14,6 +14,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.1.0',
+    date: '2026-08-25',
+    summary: 'Reactions throw real confetti, and the bell reacts when something lands.',
+    improved: [
+      'A reaction now bursts as physical confetti. The paper tumbles, catches the air, falls and settles along the bottom of the slide instead of fading in mid air.',
+      'The notification bell answers a new notification: the count slides in on a diagonal and springs into place, and the bell gives a short ring.',
+    ],
+  },
+  {
     version: '3.0.0',
     date: '2026-08-25',
     summary: 'Sign in, invite people, and edit a deck together.',
