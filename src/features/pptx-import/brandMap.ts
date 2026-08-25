@@ -175,6 +175,15 @@ export function snapToBrand(hex: string, brand: BrandMap = WOZKU_BRAND, flip = f
   return nearestByLuminance(brand.accents, lum);
 }
 
+// A slide's ground is never the accent: a full-bleed emerald slide is exactly
+// what "the accent stays scarce" rules out, whatever the source deck used.
+export function snapGround(hex: string, brand: BrandMap = WOZKU_BRAND, flip = false): string {
+  const clean = hex.replace('#', '').toUpperCase();
+  if (!/^[0-9A-F]{6}$/.test(clean)) return clean;
+  const lum = luminance(toRgb(clean));
+  return nearestByLuminance(brand.neutrals, flip ? 1 - lum : lum);
+}
+
 /**
  * Mirrors every colour in the deck onto the opposite end of its ramp, so a deck
  * built dark reads correctly on a light template and the reverse.
@@ -205,7 +214,7 @@ function flipAll(slides: ImportedSlide[], brand: BrandMap): ImportedSlide[] {
   });
   return slides.map((s) => ({
     ...s,
-    base: snapToBrand(s.base, brand, true),
+    base: snapGround(s.base, brand, true),
     shapes: s.shapes.map(shape),
   }));
 }

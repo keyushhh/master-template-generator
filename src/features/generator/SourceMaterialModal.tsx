@@ -212,7 +212,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
       const { parsePptx } = await import('../pptx-import/pptxParser');
       const { brandMapFor } = await import('../pptx-import/brandMap');
       const { slides, warnings, relit } = await parsePptx(file, brandMapFor(deckTheme, presentationTemplateId));
-      const deck = buildDeckFromImport(slides, { themeId: deckTheme.id, presentationTemplateId });
+      const deck = buildDeckFromImport(slides, { themeId: deckTheme.id, presentationTemplateId, theme: deckTheme });
       onImportDeck(deck, file.name.replace(/\.pptx$/i, ''), warnings, relit);
       onClose();
     } catch (err) {
@@ -237,7 +237,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
         // to be seen counting up rather than sitting on one unchanging word.
         (page, total) => setBusyLabel(`Reading PDF… page ${page} of ${total}`)
       );
-      const deck = buildDeckFromImport(slides, { themeId: deckTheme.id, presentationTemplateId });
+      const deck = buildDeckFromImport(slides, { themeId: deckTheme.id, presentationTemplateId, theme: deckTheme });
       onImportDeck(deck, file.name.replace(/\.pdf$/i, ''), warnings, relit);
       onClose();
     } catch (err) {

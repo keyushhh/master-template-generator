@@ -12,7 +12,7 @@ import { ConfirmModal } from '../ui/ConfirmModal';
 import { FitProbe } from '../fit/FitProbe';
 import { FitFixChip } from '../fit/FitFixChip';
 import { css as themeCss, themeCssVars, WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
-import { backgroundCssFor, canCustomizeBackground, hexIsDark } from '../deck/slideBackground';
+import { backgroundCssFor, canCustomizeBackground, hexIsDark, importedInk } from '../deck/slideBackground';
 import { TEXT_ONLY_MAX_W, TEXT_ONLY_PAD_X, TEXT_ONLY_PAD_Y } from '../deck/deckBuilder';
 import {
   EditorialSlideCover,
@@ -140,6 +140,10 @@ export interface SlideRenderProps {
   /** Deck-level logo size multiplier, and its setter. */
   logoScale?: number;
   onLogoScaleChange?: (next: number) => void;
+  /** The deck's theme. Templates read their look from the CSS vars the slide
+   *  wrapper scopes; the imported renderer needs the object, because grid and
+   *  glow are decisions rather than values. */
+  theme?: DeckTheme;
   /** DOM id of this slide's wrapper - lets a renderer target its own fields. */
   instanceId?: string;
   /** Enter edit mode from a view-mode click (see SlideBlank). */
@@ -3439,10 +3443,21 @@ export function importedIsDark(base?: string): boolean {
  * so editing a bold label inside a mixed-format line doesn't flatten the rest
  * of it back to plain text.
  */
-function SlideImported({ content, editing, onEdit, instanceId, selection, onSelect }: SlideRenderProps) {
+function SlideImported({ content, editing, onEdit, instanceId, selection, onSelect, theme }: SlideRenderProps) {
   const shapes = content.shapes ?? [];
   const base = content.importedBase ?? 'FFFFFF';
   const dark = importedIsDark(base);
+  // The chosen template's own decoration, not the house one: a template that
+  // shows no grid must not grow one just because the slide was imported.
+  const showGrid = theme?.styleSystem?.showGrid ?? true;
+  const glowStyle = theme?.styleSystem?.glowColor
+    ? { background: `radial-gradient(circle, ${theme.styleSystem.glowColor} 0%, transparent 70%)` }
+    : undefined;
+
+  // Uncoloured text takes its ink from what it actually sits on, not from the
+  // slide: dark text on a dark card is how imported cards came out unreadable.
+  const inkOn = (fill?: string) =>
+    (importedInk(fill, base) === 'light' ? '#ffffff' : 'var(--neutral-900)');
 
   /** Live geometry during a drag/resize, so the shape follows the pointer
    *  without writing to the deck (and pushing an undo entry) on every move. */
@@ -3573,7 +3588,7 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: `#${base}`, overflow: 'hidden' }}>
-      {dark ? (
+      {showGrid && (dark ? (
         <div
           style={{
             position: 'absolute',
@@ -3588,9 +3603,9 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
         />
       ) : (
         <SlideGrid />
-      )}
-      <Glow style={{ top: -260, right: -300 }} />
-      <Glow style={{ bottom: -420, left: -360, opacity: 0.6 }} />
+      ))}
+      <Glow style={{ top: -260, right: -300, ...glowStyle }} />
+      <Glow style={{ bottom: -420, left: -360, opacity: 0.6, ...glowStyle }} />
 
       {shapes.map((sh) => {
         const rect = live?.id === sh.id ? live.rect : sh;
@@ -3659,11 +3674,26 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
             <div
               key={sh.id}
               data-selectable
-              style={boxStyle}
+              style={{ ...boxStyle, overflow: sh.crop ? 'hidden' : undefined }}
               onPointerDown={(e) => editing && beginDrag(e, sh, null)}
               onClick={(e) => selectShape(sh.id, e.shiftKey)}
             >
-              <img src={sh.imageUrl} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
+              <img
+                src={sh.imageUrl}
+                alt=""
+                draggable={false}
+                style={sh.crop
+                  ? {
+                    position: 'absolute',
+                    left: `${sh.crop.l * 100}%`,
+                    top: `${sh.crop.t * 100}%`,
+                    width: `${(1 - sh.crop.l - sh.crop.r) * 100}%`,
+                    height: `${(1 - sh.crop.t - sh.crop.b) * 100}%`,
+                    display: 'block',
+                    pointerEvents: 'none',
+                  }
+                  : { width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }}
+              />
               {handles}
             </div>
           );
@@ -3706,7 +3736,7 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
                       }}
                     >
                       {(cell.paragraphs ?? []).map((para, pi) => (
-                        <div key={pi} style={{ textAlign: para.align ?? 'left', lineHeight: 1.35 }}>
+                        <div key={pi} style={{ textAlign: para.align ?? 'left', lineHeight: para.leadingPx ? `${para.leadingPx}px` : 1.35 }}>
                           {para.runs.map((run, runI) => (
                             <span
                               key={runI}
@@ -3716,7 +3746,7 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
                                 fontWeight: run.bold ? 700 : 400,
                                 fontStyle: run.italic ? 'italic' : undefined,
                                 textDecoration: run.underline ? 'underline' : undefined,
-                                color: run.color ? `#${run.color}` : dark ? '#ffffff' : 'var(--neutral-900)',
+                                color: run.color ? `#${run.color}` : inkOn(cell.fill ?? sh.fill),
                                 whiteSpace: 'pre-wrap',
                               }}
                             >
@@ -3780,8 +3810,8 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
                 key={pi}
                 style={{
                   textAlign: para.align ?? 'left',
-                  minHeight: para.runs.length ? undefined : '0.7em',
-                  lineHeight: 1.35,
+                  minHeight: para.runs.length ? undefined : (para.leadingPx ?? 12),
+                  lineHeight: para.leadingPx ? `${para.leadingPx}px` : 1.35,
                 }}
               >
                 {para.runs.map((run, ri) => (
@@ -3806,7 +3836,7 @@ function SlideImported({ content, editing, onEdit, instanceId, selection, onSele
                       fontWeight: run.bold ? 700 : 400,
                       fontStyle: run.italic ? 'italic' : undefined,
                       textDecoration: run.underline ? 'underline' : undefined,
-                      color: run.color ? `#${run.color}` : dark ? '#ffffff' : 'var(--neutral-900)',
+                      color: run.color ? `#${run.color}` : inkOn(sh.fill),
                       whiteSpace: 'pre-wrap',
                       ...(editing && runSelected(sh.id, pi, ri)
                         ? { outline: '2px solid var(--emerald-500)', outlineOffset: 2, borderRadius: 2 }
@@ -4010,7 +4040,7 @@ export function SlideStage({
             }}
           />
         )}
-        {Renderer && <Renderer ast={ast} content={slide.content} num={num} editing={false} onEdit={() => { }} logoUrl={logoUrl} />}
+        {Renderer && <Renderer ast={ast} content={slide.content} num={num} editing={false} onEdit={() => { }} logoUrl={logoUrl} theme={theme} />}
         {/* Inserted shapes must appear here too, or Present mode and the Review
             thumbnails would disagree with the editor (and with the export). */}
         <ShapeOverlay
@@ -4278,6 +4308,7 @@ export function PresentationCanvas({
                     onRequestEdit={onRequestEdit}
                     selection={selection}
                     onSelect={onSelect}
+                    theme={theme}
                   />
                 </SlideSlots>
               )}

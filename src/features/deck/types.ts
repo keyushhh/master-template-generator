@@ -35,6 +35,10 @@ export interface ImportedRun {
 export interface ImportedParagraph {
   runs: ImportedRun[];
   align?: 'left' | 'center' | 'right';
+  /** Line height in px, as the source deck set it. Absent means the renderer's
+   *  own default. A blank paragraph is a spacer of exactly this height, which
+   *  is how a source deck's deliberate gaps survive. */
+  leadingPx?: number;
 }
 
 /** One cell of an imported table. Its own fill wins over the table's banding,
@@ -65,6 +69,10 @@ export interface ImportedShape {
   line?: { color: string; widthPx: number };
   /** Present for kind==='image'. Data URL. */
   imageUrl?: string;
+  /** Present for kind==='image'. Fractions of the box the picture is inset by,
+   *  as PowerPoint's fillRect stores them: negative extends past the edge and
+   *  is cropped. Absent means the picture simply fits the box. */
+  crop?: { l: number; t: number; r: number; b: number };
   paragraphs?: ImportedParagraph[];
   vAlign?: 'top' | 'middle' | 'bottom';
   /** Present for kind==='table'. Column widths sum to `w`. */

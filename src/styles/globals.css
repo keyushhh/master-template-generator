@@ -86,3 +86,9 @@
     0 32px 74px -18px rgba(15, 23, 20, 0.36);
 }
 
+
+/* Chrome draws its own arrow inside an input that has a datalist. The Share
+   window puts its own control in that space, and two arrows read as a bug. */
+input[list]::-webkit-calendar-picker-indicator {
+  display: none;
+}

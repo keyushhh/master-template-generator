@@ -592,6 +592,27 @@ export function ZoomOutIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** Lucide: link */
+export function LinkIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </Lucide>
+  );
+}
+
+/** Lucide: history */
+export function HistoryIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <path d="M3 3v5h5" />
+      <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+      <path d="M12 7v5l4 2" />
+    </Lucide>
+  );
+}
+
 /** Lucide: lock */
 export function LockIcon({ size = 14 }: IconProps) {
   return (

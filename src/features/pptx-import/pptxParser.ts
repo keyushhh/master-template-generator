@@ -6,7 +6,7 @@ import type {
   ImportedRun,
   ImportedTableRow,
 } from '../deck/types';
-import { mapFont, snapToBrand, relightForBrand, WOZKU_BRAND, type BrandMap } from './brandMap';
+import { mapFont, snapToBrand, snapGround, relightForBrand, WOZKU_BRAND, type BrandMap } from './brandMap';
 
 /**
  * Reads an uploaded .pptx and lifts each slide into positioned shapes in the
@@ -21,6 +21,7 @@ import { mapFont, snapToBrand, relightForBrand, WOZKU_BRAND, type BrandMap } fro
 const EMU_PER_PX = 9525; // 914400 EMU/in at 96 px/in
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const CANVAS_W = 1920;
 const CANVAS_H = 1080;
 
@@ -187,6 +188,230 @@ async function loadTableStyleMap(zip: JSZip, theme: ThemeMap): Promise<TableStyl
   return map;
 }
 
+/** '../slideLayouts/x.xml' declared by a slide resolves to 'ppt/slideLayouts/x.xml'. */
+function resolveTarget(part: string, target: string): string {
+  if (target.startsWith('/')) return target.slice(1);
+  const segs = part.split('/').slice(0, -1);
+  for (const seg of target.split('/')) {
+    if (seg === '..') segs.pop();
+    else if (seg !== '.') segs.push(seg);
+  }
+  return segs.join('/');
+}
+
+/** Relationship id to full part path, for whichever part declared them. */
+async function loadRels(zip: JSZip, parser: DOMParser, part: string): Promise<Map<string, string>> {
+  const rels = new Map<string, string>();
+  const i = part.lastIndexOf('/');
+  const xml = await zip.file(`${part.slice(0, i)}/_rels/${part.slice(i + 1)}.rels`)?.async('string');
+  if (!xml) return rels;
+  const doc = parser.parseFromString(xml, 'application/xml');
+  Array.from(doc.getElementsByTagName('Relationship')).forEach((rel) => {
+    const id = rel.getAttribute('Id');
+    const target = rel.getAttribute('Target');
+    if (id && target) rels.set(id, resolveTarget(part, target));
+  });
+  return rels;
+}
+
+/** An image's average colour, which is all a picture background is asked for. */
+async function averageHex(dataUrl: string): Promise<string | undefined> {
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+    const canvas = document.createElement('canvas');
+    canvas.width = 8;
+    canvas.height = 8;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return undefined;
+    ctx.drawImage(img, 0, 0, 8, 8);
+    const { data } = ctx.getImageData(0, 0, 8, 8);
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
+    }
+    const n = data.length / 4;
+    return [r / n, g / n, b / n]
+      .map((v) => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase();
+  } catch {
+    return undefined;
+  }
+}
+
+/** A <p:bg> resolved to one hex, whether it is painted flat, graded or with a picture. */
+async function bgHex(
+  bg: Element,
+  theme: ThemeMap,
+  rels: Map<string, string>,
+  media: Map<string, string>
+): Promise<string | undefined> {
+  const pr = firstChild(bg, 'bgPr');
+  if (pr) {
+    const solid = readFill(pr, theme);
+    if (solid) return solid;
+    const grad = firstChild(pr, 'gradFill');
+    const stop = grad ? el(grad, A, 'gs') : null;
+    if (stop) {
+      const srgb = firstChild(stop, 'srgbClr')?.getAttribute('val');
+      const scheme = firstChild(stop, 'schemeClr')?.getAttribute('val');
+      const hex = srgb ?? (scheme ? theme[scheme] : undefined);
+      if (hex) return hex;
+    }
+    const fill = firstChild(pr, 'blipFill');
+    const embed = fill ? el(fill, A, 'blip')?.getAttributeNS(R, 'embed') : null;
+    const data = embed ? media.get(rels.get(embed) ?? '') : undefined;
+    if (data) return averageHex(data);
+  }
+  const ref = firstChild(bg, 'bgRef');
+  if (ref) {
+    const srgb = firstChild(ref, 'srgbClr')?.getAttribute('val');
+    const scheme = firstChild(ref, 'schemeClr')?.getAttribute('val');
+    return srgb ?? (scheme ? theme[scheme] : undefined);
+  }
+  return undefined;
+}
+
+// Most decks paint the background once on the master and never repeat it per
+// slide, so reading only the slide leaves every base white - and white text on
+// a white base is exactly how an imported deck arrives unreadable.
+async function readBackground(
+  zip: JSZip,
+  parser: DOMParser,
+  slidePart: string,
+  theme: ThemeMap,
+  media: Map<string, string>
+): Promise<string | undefined> {
+  let part: string | undefined = slidePart;
+  for (let hop = 0; part && hop < 3; hop++) {
+    const xml: string | undefined = await zip.file(part)?.async('string');
+    if (!xml) return undefined;
+    const doc = parser.parseFromString(xml, 'application/xml');
+    const rels = await loadRels(zip, parser, part);
+    const bg = doc.getElementsByTagNameNS(P, 'bg')[0];
+    const hex = bg ? await bgHex(bg, theme, rels, media) : undefined;
+    if (hex) return hex;
+    part = Array.from(rels.values()).find((t) => /slideLayouts\/|slideMasters\//.test(t));
+  }
+  return undefined;
+}
+
+function isOpaque(ctx: CanvasRenderingContext2D, w: number, h: number): boolean {
+  const { data } = ctx.getImageData(0, 0, w, h);
+  for (let i = 3; i < data.length; i += 4) if (data[i] < 255) return false;
+  return true;
+}
+
+// How much of a picture has to be see-through, and how light its ink has to be,
+// before it counts as a logo cut out for a dark slide rather than a picture.
+const CUTOUT_CLEAR = 0.3;
+const CUTOUT_INK = 0.75;
+
+// A logo drawn in white for a dark deck vanishes on a light one, and no amount
+// of re-colouring the slide behind it helps. Cut-out art is the one kind of
+// picture that can be re-lit like everything else: its ink flips and its
+// transparency keeps the shape. A photo is opaque and never qualifies.
+async function invertCutout(dataUrl: string): Promise<string | undefined> {
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, img.width);
+    canvas.height = Math.max(1, img.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return undefined;
+    ctx.drawImage(img, 0, 0);
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = image.data;
+    const pixels = d.length / 4;
+    let clear = 0;
+    let lum = 0;
+    let ink = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 128) {
+        clear += 1;
+        continue;
+      }
+      lum += (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+      ink += 1;
+    }
+    if (!ink || clear / pixels < CUTOUT_CLEAR || lum / ink < CUTOUT_INK) return undefined;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 8) continue;
+      const max = Math.max(d[i], d[i + 1], d[i + 2]);
+      const min = Math.min(d[i], d[i + 1], d[i + 2]);
+      // A coloured mark keeps its hue; only the black-and-white part flips.
+      if (max === 0 || (max - min) / max >= 0.15) continue;
+      d[i] = 255 - d[i];
+      d[i + 1] = 255 - d[i + 1];
+      d[i + 2] = 255 - d[i + 2];
+    }
+    ctx.putImageData(image, 0, 0);
+    return canvas.toDataURL('image/png');
+  } catch {
+    return undefined;
+  }
+}
+
+/** Re-lights every cut-out logo in the deck, once per distinct picture. */
+async function relightArt(slides: ImportedSlide[]): Promise<number> {
+  const done = new Map<string, string>();
+  let flipped = 0;
+  for (const slide of slides) {
+    for (const shape of slide.shapes) {
+      if (shape.kind !== 'image' || !shape.imageUrl) continue;
+      const from = shape.imageUrl;
+      let to = done.get(from);
+      if (to === undefined) {
+        to = (await invertCutout(from)) ?? from;
+        done.set(from, to);
+        if (to !== from) flipped += 1;
+      }
+      shape.imageUrl = to;
+    }
+  }
+  return flipped;
+}
+
+// Art is re-encoded at screen size: a deck's media folder routinely runs to
+// tens of MB at print resolution, and the whole library shares ~5MB of storage.
+async function shrink(dataUrl: string, mime: string, maxDim = 1200): Promise<string> {
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    if (scale === 1 && dataUrl.length < 200_000) return dataUrl;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // PNG only earns its size when the art really is cut out; a screenshot in a
+    // lossless wrapper is an order of magnitude bigger than it needs to be.
+    const keepPng = mime === 'image/png' && !isOpaque(ctx, canvas.width, canvas.height);
+    const out = keepPng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.82);
+    return out.length < dataUrl.length ? out : dataUrl;
+  } catch {
+    return dataUrl;
+  }
+}
+
+// PowerPoint stores leading as either exact points or a percentage of the type
+// size, and both change where the next line lands.
+function readLeading(pPr: Element | null, fontPx: number): number | undefined {
+  const lnSpc = pPr ? firstChild(pPr, 'lnSpc') : null;
+  if (!lnSpc) return undefined;
+  const pts = firstChild(lnSpc, 'spcPts')?.getAttribute('val');
+  if (pts) return (Number(pts) / 100) * (96 / 72);
+  const pct = firstChild(lnSpc, 'spcPct')?.getAttribute('val');
+  if (pct && fontPx) return (Number(pct) / 100000) * fontPx;
+  return undefined;
+}
+
 function readParagraphs(sp: Element, theme: ThemeMap, brand: BrandMap): ImportedParagraph[] | undefined {
   const txBody = el(sp, 'http://schemas.openxmlformats.org/presentationml/2006/main', 'txBody')
     ?? el(sp, A, 'txBody');
@@ -216,16 +441,20 @@ function readParagraphs(sp: Element, theme: ThemeMap, brand: BrandMap): Imported
       }
       runs.push(run);
     }
+    const pPr = firstChild(p, 'pPr');
+    const endSz = firstChild(p, 'endParaRPr')?.getAttribute('sz');
+    const leadingPx = readLeading(pPr, runs[0]?.sizePx ?? (endSz ? (Number(endSz) / 100) * (96 / 72) : 0));
     if (!runs.length) {
-      // Preserve deliberate blank lines between paragraphs.
-      paragraphs.push({ runs: [] });
+      // A blank line is a spacer, and collapsing it to a default height is what
+      // pushed the copy under it up into the label above.
+      paragraphs.push({ runs: [], leadingPx });
       continue;
     }
-    const pPr = firstChild(p, 'pPr');
     const algn = pPr?.getAttribute('algn');
     paragraphs.push({
       runs,
       align: algn === 'ctr' ? 'center' : algn === 'r' ? 'right' : 'left',
+      leadingPx,
     });
   }
   // Trailing empties are layout noise, not content.
@@ -258,6 +487,17 @@ function readXfrm(spPr: Element | null, frame: Frame, scale: number) {
     w: w * frame.sx * scale,
     h: h * frame.sy * scale,
   };
+}
+
+// A picture placed with a zoom or a crop stores that as fillRect insets, in
+// thousandths of a percent, where a negative value runs past the box's edge.
+function readCrop(blipFill: Element | null): ImportedShape['crop'] {
+  const stretch = blipFill ? firstChild(blipFill, 'stretch') : null;
+  const rect = stretch ? firstChild(stretch, 'fillRect') : null;
+  if (!rect) return undefined;
+  const side = (name: string) => Number(rect.getAttribute(name) ?? 0) / 100000;
+  const crop = { l: side('l'), t: side('t'), r: side('r'), b: side('b') };
+  return crop.l || crop.t || crop.r || crop.b ? crop : undefined;
 }
 
 function geomOf(spPr: Element | null): 'rect' | 'ellipse' {
@@ -435,8 +675,19 @@ function walk(
         warnings.push('An image could not be read and was skipped.');
         continue;
       }
-      out.push({ ...base, kind: 'image', imageUrl: data });
+      out.push({ ...base, kind: 'image', imageUrl: data, crop: readCrop(firstChild(node, 'blipFill')) });
       continue;
+    }
+
+    // A picture used as a shape's fill is how most cropped or rounded art is
+    // placed, and reading only solidFill dropped every one of them.
+    const picFill = spPr ? firstChild(spPr, 'blipFill') : null;
+    const picEmbed = picFill ? el(picFill, A, 'blip')?.getAttributeNS(R, 'embed') : null;
+    const picData = picEmbed ? media.get(rels.get(picEmbed) ?? '') : undefined;
+    if (picData) {
+      out.push({ ...base, kind: 'image', imageUrl: picData, crop: readCrop(picFill) });
+      counter.n += 1;
+      base.id = `imp-${counter.n}`;
     }
 
     const fill = readFill(spPr, theme);
@@ -540,7 +791,7 @@ export async function parsePptx(file: File | ArrayBuffer, brand: BrandMap = WOZK
       const mime = MIME[ext];
       if (!mime) return; // EMF/WMF vector art can't be shown in a browser
       const b64 = await zip.file(n)!.async('base64');
-      media.set(n.replace(/^ppt\//, ''), `data:${mime};base64,${b64}`);
+      media.set(n, await shrink(`data:${mime};base64,${b64}`, mime));
     }));
 
   const order = await slideOrder(zip);
@@ -557,31 +808,19 @@ export async function parsePptx(file: File | ArrayBuffer, brand: BrandMap = WOZK
     if (!xml) continue;
     const doc = parser.parseFromString(xml, 'application/xml');
 
-    const relsXml = await zip.file(
-      name.replace(/slides\/(slide\d+)\.xml$/, 'slides/_rels/$1.xml.rels'))?.async('string');
-    const rels = new Map<string, string>();
-    if (relsXml) {
-      const relsDoc = parser.parseFromString(relsXml, 'application/xml');
-      Array.from(relsDoc.getElementsByTagName('Relationship')).forEach((rel) => {
-        const id = rel.getAttribute('Id');
-        const target = rel.getAttribute('Target');
-        if (id && target) rels.set(id, target.replace(/^\.\.\//, ''));
-      });
-    }
+    const rels = await loadRels(zip, parser, name);
 
     const spTree = doc.getElementsByTagNameNS(
       'http://schemas.openxmlformats.org/presentationml/2006/main', 'spTree')[0];
     if (!spTree) continue;
 
-    const bg = doc.getElementsByTagNameNS(
-      'http://schemas.openxmlformats.org/presentationml/2006/main', 'bg')[0];
-    const bgSrgb = bg?.getElementsByTagNameNS(A, 'srgbClr')[0]?.getAttribute('val');
+    const slideBase = await readBackground(zip, parser, name, theme, media);
 
     const shapes: ImportedShape[] = [];
     walk(spTree, IDENTITY, scale, media, rels, theme, brand, tableStyles, shapes, warnings, { n: 0 });
     slides.push({
       shapes,
-      base: bgSrgb ?? 'FFFFFF',
+      base: slideBase ? snapGround(slideBase, brand) : 'FFFFFF',
       title: slideTitle(shapes, i),
     });
   }
@@ -591,9 +830,16 @@ export async function parsePptx(file: File | ArrayBuffer, brand: BrandMap = WOZK
   // A deck built dark and dropped onto a light template comes out white-on-cream
   // unless the whole thing is re-lit.
   const lit = relightForBrand(slides, brand);
-  if (lit.relit && slides.some((s) => s.shapes.some((sh) => sh.kind === 'image'))) {
-    warnings.push('Colours were re-lit to match this template. Images keep their '
-      + 'original background, so a screenshot may need replacing.');
+  if (lit.relit) {
+    const flipped = await relightArt(lit.slides);
+    if (flipped) {
+      warnings.push(`Colours were re-lit to match this template, and ${flipped} cut-out `
+        + 'logos were re-lit with them. Photos and screenshots keep their original '
+        + 'background, so one of those may need replacing.');
+    } else if (lit.slides.some((s) => s.shapes.some((sh) => sh.kind === 'image'))) {
+      warnings.push('Colours were re-lit to match this template. Images keep their '
+        + 'original background, so a screenshot may need replacing.');
+    }
   }
 
   return { slides: lit.slides, warnings: Array.from(new Set(warnings)), relit: lit.relit };

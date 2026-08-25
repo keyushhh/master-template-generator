@@ -79,9 +79,22 @@ import {
   renameProject,
   deleteProject,
   promoteToRepository,
+  claimOwnerless,
+  onProjectsChanged,
+  canEdit,
+  roleFor,
+  shareProject,
+  unshareProject,
+  visibleProjects,
   type ProjectMeta,
   type StoredSession,
 } from '../features/deck/deckStore';
+import { listVersions, saveVersion, shouldSnapshot, type DeckVersion } from '../features/deck/versionStore';
+import { useAuth } from '../features/auth/authStore';
+import { useCollab } from '../features/collab/useCollab';
+import { PresenceStack } from '../features/collab/PresenceStack';
+import { RemoteCursors } from '../features/collab/RemoteCursors';
+import { VersionHistoryPanel } from '../features/deck/VersionHistoryPanel';
 
 // Undo/redo history for the committed deck.
 const HISTORY_LIMIT = 50;
@@ -98,6 +111,7 @@ interface DeckHistory {
 
 type HistoryAction =
   | { type: 'commit'; deck: Deck }
+  | { type: 'remote'; deck: Deck }
   | { type: 'set'; deck: Deck; past?: Deck[]; future?: Deck[] }
   | { type: 'undo' }
   | { type: 'redo' };
@@ -109,6 +123,12 @@ function historyReducer(state: DeckHistory, action: HistoryAction): DeckHistory 
       const past = [...state.past, state.present].slice(-HISTORY_LIMIT);
       return { past, present: action.deck, future: [] };
     }
+    // Someone else's edit, arriving from another tab. It replaces what is on
+    // screen but never enters this person's undo stack: Undo means "take back
+    // what I did", and walking it back through a collaborator's edits would
+    // silently overwrite their work.
+    case 'remote':
+      return { ...state, present: action.deck };
     case 'set':
       return { past: action.past ?? [], present: action.deck, future: action.future ?? [] };
     case 'undo': {
@@ -210,6 +230,11 @@ export function MasterTemplatePage() {
   if (bootstrapRef.current === null) bootstrapRef.current = ensureInitialized(createTemplateDeck);
   const boot = bootstrapRef.current;
 
+  const { user } = useAuth();
+  // Decks made before sharing existed have no owner; the first person to sign
+  // in adopts them rather than the app showing them to everybody.
+  if (user) claimOwnerless(user.id);
+
   const [projects, setProjects] = useState<ProjectMeta[]>(() => listProjects());
   const [activeId, setActiveIdState] = useState<string>(boot.id);
 
@@ -220,7 +245,13 @@ export function MasterTemplatePage() {
     future: boot.session.historyFuture ?? [],
   }));
   const deck = history.present;
-  const commitDeck = useCallback((next: Deck) => dispatchHistory({ type: 'commit', deck: next }), []);
+  // Set while a remote edit is being applied, so echoing it back is impossible.
+  const applyingRemoteRef = useRef(false);
+  const broadcastRef = useRef<(deck: Deck) => void>(() => {});
+  const commitDeck = useCallback((next: Deck) => {
+    dispatchHistory({ type: 'commit', deck: next });
+    if (!applyingRemoteRef.current) broadcastRef.current(next);
+  }, []);
   // What Reset restores to - the deck as it stood right after import/generation,
   // not the generic placeholder. Falls back to the placeholder for a deck that
   // never had a source (a brand-new blank deck).
@@ -275,6 +306,30 @@ export function MasterTemplatePage() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [versions, setVersions] = useState<DeckVersion[]>(() => listVersions(boot.id));
+
+  const activeProject = projects.find((p) => p.id === activeId);
+  // No project record yet (a deck mid-creation) is this person's own doing.
+  const mayEdit = !user || !activeProject || canEdit(activeProject, user.id);
+
+  // Another tab's edit replaces what is on screen without touching undo.
+  const applyRemoteDeck = useCallback((incoming: Deck) => {
+    applyingRemoteRef.current = true;
+    dispatchHistory({ type: 'remote', deck: incoming });
+    applyingRemoteRef.current = false;
+  }, []);
+
+  const { peers, broadcastDeck, reportSlide, reportPointer } = useCollab({
+    projectId: activeId,
+    user,
+    onRemoteDeck: applyRemoteDeck,
+  });
+
+  // Access can change from a tab that is not on this deck at all, so this
+  // listens to the store rather than to the deck's own channel.
+  useEffect(() => onProjectsChanged(() => setProjects(listProjects())), []);
+  broadcastRef.current = broadcastDeck;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [borrowOpen, setBorrowOpen] = useState(false);
   const [newDeckOpen, setNewDeckOpen] = useState(false);
@@ -323,7 +378,14 @@ export function MasterTemplatePage() {
       saveFailedRef.current = false;
     }
     setProjects(listProjects()); // keep updatedAt ordering fresh in the switcher
-  }, [activeId, ast, deck, draft, dirty, history.past, history.future, baselineDeck, showToast]);
+
+    // A restorable snapshot, coalesced so one person's burst of edits is one
+    // entry while a handover between two people always gets its own.
+    if (ok && user && shouldSnapshot(activeId, user.id)) {
+      saveVersion(activeId, deck, user.id);
+      setVersions(listVersions(activeId));
+    }
+  }, [activeId, ast, deck, draft, dirty, history.past, history.future, baselineDeck, showToast, user]);
 
   /** Route a deck mutation to the draft while editing, else commit directly. */
   const mutateDeck = useCallback(
@@ -484,6 +546,16 @@ function pristineDeckFor(templateId: string | undefined): Deck {
   /** The slide on the stage - the canvas shows one at a time, so this is the
    *  deck's cursor: the rail selects it, the canvas renders it. */
   const [currentSlideId, setCurrentSlideId] = useState<string | null>(null);
+  // Following someone needs the slide they are on, whether or not they are
+  // moving the mouse, so this is reported apart from the pointer.
+  useEffect(() => reportSlide(currentSlideId ?? undefined), [currentSlideId, reportSlide]);
+
+  /** Slides someone can be followed to: a peer on a hidden or since-deleted
+   *  slide is still shown, just not offered as somewhere to go. */
+  const followableSlideIds = useMemo(
+    () => new Set(displayDeck.slides.filter((sl) => !sl.hidden).map((sl) => sl.instanceId)),
+    [displayDeck]
+  );
 
   // Keep the cursor on something that exists and is visible.
   useEffect(() => {
@@ -1921,7 +1993,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     (name: string, built: Deck) => {
       flushCurrent();
       const session: StoredSession = { ast: null, deck: built };
-      const meta = createProject(name, session); // also sets store-active
+      const meta = createProject(name, session, undefined, user?.id); // also sets store-active
       setActiveIdState(meta.id);
       hydrate(session);
       setProjects(listProjects());
@@ -1940,7 +2012,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
       if (!nextActive) {
         // Deleted the last deck - start a fresh one so there's always a deck.
         const session: StoredSession = { ast: null, deck: createTemplateDeck() };
-        nextActive = createProject('Untitled deck', session).id;
+        nextActive = createProject('Untitled deck', session, undefined, user?.id).id;
       }
       setProjects(listProjects());
       if (id === activeId) {
@@ -2229,6 +2301,11 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onOpenReview={() => setReviewOpen(true)}
         canExport={displayDeck.slides.some((s) => !s.hidden)}
         onOpenShare={() => setShareOpen(true)}
+        onOpenHistory={() => setHistoryOpen(true)}
+        peers={peers}
+        onFollowPeer={setCurrentSlideId}
+        reachableSlideIds={followableSlideIds}
+        canEditDeck={mayEdit}
         projects={projects}
         activeId={activeId}
         onSwitchDeck={handleSwitchDeck}
@@ -2237,6 +2314,17 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onDeleteDeck={handleDeleteDeck}
       />
 
+      <div
+        onPointerMove={(e) => {
+          const stage = (e.target as HTMLElement).closest?.('[data-slide]')
+            ?? document.querySelector('[data-slide]');
+          const rect = (stage as HTMLElement | null)?.getBoundingClientRect();
+          if (!rect || rect.width <= 0) return;
+          const scale = rect.width / 1920;
+          reportPointer((e.clientX - rect.left) / scale, (e.clientY - rect.top) / scale);
+        }}
+        onPointerLeave={() => reportPointer()}
+      >
       <PresentationCanvas
         ast={ast}
         deck={displayDeck}
@@ -2257,6 +2345,8 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onNavigate={setCurrentSlideId}
         onPickVideo={setVideoPickerFor}
       />
+      </div>
+      <RemoteCursors peers={peers} slideId={currentSlideId} />
 
       {/* One editing toolbar. This used to be three stacked bars (insert,
           format, session); the stack was heavier than the tools we're competing
@@ -2489,18 +2579,43 @@ function pristineDeckFor(templateId: string | undefined): Deck {
       <ShareModal
         open={shareOpen}
         onClose={() => setShareOpen(false)}
-        deck={deck}
         deckName={projectName}
         onOpenExport={() => setReviewOpen(true)}
         onOpenPresent={() => setPresentOpen(true)}
         onShowToast={showToast}
-        isSandbox={projects.find(p => p.id === activeId)?.isSandbox}
+        isSandbox={activeProject?.isSandbox}
         onPromoteToRepository={() => {
           if (activeId) {
             promoteToRepository(activeId);
             setProjects(listProjects());
             setShareOpen(false);
           }
+        }}
+        collaborators={activeProject?.collaborators ?? []}
+        ownerId={activeProject?.ownerId}
+        currentUserId={user?.id}
+        onInvite={(userId, role) => {
+          shareProject(activeId, userId, role);
+          setProjects(listProjects());
+        }}
+        onRemoveCollaborator={(userId) => {
+          unshareProject(activeId, userId);
+          setProjects(listProjects());
+        }}
+      />
+      <VersionHistoryPanel
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        versions={versions}
+        canRestore={mayEdit}
+        onRestore={(version) => {
+          // Everything newer is kept: the restored deck simply becomes the
+          // latest version, so a restore is never itself a loss.
+          commitDeck(version.deck);
+          if (user) saveVersion(activeId, version.deck, user.id, version.at);
+          setVersions(listVersions(activeId));
+          setHistoryOpen(false);
+          showToast('Restored an earlier version of this deck.', 'success');
         }}
       />
       <CommandPalette

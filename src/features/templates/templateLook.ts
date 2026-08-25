@@ -1,4 +1,5 @@
 import { hexIsDark } from '../deck/slideBackground';
+import type { DeckTheme } from '../theme/deckTheme';
 
 /**
  * The background each presentation template actually paints its slides.
@@ -30,6 +31,19 @@ export const TEMPLATE_BASE: Record<string, string> = {
   'ai-native': '0B071A',
   'startup-bold': '09090B',
 };
+
+// The ground a deck's slides are painted on. A deck built on the classic
+// template carries no template id at all, so "no id" has to answer with the
+// house look rather than with nothing: a caller that treated it as unknown fell
+// back to the source deck's own ground and the chosen template never showed.
+export function templateBaseFor(presentationTemplateId: string | undefined, theme: DeckTheme): string {
+  const own = presentationTemplateId ? TEMPLATE_BASE[presentationTemplateId] : undefined;
+  if (own) return own;
+  // No template of its own, so the theme is the only thing left that knows.
+  const styled = theme.styleSystem?.slideBackground?.replace('#', '').toUpperCase();
+  if (styled && /^[0-9A-F]{6}$/.test(styled)) return styled;
+  return (theme.styleSystem?.isDarkSlideDefault ? theme.surface.dark : theme.surface.light).toUpperCase();
+}
 
 /** Whether this template paints dark slides. Undefined for a template we have
  *  no look for, so a caller can fall back rather than assume light. */

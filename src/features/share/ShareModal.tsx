@@ -1,202 +1,393 @@
-import { useRef, useState } from 'react';
-import type { Deck } from '../deck/types';
-import { CloseIcon, CopyIcon, DownloadIcon } from '../ui/icons';
+import { useEffect, useRef, useState } from 'react';
+import type { Collaborator, CollaboratorRole } from '../deck/deckStore';
+import { CheckIcon, ChevronDownIcon, CloseIcon, LinkIcon } from '../ui/icons';
 import { useFocusTrap } from '../a11y/useFocusTrap';
+import { DEMO_USERS, findDemoUser, initialsOf, userById } from '../auth/demoUsers';
 
 interface ShareModalProps {
   open: boolean;
   onClose: () => void;
-  deck: Deck;
   deckName: string;
   onOpenExport: () => void;
   onOpenPresent: () => void;
   onShowToast: (msg: string, type: 'info' | 'success') => void;
   isSandbox?: boolean;
   onPromoteToRepository?: () => void;
+  collaborators?: Collaborator[];
+  ownerId?: string;
+  currentUserId?: string;
+  onInvite?: (userId: string, role: CollaboratorRole) => void;
+  onRemoveCollaborator?: (userId: string) => void;
+}
+
+const ROLE_LABEL: Record<CollaboratorRole, string> = {
+  editor: 'can edit',
+  viewer: 'can view',
+};
+
+/**
+ * The access menu, opening under whatever opened it.
+ *
+ * A native `select` cannot be styled and drew the platform's own popup, which
+ * looked like it belonged to a different application than the rest of this
+ * window.
+ */
+function RoleMenu({
+  value,
+  onChange,
+  onRemove,
+  label,
+  compact,
+}: {
+  value: CollaboratorRole;
+  onChange: (role: CollaboratorRole) => void;
+  onRemove?: () => void;
+  label: string;
+  /** The pill inside the invite field, rather than a bare row label. */
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      // Escape closes the menu without also closing the window behind it.
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+
+  const row =
+    'w-full flex items-center gap-2 px-3 py-[7px] text-[12.5px] font-medium transition-colors cursor-pointer text-left';
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={
+          compact
+            ? 'flex items-center gap-1 h-7 pl-2 pr-1.5 bg-neutral-100 hover:bg-neutral-200 rounded-[var(--radius-sharp)] text-[12px] font-semibold text-neutral-700 cursor-pointer transition-colors'
+            : 'flex items-center gap-1 text-[12.5px] font-semibold text-neutral-500 hover:text-neutral-900 cursor-pointer transition-colors'
+        }
+      >
+        {ROLE_LABEL[value]}
+        <ChevronDownIcon size={12} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+6px)] z-30 w-[168px] py-1 bg-white border border-neutral-200 text-left rounded-[var(--radius-sharp)]"
+          style={{ boxShadow: '0 10px 30px -8px rgba(15,23,20,0.28)' }}
+        >
+          {(['editor', 'viewer'] as CollaboratorRole[]).map((role) => (
+            <button
+              key={role}
+              role="menuitem"
+              type="button"
+              onClick={() => { onChange(role); setOpen(false); }}
+              className={`${row} text-neutral-700 hover:bg-neutral-100`}
+            >
+              <span className="w-3.5 shrink-0 text-neutral-900">
+                {value === role && <CheckIcon size={13} />}
+              </span>
+              {ROLE_LABEL[role]}
+            </button>
+          ))}
+          {onRemove && (
+            <>
+              <div className="my-1 border-t border-neutral-200" />
+              <button
+                role="menuitem"
+                type="button"
+                onClick={() => { onRemove(); setOpen(false); }}
+                className={`${row} text-rose-600 hover:bg-rose-50`}
+              >
+                <span className="w-3.5 shrink-0" />
+                Remove
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Row({
+  color,
+  name,
+  email,
+  you,
+  children,
+}: {
+  color: string;
+  name: string;
+  email: string;
+  you: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 py-2.5">
+      <span
+        className="w-8 h-8 shrink-0 flex items-center justify-center text-[10px] font-mono font-bold text-white"
+        style={{ backgroundColor: color }}
+      >
+        {initialsOf(name)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-semibold text-neutral-900 truncate">
+          {name}
+          {you && <span className="text-neutral-400 font-normal"> (you)</span>}
+        </div>
+        <div className="text-[11.5px] text-neutral-500 truncate">{email}</div>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
 }
 
 export function ShareModal({
   open,
   onClose,
-  deck,
   deckName,
   onOpenExport,
-  onOpenPresent,
   onShowToast,
   isSandbox,
   onPromoteToRepository,
+  collaborators = [],
+  ownerId,
+  currentUserId,
+  onInvite,
+  onRemoveCollaborator,
 }: ShareModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedPackage, setCopiedPackage] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<CollaboratorRole>('editor');
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   useFocusTrap(containerRef, open);
-
   if (!open) return null;
 
+  const isOwner = !ownerId || ownerId === currentUserId;
+  const owner = userById(ownerId);
   const presentUrl = `${window.location.origin}${window.location.pathname}?present=true`;
 
-  const handleCopyLink = async () => {
+  const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(presentUrl);
-      setCopiedLink(true);
-      onShowToast('Copied presenter link to clipboard!', 'success');
-      setTimeout(() => setCopiedLink(false), 2500);
+      onShowToast('Presenter link copied.', 'success');
     } catch {
-      onShowToast('Could not copy link.', 'info');
+      onShowToast('Could not copy the link.', 'info');
     }
   };
 
-  const handleDownloadDeckFile = () => {
-    const payload = JSON.stringify({ version: '1.5.0', deckName, deck }, null, 2);
-    const blob = new Blob([payload], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${deckName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.wozku`;
-    a.click();
-    URL.revokeObjectURL(url);
-    onShowToast('Downloaded editable .wozku deck file!', 'success');
-  };
-
-  const handleCopyDeckJson = async () => {
-    try {
-      const payload = JSON.stringify({ version: '1.5.0', deckName, deck });
-      await navigator.clipboard.writeText(payload);
-      setCopiedPackage(true);
-      onShowToast('Copied deck package JSON to clipboard!', 'success');
-      setTimeout(() => setCopiedPackage(false), 2500);
-    } catch {
-      onShowToast('Failed to copy deck package.', 'info');
+  const submitInvite = (e: React.FormEvent) => {
+    e.preventDefault();
+    const match = findDemoUser(inviteEmail);
+    // Without a backend there is nobody to send an invitation to, so an unknown
+    // address is a dead end rather than a pending invite.
+    if (!match) {
+      setInviteError('No Studio account uses that email.');
+      return;
     }
+    if (match.id === ownerId) {
+      setInviteError('They already own this deck.');
+      return;
+    }
+    onInvite?.(match.id, inviteRole);
+    onShowToast(`${match.name} can now ${inviteRole === 'editor' ? 'edit' : 'view'} this deck.`, 'success');
+    setInviteEmail('');
+    setInviteError(null);
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-neutral-900/60 backdrop-blur-xs">
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-neutral-900/60 backdrop-blur-xs"
+      // Only a press that both starts and ends on the backdrop closes it, so a
+      // drag that began inside the window does not dismiss it on release.
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div
         ref={containerRef}
-        className="w-full max-w-[500px] bg-white border border-neutral-200 shadow-2xl rounded-[var(--radius-sharp)] overflow-hidden animate-in fade-in zoom-in-95 duration-120"
+        className="w-full max-w-[460px] bg-white border border-neutral-200 shadow-2xl rounded-[var(--radius-sharp)] animate-in fade-in zoom-in-95 duration-120"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200 bg-neutral-50">
-          <div>
-            <h2
-              className="text-[16px] font-bold text-neutral-900 tracking-[-0.01em]"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              Share Presentation
-            </h2>
-            <p className="text-[12px] text-neutral-500">{deckName}</p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close Share dialog"
-            className="p-1 text-neutral-400 hover:text-neutral-800 transition-colors cursor-pointer"
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-neutral-200">
+          <h2
+            className="text-[15px] font-bold text-neutral-900 tracking-[-0.01em] truncate"
+            style={{ fontFamily: 'var(--font-display)' }}
           >
-            <CloseIcon size={16} />
-          </button>
+            Share {deckName}
+          </h2>
+          <div className="flex items-center gap-3 shrink-0 pl-3">
+            <button
+              type="button"
+              onClick={copyLink}
+              className="flex items-center gap-1.5 text-[12.5px] font-semibold text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
+            >
+              <LinkIcon size={14} />
+              Copy link
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="Close Share dialog"
+              className="text-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer"
+            >
+              <CloseIcon size={16} />
+            </button>
+          </div>
         </div>
 
-        {/* Content */}
         <div className="p-5 flex flex-col gap-4">
-          {/* Privacy Guarantee Badge */}
-          {isSandbox ? (
-            <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-[var(--radius-sharp)] flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <span className="text-[16px] select-none">🧪</span>
-                <div className="text-[12px] text-blue-950 leading-relaxed">
-                  <strong className="font-bold text-blue-900 block">Quick Sandbox Active</strong>
-                  This deck is currently hidden from the Team Repository.
-                </div>
+          <div className="flex flex-col gap-1.5">
+            <form onSubmit={submitInvite} className="flex items-center gap-2">
+              <div
+                className={`flex-1 flex items-center h-9 pl-3 pr-1 bg-white border rounded-[var(--radius-sharp)] transition-colors ${
+                  isOwner ? 'border-neutral-200 focus-within:border-neutral-900' : 'border-neutral-200 bg-neutral-100'
+                }`}
+              >
+                <input
+                  type="email"
+                  list="wozku-share-people"
+                  value={inviteEmail}
+                  onChange={(e) => { setInviteEmail(e.target.value); setInviteError(null); }}
+                  placeholder="Invite by email"
+                  disabled={!isOwner}
+                  className="flex-1 min-w-0 bg-transparent border-none outline-none text-[12.5px] text-neutral-900 disabled:text-neutral-400 placeholder:text-neutral-400"
+                />
+                {inviteEmail.trim() && (
+                  <div className="shrink-0">
+                    <RoleMenu
+                      value={inviteRole}
+                      label="Invite as"
+                      onChange={setInviteRole}
+                      compact
+                    />
+                  </div>
+                )}
               </div>
-              {onPromoteToRepository && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onPromoteToRepository();
-                    onShowToast('Saved to Team Repository!', 'success');
-                  }}
-                  className="self-start px-3 py-1.5 text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
+              <datalist id="wozku-share-people">
+                {DEMO_USERS.filter((u) => u.id !== ownerId).map((u) => (
+                  <option key={u.id} value={u.email}>{u.name}</option>
+                ))}
+              </datalist>
+              <button
+                type="submit"
+                disabled={!isOwner}
+                className="h-9 px-4 text-[12.5px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 disabled:bg-neutral-200 disabled:text-neutral-400 disabled:cursor-not-allowed rounded-[var(--radius-sharp)] transition-colors cursor-pointer shrink-0"
+              >
+                Invite
+              </button>
+            </form>
+            {inviteError && (
+              <span role="alert" className="text-[11.5px] font-semibold text-rose-700">{inviteError}</span>
+            )}
+            {!isOwner && (
+              <span className="text-[11.5px] text-neutral-500">
+                Only {owner?.name ?? 'the owner'} can change who has access.
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col">
+            <span className="text-[12.5px] font-semibold text-neutral-500 pb-1">Who has access</span>
+
+            {owner && (
+              <Row
+                color={owner.color}
+                name={owner.name}
+                email={owner.email}
+                you={owner.id === currentUserId}
+              >
+                <span className="text-[12.5px] font-semibold text-neutral-400">owner</span>
+              </Row>
+            )}
+
+            {collaborators.map((c) => {
+              const person = userById(c.userId);
+              if (!person) return null;
+              return (
+                <Row
+                  key={c.userId}
+                  color={person.color}
+                  name={person.name}
+                  email={person.email}
+                  you={person.id === currentUserId}
                 >
-                  Save to Team Repository
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-[var(--radius-sharp)] flex items-start gap-3">
-              <span className="text-[16px] select-none">🔒</span>
-              <div className="text-[12px] text-emerald-950 leading-relaxed">
-                <strong className="font-bold text-emerald-900 block">Client Privacy & Storage Guarantee</strong>
-                This deck remains 100% private to your browser local storage. Share files directly with colleagues without cloud uploads.
-              </div>
+                  {isOwner ? (
+                    <RoleMenu
+                      value={c.role}
+                      label={`Access for ${person.name}`}
+                      onChange={(role) => onInvite?.(c.userId, role)}
+                      onRemove={() => {
+                        onRemoveCollaborator?.(c.userId);
+                        onShowToast(`Removed ${person.name} from this deck.`, 'info');
+                      }}
+                    />
+                  ) : (
+                    <span className="text-[12.5px] font-semibold text-neutral-400">
+                      {c.role === 'editor' ? 'can edit' : 'can view'}
+                    </span>
+                  )}
+                </Row>
+              );
+            })}
+
+            {!collaborators.length && (
+              <p className="text-[11.5px] text-neutral-400 py-1.5">
+                Nobody else has been invited yet.
+              </p>
+            )}
+          </div>
+
+          {isSandbox && onPromoteToRepository && (
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <span className="text-[12px] text-neutral-600">
+                This deck is hidden from the Team Repository.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  onPromoteToRepository();
+                  onShowToast('Saved to the Team Repository.', 'success');
+                }}
+                className="shrink-0 text-[12.5px] font-bold text-neutral-900 hover:underline cursor-pointer"
+              >
+                Save to repository
+              </button>
             </div>
           )}
 
-          {/* Share Option 1: Editable Deck Package */}
-          <div className="p-3.5 border border-neutral-200 rounded-[var(--radius-sharp)] bg-neutral-50/50 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] font-bold text-neutral-900">Editable Deck File (`.wozku`)</span>
-              <span className="text-[11px] font-mono text-emerald-700 font-semibold bg-emerald-100/60 px-1.5 py-0.5 rounded">On-Brand</span>
-            </div>
-            <p className="text-[12px] text-neutral-500 leading-normal">
-              Export an editable deck file that team members can import into Wozku Studio on any computer.
-            </p>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleDownloadDeckFile}
-                className="flex-1 h-8 text-[12px] font-bold text-neutral-800 bg-white border border-neutral-200 hover:bg-neutral-100 rounded-[var(--radius-sharp)] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <DownloadIcon size={13} />
-                Download `.wozku`
-              </button>
-              <button
-                type="button"
-                onClick={handleCopyDeckJson}
-                className="h-8 px-3 text-[12px] font-bold text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-100 rounded-[var(--radius-sharp)] flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <CopyIcon size={13} />
-                {copiedPackage ? 'Copied!' : 'Copy Data'}
-              </button>
-            </div>
-          </div>
+        </div>
 
-          {/* Share Option 2: Presenter Mode Link */}
-          <div className="p-3.5 border border-neutral-200 rounded-[var(--radius-sharp)] bg-neutral-50/50 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] font-bold text-neutral-900">Presenter View</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                readOnly
-                value={presentUrl}
-                className="flex-1 h-8 px-2.5 bg-neutral-100 border border-neutral-200 rounded text-[11.5px] font-mono text-neutral-600 select-all outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                className="h-8 px-3 text-[12px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 rounded-[var(--radius-sharp)] transition-colors cursor-pointer shrink-0"
-              >
-                {copiedLink ? 'Copied!' : 'Copy Link'}
-              </button>
-            </div>
-          </div>
-
-          {/* Share Option 3: Export Native Formats */}
-          <div className="pt-2 border-t border-neutral-200 flex items-center justify-between">
-            <span className="text-[12px] text-neutral-600 font-medium">Need standard deliverables?</span>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenExport();
-              }}
-              className="text-[12.5px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer"
-            >
-              Export PowerPoint (.pptx) or PDF →
-            </button>
-          </div>
+        <div className="flex items-center justify-between px-5 py-3.5 border-t border-neutral-200">
+          <span className="text-[12.5px] text-neutral-500">Need a file to send on?</span>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onOpenExport();
+            }}
+            className="text-[12.5px] font-bold text-neutral-900 hover:underline cursor-pointer"
+          >
+            Export PowerPoint or PDF →
+          </button>
         </div>
       </div>
     </div>

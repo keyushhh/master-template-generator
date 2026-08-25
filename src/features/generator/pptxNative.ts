@@ -1,6 +1,6 @@
 import type pptxgen from 'pptxgenjs';
-import type { SlideInstance, ComparisonRow, OverlayShape, SlideBackground, SlotOffset, SlotStyle } from '../deck/types';
-import { canCustomizeBackground } from '../deck/slideBackground';
+import type { ImportedShape, SlideInstance, ComparisonRow, OverlayShape, SlideBackground, SlotOffset, SlotStyle } from '../deck/types';
+import { canCustomizeBackground, importedInk } from '../deck/slideBackground';
 import { getVideo } from '../deck/mediaStore';
 import { parseVideoSource } from '../formatting/videoSource';
 import { applyToPptx, caseText, offsetFor, styleFor } from '../formatting/resolve';
@@ -576,6 +576,38 @@ async function loadImage(dataUrl: string): Promise<HTMLImageElement> {
 }
 
 /** Places an image contained (aspect-preserved, letterboxed) inside a px box, centered. */
+// A cropped picture is baked to its visible window before export, so the file
+// shows exactly the framing the canvas does rather than the whole source image.
+async function addImageCropped(
+  slide: pptxgen.Slide,
+  dataUrl: string,
+  b: Box,
+  crop: NonNullable<ImportedShape['crop']>
+) {
+  const spanX = 1 - crop.l - crop.r;
+  const spanY = 1 - crop.t - crop.b;
+  if (spanX <= 0 || spanY <= 0) return addImageContain(slide, dataUrl, b);
+  try {
+    const img = await loadImage(dataUrl);
+    const sw = img.naturalWidth / spanX;
+    const sh = img.naturalHeight / spanY;
+    const scale = Math.min(1, 1600 / Math.max(sw, sh));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(sw * scale));
+    canvas.height = Math.max(1, Math.round(sh * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return addImageContain(slide, dataUrl, b);
+    ctx.drawImage(
+      img,
+      -crop.l * sw, -crop.t * sh, sw, sh,
+      0, 0, canvas.width, canvas.height
+    );
+    slide.addImage({ data: canvas.toDataURL('image/png'), x: b.x, y: b.y, w: b.w, h: b.h });
+  } catch {
+    await addImageContain(slide, dataUrl, b);
+  }
+}
+
 async function addImageContain(
   slide: pptxgen.Slide,
   dataUrl: string,
@@ -1400,11 +1432,17 @@ async function buildBlank(slide: pptxgen.Slide, content: SlideInstance['content'
  * edit after download.
  */
 async function buildImported(slide: pptxgen.Slide, content: SlideInstance['content']) {
+  // Matches the canvas: uncoloured text takes its ink from the card it sits on,
+  // else from the slide, so nothing that reads on screen exports invisible.
+  const inkOn = (fill?: string) =>
+    (importedInk(fill, content.importedBase) === 'light' ? WHITE() : NEUTRAL_900());
+
   for (const sh of content.shapes ?? []) {
     const b = box(sh.x, sh.y, sh.w, sh.h);
 
     if (sh.kind === 'image' && sh.imageUrl) {
-      await addImageContain(slide, sh.imageUrl, b);
+      if (sh.crop) await addImageCropped(slide, sh.imageUrl, b, sh.crop);
+      else await addImageContain(slide, sh.imageUrl, b);
       continue;
     }
 
@@ -1417,7 +1455,7 @@ async function buildImported(slide: pptxgen.Slide, content: SlideInstance['conte
           fontFace: cell.paragraphs?.[0]?.runs[0]?.font ?? FONT_DISPLAY(),
           fontSize: pt(cell.paragraphs?.[0]?.runs[0]?.sizePx ?? 16),
           bold: cell.paragraphs?.[0]?.runs[0]?.bold,
-          color: cell.paragraphs?.[0]?.runs[0]?.color ?? NEUTRAL_900(),
+          color: cell.paragraphs?.[0]?.runs[0]?.color ?? inkOn(cell.fill ?? sh.fill),
           align: cell.paragraphs?.[0]?.align ?? 'left',
           border: { type: 'solid', color: RULE_TABLE(), pt: 0.75 },
         },
@@ -1441,7 +1479,13 @@ async function buildImported(slide: pptxgen.Slide, content: SlideInstance['conte
     const runs: pptxgen.TextProps[] = [];
     paragraphs.forEach((para, pi) => {
       if (!para.runs.length) {
-        runs.push({ text: ' ', options: pi > 0 ? { breakLine: true } : {} });
+        runs.push({
+          text: ' ',
+          options: {
+            ...(pi > 0 ? { breakLine: true } : {}),
+            lineSpacing: para.leadingPx ? pt(para.leadingPx) : undefined,
+          },
+        });
         return;
       }
       para.runs.forEach((run, ri) => {
@@ -1454,8 +1498,9 @@ async function buildImported(slide: pptxgen.Slide, content: SlideInstance['conte
             bold: run.bold,
             italic: run.italic,
             underline: run.underline ? { style: 'sng' } : undefined,
-            color: run.color ?? NEUTRAL_900(),
+            color: run.color ?? inkOn(sh.fill),
             align: para.align ?? 'left',
+            lineSpacing: para.leadingPx ? pt(para.leadingPx) : undefined,
           },
         });
       });
@@ -1632,7 +1677,7 @@ async function buildSlideBody(
       + 0.0722 * parseInt(base.slice(4, 6), 16)) / 255;
     applyBackground(slide, {
       base,
-      grid: true,
+      grid: theme().styleSystem?.showGrid ?? true,
       gridColor: lum < 0.5 ? 'rgba(255,255,255,0.11)' : undefined,
       glow: { cx: 1520, cy: 320, r: 700 },
     });

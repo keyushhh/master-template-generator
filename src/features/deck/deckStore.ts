@@ -25,12 +25,24 @@ export interface FolderMeta {
   updatedAt: number;
 }
 
+export type CollaboratorRole = 'editor' | 'viewer';
+
+export interface Collaborator {
+  userId: string;
+  role: CollaboratorRole;
+}
+
 export interface ProjectMeta {
   id: string;
   name: string;
   updatedAt: number;
   folderId?: string | null;
   isSandbox?: boolean;
+  /** Who the deck belongs to. Absent on every deck made before sharing existed;
+   *  `claimOwnerless` adopts those for whoever is signed in. */
+  ownerId?: string;
+  /** Everyone the owner has invited, and what they may do. */
+  collaborators?: Collaborator[];
 }
 
 export interface StoredSession {
@@ -81,9 +93,77 @@ function sessionKey(id: string): string {
   return `${SESSION_PREFIX}${id}`;
 }
 
+/**
+ * Calls back when another tab changes the project index: a deck shared, a role
+ * changed, a deck renamed or deleted.
+ *
+ * The storage event fires only in the tabs that did not make the change, which
+ * is exactly the set of tabs that need telling. It also reaches tabs sitting on
+ * a different deck, or on the library, which a per-deck channel cannot.
+ */
+export function onProjectsChanged(fn: () => void): () => void {
+  const handler = (e: StorageEvent) => {
+    // A null key means the whole store was cleared.
+    if (e.key === null || e.key === INDEX_KEY) fn();
+  };
+  window.addEventListener('storage', handler);
+  return () => window.removeEventListener('storage', handler);
+}
+
 /** Newest-first list of decks for the switcher. */
 export function listProjects(): ProjectMeta[] {
   return [...readIndex().projects].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** What this person may do with a deck. A deck nobody owns is treated as
+ *  theirs, which is what makes decks that predate sharing still openable. */
+export function roleFor(project: ProjectMeta, userId: string): 'owner' | CollaboratorRole | null {
+  if (!project.ownerId || project.ownerId === userId) return 'owner';
+  return project.collaborators?.find((c) => c.userId === userId)?.role ?? null;
+}
+
+export function canEdit(project: ProjectMeta, userId: string): boolean {
+  const role = roleFor(project, userId);
+  return role === 'owner' || role === 'editor';
+}
+
+/** Decks this person owns or has been invited to, newest first. */
+export function visibleProjects(userId: string): ProjectMeta[] {
+  return listProjects().filter((p) => roleFor(p, userId) !== null);
+}
+
+/** Adopt every ownerless deck for this person, once, on first sign-in. Decks
+ *  made before sharing existed have no owner, and an unowned deck would show up
+ *  for everyone. */
+export function claimOwnerless(userId: string): void {
+  const index = readIndex();
+  if (!index.projects.some((p) => !p.ownerId)) return;
+  writeIndex({
+    ...index,
+    projects: index.projects.map((p) => (p.ownerId ? p : { ...p, ownerId: userId })),
+  });
+}
+
+export function shareProject(id: string, userId: string, role: CollaboratorRole): void {
+  const index = readIndex();
+  writeIndex({
+    ...index,
+    projects: index.projects.map((p) => {
+      if (p.id !== id || p.ownerId === userId) return p;
+      const others = (p.collaborators ?? []).filter((c) => c.userId !== userId);
+      return { ...p, collaborators: [...others, { userId, role }] };
+    }),
+  });
+}
+
+export function unshareProject(id: string, userId: string): void {
+  const index = readIndex();
+  writeIndex({
+    ...index,
+    projects: index.projects.map((p) => (p.id === id
+      ? { ...p, collaborators: (p.collaborators ?? []).filter((c) => c.userId !== userId) }
+      : p)),
+  });
 }
 
 export function setActiveId(id: string): void {
@@ -119,9 +199,14 @@ export function saveProjectSession(id: string, session: StoredSession): boolean 
 }
 
 /** Add a new deck to the index, save its session, and make it active. */
-export function createProject(name: string, session: StoredSession, isSandbox?: boolean): ProjectMeta {
+export function createProject(
+  name: string,
+  session: StoredSession,
+  isSandbox?: boolean,
+  ownerId?: string
+): ProjectMeta {
   const index = readIndex();
-  const meta: ProjectMeta = { id: newId(), name: name.trim() || 'Untitled deck', updatedAt: Date.now(), isSandbox };
+  const meta: ProjectMeta = { id: newId(), name: name.trim() || 'Untitled deck', updatedAt: Date.now(), isSandbox, ownerId };
   writeIndex({ activeId: meta.id, projects: [...index.projects, meta] });
   saveProjectSession(meta.id, session);
   return meta;

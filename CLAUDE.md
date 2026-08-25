@@ -75,6 +75,18 @@ that at 144px/inch onto `LAYOUT_WIDE`. Slot positions are stored as deltas from
 where the template put them (`SlotOffset`), never absolute, so a nudged slot still
 follows its template.
 
+## Collaboration is a prototype, not a backend
+
+There is no server. Sign-in (`src/features/auth/`) checks a hardcoded list of demo
+users and keeps the session in `sessionStorage`, deliberately: per-tab sessions are
+what let one browser be two people at once, which is the only way the sharing and
+multiplayer work can be demonstrated. Live editing (`src/features/collab/`) rides
+`BroadcastChannel`, so it reaches other tabs of the same browser and nothing else.
+
+None of this is security. It exists so a dev team can replace each seam (auth store,
+collab channel, deck ownership in `deckStore.ts`) with a real one. Do not describe
+the app as private or local-only in UI copy any more: a deck can now be shared.
+
 ## Storage
 
 - Decks live in `localStorage` (~5MB total) via `src/features/deck/deckStore.ts`.

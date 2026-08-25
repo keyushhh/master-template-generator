@@ -10,14 +10,15 @@
     "test:pptx": "node scripts/pptx-theme-check.mjs",
     "snapshot:pptx": "node scripts/pptx-snapshot.mjs",
     "test:brand": "node scripts/brand-kit-check.mjs",
-    "test": "node scripts/pptx-theme-check.mjs && node scripts/brand-kit-check.mjs && node scripts/preflight-check.mjs && node scripts/pptx-font-check.mjs && node scripts/font-catalog-check.mjs && node scripts/resolve-check.mjs && node scripts/pptx-format-check.mjs && node scripts/overflow-check.mjs && node scripts/typesize-check.mjs && node scripts/pdf-import-check.mjs && node scripts/dash-check.mjs",
+    "test": "node scripts/pptx-theme-check.mjs && node scripts/brand-kit-check.mjs && node scripts/preflight-check.mjs && node scripts/pptx-font-check.mjs && node scripts/font-catalog-check.mjs && node scripts/resolve-check.mjs && node scripts/pptx-format-check.mjs && node scripts/overflow-check.mjs && node scripts/typesize-check.mjs && node scripts/pdf-import-check.mjs && node scripts/pptx-import-check.mjs && node scripts/dash-check.mjs",
     "test:preflight": "node scripts/preflight-check.mjs",
     "fonts:catalog": "node scripts/build-font-catalog.mjs",
     "test:fonts": "node scripts/pptx-font-check.mjs && node scripts/font-catalog-check.mjs",
     "test:resolve": "node scripts/resolve-check.mjs",
     "test:format": "node scripts/pptx-format-check.mjs",
     "test:overflow": "node scripts/overflow-check.mjs",
-    "test:dashes": "node scripts/dash-check.mjs"
+    "test:dashes": "node scripts/dash-check.mjs",
+    "test:import": "node scripts/pdf-import-check.mjs && node scripts/pptx-import-check.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

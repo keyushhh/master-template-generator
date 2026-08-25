@@ -25,8 +25,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ProjectMeta } from '../deck/deckStore';
 import { DeckSwitcher } from './DeckSwitcher';
-import logoBlack from '../../assets/Logo_Black_Transparent.png';
-import { DownloadIcon, RedoIcon, RefreshIcon, ShareIcon, UndoIcon } from '../ui/icons';
+import logoBlack from '../../assets/wozku-logo-black.svg';
+import { DownloadIcon, HistoryIcon, RedoIcon, RefreshIcon, ShareIcon, UndoIcon } from '../ui/icons';
+import { PresenceStack } from '../collab/PresenceStack';
+import type { CollabPeer } from '../collab/collabChannel';
 
 export type StudioMode = 'view' | 'edit';
 
@@ -58,6 +60,15 @@ interface StudioHeaderProps {
   onOpenReview: () => void;
   canExport: boolean;
   onOpenShare?: () => void;
+  onOpenHistory?: () => void;
+  /** Everyone else with this deck open, shown as avatars beside the actions. */
+  peers?: CollabPeer[];
+  /** Jump to the slide a peer is on. */
+  onFollowPeer?: (slideId: string) => void;
+  /** Slides a peer can actually be followed to. */
+  reachableSlideIds?: Set<string>;
+  /** False for someone invited to view: the Edit tab is theirs to see, not use. */
+  canEditDeck?: boolean;
   /** Deck management, moved here from under the sidebar logo so the deck you
    *  have open and its name live in the same place. */
   projects: ProjectMeta[];
@@ -144,6 +155,11 @@ export function StudioHeader({
   onOpenReview,
   canExport,
   onOpenShare,
+  onOpenHistory,
+  peers = [],
+  onFollowPeer,
+  reachableSlideIds,
+  canEditDeck = true,
   projects,
   activeId,
   onSwitchDeck,
@@ -230,7 +246,7 @@ export function StudioHeader({
           <img
             src={logoBlack}
             alt="Wozku"
-            style={{ width: 84, height: 'auto', flexShrink: 0, userSelect: 'none' }}
+            style={{ height: 20, width: 'auto', flexShrink: 0, userSelect: 'none' }}
             draggable={false}
           />
         </Link>
@@ -365,13 +381,14 @@ export function StudioHeader({
         />
         {MODES.map((m, i) => {
           const active = i === activeIndex;
-          const disabled = m.id === 'present' && !canPresent;
+          const disabled = (m.id === 'present' && !canPresent) || (m.id === 'edit' && !canEditDeck);
           return (
             <button
               key={m.id}
               role="tab"
               aria-selected={active}
               disabled={disabled}
+              title={m.id === 'edit' && !canEditDeck ? 'You have view access to this deck' : undefined}
               onClick={() => selectMode(m.id)}
               style={{
                 position: 'relative',
@@ -402,6 +419,12 @@ export function StudioHeader({
 
       {/* ── Actions ───────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+        {peers.length > 0 && (
+          <>
+            <PresenceStack peers={peers} onFollow={onFollowPeer} reachableSlideIds={reachableSlideIds} />
+            <span style={{ width: 1, height: 20, background: 'var(--neutral-200)', margin: '0 6px' }} />
+          </>
+        )}
         <IconBtn onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z)" label="Undo">
           <UndoIcon size={16} />
         </IconBtn>
@@ -434,6 +457,30 @@ export function StudioHeader({
         >
           {!resetArmed && <RefreshIcon size={14} />}
           {resetArmed ? 'Confirm reset?' : 'Reset'}
+        </button>
+
+        <IconBtn onClick={() => onOpenHistory?.()} title="Version history" label="Version history">
+          <HistoryIcon size={15} />
+        </IconBtn>
+
+        <button
+          onClick={() => onOpenShare?.()}
+          title="Invite people to this deck"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            height: 30, padding: '0 11px',
+            borderRadius: 'var(--radius-sharp)',
+            border: '1px solid var(--neutral-200)',
+            background: 'transparent',
+            color: 'var(--neutral-700)',
+            fontSize: 12, fontWeight: 600,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            transition: 'background .15s, border-color .15s',
+          }}
+        >
+          <ShareIcon size={14} />
+          Share
         </button>
 
         <button

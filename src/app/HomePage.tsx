@@ -6,7 +6,6 @@ import { PresentMode } from '../features/generator/PresentMode';
 import { DevPanel } from '../features/dev/DevPanel';
 import { HelpMenu } from '../features/help/HelpMenu';
 import { ProfileMenu } from '../features/identity/ProfileMenu';
-import { AVAILABLE_WORKSPACES, loadUserProfile } from '../features/identity/profileStore';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
 import { hasModifier, MOD_KEY } from '../features/help/platform';
 import { createTemplateDeck } from '../features/deck/deckBuilder';
@@ -18,6 +17,7 @@ import { DeleteFolderModal } from '../features/deck/DeleteFolderModal';
 import { MoveDecksToFolderModal } from '../features/deck/MoveDecksToFolderModal';
 import { ConfirmModal, cannotBeUndone } from '../features/ui/ConfirmModal';
 import { useToast } from '../features/toast/Toast';
+import { useAuth } from '../features/auth/authStore';
 import type { Deck } from '../features/deck/types';
 import {
   createFolder,
@@ -28,6 +28,9 @@ import {
   listFolders,
   listProjects,
   listProjectSummaries,
+  claimOwnerless,
+  onProjectsChanged,
+  roleFor,
   moveProjectToFolder,
   moveProjectsToFolder,
   renameFolder,
@@ -42,7 +45,7 @@ import { getPresentPosition, setPresentPosition } from '../features/deck/present
 import { brandKitThemes, listBrandKits } from '../features/theme/brandKitStore';
 import { ensureFonts } from '../features/fonts/loadFont';
 import { css as themeCss, themeById, WOZKU_THEME, type DeckTheme } from '../features/theme/deckTheme';
-import logoBlack from '../assets/Logo_Black_Transparent.png';
+import logoBlack from '../assets/wozku-logo-black.svg';
 import {
   AddIcon,
   AlbumsIcon,
@@ -359,24 +362,22 @@ function getLocalStorageUsage() {
 export function HomePage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
+  // Decks that predate sharing belong to whoever signs in first, not to nobody.
+  if (user) claimOwnerless(user.id);
   /** Whether this library is big enough that its covers are worth loading after
    *  the first paint rather than before it. Decided once, on mount. */
   const [deferCovers] = useState(() => listProjects().length > SKELETON_THRESHOLD);
 
-  const [userProfile, setUserProfile] = useState(loadUserProfile);
-  useEffect(() => {
-    const update = () => setUserProfile(loadUserProfile());
-    window.addEventListener('storage', update);
-    const timer = setInterval(update, 1000);
-    return () => {
-      window.removeEventListener('storage', update);
-      clearInterval(timer);
-    };
-  }, []);
   const [projects, setProjects] = useState<ProjectSummary[]>(() =>
     deferCovers ? [] : listProjectSummaries().filter((p) => !p.isSandbox)
   );
   const [folders, setFolders] = useState<FolderMeta[]>(() => listFolders());
+
+  // A deck shared with you from another tab should appear without a reload.
+  useEffect(() => onProjectsChanged(() => {
+    setProjects(listProjectSummaries().filter((p) => !p.isSandbox));
+  }), []);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   
   /** Navigation history stack for folder navigation ← / → */
@@ -387,6 +388,8 @@ export function HomePage() {
   const [loading, setLoading] = useState(deferCovers);
   const [query, setQuery] = useState('');
   const [kitFilter, setKitFilter] = useState<string | null>(null);
+  /** null shows everything this person can reach; the rest split owned from invited. */
+  const [accessFilter, setAccessFilter] = useState<'mine' | 'shared' | null>(null);
   /**
    * The view the *library* is in. Not the view on screen: inside a folder the
    * grid is forced, and that is a consequence of where you are rather than a
@@ -616,7 +619,7 @@ export function HomePage() {
   );
 
   const createDeck = (name: string, deck: Deck, isSandbox?: boolean) => {
-    const meta = createProject(name, { ast: null, deck }, isSandbox);
+    const meta = createProject(name, { ast: null, deck }, isSandbox, user?.id);
     if (activeFolderId) {
       moveProjectToFolder(meta.id, activeFolderId);
     }
@@ -801,9 +804,22 @@ export function HomePage() {
         return false;
       }
       if (kitFilter && themeOf(p).id !== kitFilter) return false;
+      if (user) {
+        const role = roleFor(p, user.id);
+        if (role === null) return false;
+        if (accessFilter === 'mine' && role !== 'owner') return false;
+        if (accessFilter === 'shared' && role === 'owner') return false;
+      }
       return !q || p.name.toLowerCase().includes(q);
     });
-  }, [projects, query, kitFilter, themeOf, activeFolderId]);
+  }, [projects, query, kitFilter, themeOf, activeFolderId, user, accessFilter]);
+
+  /** Whether anyone has actually shared anything, so the filter only appears
+   *  once there is something to filter. */
+  const hasShared = useMemo(
+    () => Boolean(user) && projects.some((p) => roleFor(p, user!.id) !== null && p.ownerId !== undefined && p.ownerId !== user!.id),
+    [projects, user]
+  );
 
   /** Folder name and colour by id, for marking search results that are filed. */
   const folderById = useMemo(
@@ -997,7 +1013,7 @@ export function HomePage() {
       <header className="sticky top-0 z-20 border-b border-neutral-200/80 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-[56px] max-w-[1220px] items-center justify-between px-8">
           <div className="flex items-center gap-3">
-            <img src={logoBlack} alt="Wozku Studio" className="h-6 w-auto" />
+            <img src={logoBlack} alt="Wozku Studio" className="h-8 w-auto" />
             <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-neutral-400">
               Studio
             </span>
@@ -1049,9 +1065,9 @@ export function HomePage() {
                 </button>
               </div>
 
-              <div className="pl-1 border-l border-neutral-200/80 flex items-center">
-                <ProfileMenu />
-              </div>
+              <div className="w-px h-5 bg-neutral-300" aria-hidden="true" />
+
+              <ProfileMenu />
             </div>
           </div>
         </div>
@@ -1218,6 +1234,32 @@ export function HomePage() {
           </div>
         ) : (
           <>
+            {/* Access filter. Only worth showing once a deck has actually been
+                shared, since before that every deck is your own. */}
+            {activeFolderId === null && hasShared && (
+              <div className="flex items-center gap-2 pt-2 flex-wrap mb-4">
+                <Eyebrow>Access</Eyebrow>
+                <span className="w-2" />
+                {([
+                  { id: null, label: 'All decks' },
+                  { id: 'mine' as const, label: 'My decks' },
+                  { id: 'shared' as const, label: 'Shared with me' },
+                ]).map((opt) => (
+                  <button
+                    key={opt.label}
+                    onClick={() => setAccessFilter(opt.id)}
+                    className={`h-[27px] px-3 text-[11.5px] font-bold transition-colors cursor-pointer border ${
+                      accessFilter === opt.id
+                        ? 'bg-neutral-900 text-white border-neutral-900'
+                        : 'bg-white/70 text-neutral-600 border-neutral-200 hover:border-neutral-400'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Client Filter (Only show on root homepage, not inside folders) */}
             {activeFolderId === null && kitsInUse.length > 1 && (
               <div className="flex items-center gap-2 pt-2 flex-wrap mb-4">

@@ -14,6 +14,48 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.0.0',
+    date: '2026-08-25',
+    summary: 'Sign in, invite people, and edit a deck together.',
+    added: [
+      'Studio now asks who you are. Sign in with one of the demo accounts shown on the login screen, and sign out from the menu behind your avatar.',
+      'A deck can be shared. Invite someone by email from the Share button, choose whether they can edit or only view, and change or revoke that at any time. Decks shared with you appear in your library under Shared with me.',
+      'Two people can work on one deck at once. You see who else has it open in the top bar, their cursor moves on the slide as they move it, and their edits appear as they make them. Undo still only takes back your own work, never theirs.',
+      'Click somebody in the top bar to go to the slide they are on. It takes you there once rather than tying you to them, so you can look and then carry on with your own work.',
+      'Every deck keeps a version history, saved as you go. Open it from the clock in the top bar to see who changed what and when, and restore any earlier version. Restoring keeps everything newer, so it can always be undone by restoring again.',
+    ],
+    improved: [
+      'The profile menu shows the account you signed in with, and nothing else. The workspace switcher it used to carry described teams that did not exist.',
+      'The Share window is a list of people rather than a wall of boxes, and the storage promise it used to make has gone, because a shared deck is no longer private to your browser.',
+      'Removed the download that produced a .wozku file. Nothing could open one, including Studio itself. Use Export for PowerPoint or PDF.',
+    ],
+  },
+  {
+    version: '2.5.0',
+    date: '2026-08-25',
+    summary: 'The header wears the current Wozku mark.',
+    improved: [
+      'The wordmark in both headers is now the current Wozku logo, as a vector rather than a raster PNG, so it stays crisp at any size and on any screen density.',
+    ],
+  },
+  {
+    version: '2.4.0',
+    date: '2026-08-25',
+    summary: 'An uploaded .pptx comes in readable, on the template you chose.',
+    fixed: [
+      'An uploaded deck ignored the template you dropped it onto and sat on a flat grey of its own. Imported slides now take the background, grid, glow and accent of the template you picked, so Wozku Master Classic arrives on white with its grid, The Editorial on cream with none, and AI-Native dark. A slide whose background stood apart from the rest of the source deck, a divider, still keeps its own.',
+      'A logo drawn in white for a dark deck vanished when that deck was re-lit onto a light template. Cut-out artwork is now re-lit along with everything else, keeping its shape and any colour it carries, so a partner logo strip survives the move. Photos and screenshots are left alone and still say so.',
+      'Text from an uploaded deck arrived invisible on decks whose background is painted once on the slide master rather than on each slide, which is most of them. The importer read only the slide, found nothing, and assumed white, so a deck of white text landed on a white slide. It now follows the background through to the layout and the master, including a background that is a picture, and re-lights the deck from that.',
+      'Pictures placed as a shape’s fill, which is how nearly all cropped and rounded artwork is placed, were dropped on the way in. Every one of them now comes across, cropped to the same window it filled in PowerPoint.',
+      'Text sitting on a dark card over a light slide came in dark on dark. Text with no colour of its own now takes its ink from the card it actually sits on, on the canvas and in the exported .pptx alike.',
+      'Blank lines between paragraphs collapsed to a fixed height, so copy underneath them rode up into the label above. Line spacing now comes across as the source deck set it.',
+      'A slide’s background no longer snaps to the accent colour. An imported deck used to be able to arrive as twenty-eight full-bleed emerald slides.',
+    ],
+    improved: [
+      'Artwork is stored at screen size instead of print size, and a picture with no transparency is kept as a photo rather than losing to a lossless format. A picture-heavy deck now takes about a third of the space it used to.',
+    ],
+  },
+  {
     version: '2.3.0',
     date: '2026-08-24',
     summary: 'Folders open on hover.',

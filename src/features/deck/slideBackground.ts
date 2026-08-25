@@ -28,6 +28,13 @@ export function hexIsDark(base?: string): boolean {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
 }
 
+/** Ink for imported text with no colour of its own: taken from the card it sits
+ *  on when it has one, else from the slide. Shared so the canvas and the .pptx
+ *  exporter cannot disagree about whether a run is readable. */
+export function importedInk(shapeFill: string | undefined, slideBase: string | undefined): 'light' | 'dark' {
+  return hexIsDark(shapeFill ?? slideBase) ? 'light' : 'dark';
+}
+
 /** WCAG relative luminance. Gamma-corrected, unlike the quick average
  *  `hexIsDark` uses, because a contrast ratio is only meaningful with it. */
 function relativeLuminance(hex: string): number {
