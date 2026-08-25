@@ -10,6 +10,8 @@ import {
   type CollabPeer,
 } from './collabChannel';
 
+import type { CommentAction } from '../comments/types';
+
 /** Fast enough to read as a live cursor, slow enough not to flood the channel. */
 const POINTER_THROTTLE_MS = 60;
 
@@ -18,6 +20,8 @@ interface Options {
   user: DemoUser | null;
   /** Applied when another tab edits the deck. Must not push onto undo history. */
   onRemoteDeck: (deck: Deck) => void;
+  /** Applied when another tab creates, replies to, or resolves a comment. */
+  onRemoteComment?: (action: CommentAction) => void;
 }
 
 interface Collab {
@@ -29,9 +33,13 @@ interface Collab {
   reportSlide: (slideId: string | undefined) => void;
   /** Tell the others where this cursor is, or nothing once it leaves. */
   reportPointer: (x?: number, y?: number) => void;
+  /** Broadcast live cursor chat message (Figma-style ephemeral chat). */
+  reportChat: (text?: string) => void;
+  /** Broadcast comment creation/reply/resolve/delete. */
+  broadcastComment: (action: CommentAction) => void;
 }
 
-export function useCollab({ projectId, user, onRemoteDeck }: Options): Collab {
+export function useCollab({ projectId, user, onRemoteDeck, onRemoteComment }: Options): Collab {
   const clientId = useMemo(newClientId, []);
   const [peers, setPeers] = useState<CollabPeer[]>([]);
   const channelRef = useRef<BroadcastChannel | null>(null);
@@ -40,6 +48,7 @@ export function useCollab({ projectId, user, onRemoteDeck }: Options): Collab {
   // following them to.
   const slideRef = useRef<string | undefined>(undefined);
   const pointerRef = useRef<{ x?: number; y?: number }>({});
+  const chatRef = useRef<{ text: string; sentAt: number } | undefined>(undefined);
   const announceRef = useRef<() => void>(() => {});
   const lastPointerSendRef = useRef(0);
 
@@ -47,6 +56,9 @@ export function useCollab({ projectId, user, onRemoteDeck }: Options): Collab {
   // the channel every time the parent re-renders with a new callback.
   const onRemoteDeckRef = useRef(onRemoteDeck);
   onRemoteDeckRef.current = onRemoteDeck;
+
+  const onRemoteCommentRef = useRef(onRemoteComment);
+  onRemoteCommentRef.current = onRemoteComment;
 
   useEffect(() => {
     if (!user) return;
@@ -61,6 +73,12 @@ export function useCollab({ projectId, user, onRemoteDeck }: Options): Collab {
         onRemoteDeckRef.current(msg.deck);
       } else if (msg.kind === 'presence' && msg.peer.clientId !== clientId) {
         setPeers((prev) => [...prev.filter((p) => p.clientId !== msg.peer.clientId), msg.peer]);
+      } else if (msg.kind === 'chat' && msg.clientId !== clientId) {
+        setPeers((prev) =>
+          prev.map((p) => (p.clientId === msg.clientId ? { ...p, chat: msg.chat } : p))
+        );
+      } else if (msg.kind === 'comment' && msg.clientId !== clientId) {
+        onRemoteCommentRef.current?.(msg.action);
       } else if (msg.kind === 'leave') {
         setPeers((prev) => prev.filter((p) => p.clientId !== msg.clientId));
       }
@@ -74,6 +92,7 @@ export function useCollab({ projectId, user, onRemoteDeck }: Options): Collab {
         color: user.color,
         slideId: slideRef.current,
         ...pointerRef.current,
+        chat: chatRef.current,
         at: Date.now(),
       };
       try {
@@ -121,6 +140,15 @@ export function useCollab({ projectId, user, onRemoteDeck }: Options): Collab {
     }
   }, [clientId, user]);
 
+  const broadcastComment = useCallback((action: CommentAction) => {
+    if (!user) return;
+    try {
+      channelRef.current?.postMessage({ kind: 'comment', clientId, action } satisfies CollabMessage);
+    } catch {
+      // ignore
+    }
+  }, [clientId, user]);
+
   // Rare enough to send the moment it happens, and the others need it promptly
   // to be able to follow.
   const reportSlide = useCallback((slideId: string | undefined) => {
@@ -139,5 +167,16 @@ export function useCollab({ projectId, user, onRemoteDeck }: Options): Collab {
     announceRef.current();
   }, []);
 
-  return { peers, broadcastDeck, reportSlide, reportPointer };
+  const reportChat = useCallback((text?: string) => {
+    const chat = text ? { text, sentAt: Date.now() } : undefined;
+    chatRef.current = chat;
+    try {
+      channelRef.current?.postMessage({ kind: 'chat', clientId, chat } satisfies CollabMessage);
+    } catch {
+      // ignore
+    }
+    announceRef.current();
+  }, [clientId]);
+
+  return { peers, broadcastDeck, reportSlide, reportPointer, reportChat, broadcastComment };
 }

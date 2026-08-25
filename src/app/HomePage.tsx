@@ -6,6 +6,7 @@ import { PresentMode } from '../features/generator/PresentMode';
 import { DevPanel } from '../features/dev/DevPanel';
 import { HelpMenu } from '../features/help/HelpMenu';
 import { ProfileMenu } from '../features/identity/ProfileMenu';
+import { NotificationBell } from '../features/notifications/NotificationBell';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
 import { hasModifier, MOD_KEY } from '../features/help/platform';
 import { createTemplateDeck } from '../features/deck/deckBuilder';
@@ -1067,6 +1068,7 @@ export function HomePage() {
 
               <div className="w-px h-5 bg-neutral-300" aria-hidden="true" />
 
+              <NotificationBell />
               <ProfileMenu />
             </div>
           </div>

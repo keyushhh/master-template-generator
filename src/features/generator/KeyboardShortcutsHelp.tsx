@@ -16,7 +16,9 @@ const GLOBAL_SHORTCUTS: Shortcut[] = [
   { keys: [MOD_KEY, 'Enter'], description: 'Start presentation mode' },
   // Same key in both places, because it means the same thing in both: type what
   // you want rather than go and find it.
-  { keys: [MOD_KEY, 'K'], description: 'Command palette here, deck search in the library' },
+  { keys: ['/'], description: 'Cursor Chat: broadcast a temporary live message' },
+  { keys: ['C'], description: 'Comment Mode: click anywhere to drop a comment pin' },
+  { keys: ['Shift', 'C'], description: 'Toggle comments visibility on canvas' },
   { keys: ['N'], description: 'Add a new slide' },
   { keys: ['Esc'], description: 'Close the open dialog' },
   { keys: ['?'], description: 'Show this shortcuts overlay' },

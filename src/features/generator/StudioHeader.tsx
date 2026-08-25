@@ -26,7 +26,18 @@ import { Link } from 'react-router-dom';
 import type { ProjectMeta } from '../deck/deckStore';
 import { DeckSwitcher } from './DeckSwitcher';
 import logoBlack from '../../assets/wozku-logo-black.svg';
-import { DownloadIcon, HistoryIcon, RedoIcon, RefreshIcon, ShareIcon, UndoIcon } from '../ui/icons';
+import {
+  ChatIcon,
+  CommentIcon,
+  DownloadIcon,
+  EyeIcon,
+  EyeOffIcon,
+  HistoryIcon,
+  RedoIcon,
+  RefreshIcon,
+  ShareIcon,
+  UndoIcon,
+} from '../ui/icons';
 import { PresenceStack } from '../collab/PresenceStack';
 import type { CollabPeer } from '../collab/collabChannel';
 
@@ -61,6 +72,10 @@ interface StudioHeaderProps {
   canExport: boolean;
   onOpenShare?: () => void;
   onOpenHistory?: () => void;
+  /** Whether comment pins are visible on the canvas */
+  showComments?: boolean;
+  onToggleShowComments?: () => void;
+  openCommentsCount?: number;
   /** Everyone else with this deck open, shown as avatars beside the actions. */
   peers?: CollabPeer[];
   /** Jump to the slide a peer is on. */
@@ -103,15 +118,13 @@ function IconBtn({
   label: string;
   children: React.ReactNode;
 }) {
-  const [hover, setHover] = useState(false);
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       title={title}
       aria-label={label}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -119,15 +132,15 @@ function IconBtn({
         width: 30,
         height: 30,
         borderRadius: 'var(--radius-sharp)',
-        borderWidth: 1,
-        borderStyle: 'solid',
-        borderColor: 'transparent',
-        background: !disabled && hover ? 'var(--neutral-100)' : 'transparent',
-        color: disabled ? 'var(--neutral-300)' : 'var(--neutral-600)',
+        border: '1px solid var(--neutral-200)',
+        background: 'transparent',
+        color: 'var(--neutral-700)',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        transition: 'background .15s, color .15s',
+        opacity: disabled ? 0.35 : 1,
+        transition: 'background .15s, border-color .15s, color .15s',
         padding: 0,
       }}
+      className="hover:border-neutral-400 hover:text-neutral-900"
     >
       {children}
     </button>
@@ -156,6 +169,9 @@ export function StudioHeader({
   canExport,
   onOpenShare,
   onOpenHistory,
+  showComments = true,
+  onToggleShowComments,
+  openCommentsCount = 0,
   peers = [],
   onFollowPeer,
   reachableSlideIds,
@@ -462,6 +478,43 @@ export function StudioHeader({
         <IconBtn onClick={() => onOpenHistory?.()} title="Version history" label="Version history">
           <HistoryIcon size={15} />
         </IconBtn>
+
+        {/* Single Comments Toggle Icon Button */}
+        {onToggleShowComments && (
+          <div style={{ position: 'relative' }}>
+            <IconBtn
+              onClick={onToggleShowComments}
+              title={showComments ? 'Hide comments (⇧C)' : 'Show comments (⇧C)'}
+              label="Comments"
+            >
+              <ChatIcon size={15} />
+            </IconBtn>
+            {openCommentsCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  minWidth: 15,
+                  height: 15,
+                  padding: '0 3.5px',
+                  borderRadius: 8,
+                  backgroundColor: '#0D99FF',
+                  color: '#ffffff',
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  pointerEvents: 'none',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                }}
+              >
+                {openCommentsCount}
+              </span>
+            )}
+          </div>
+        )}
 
         <button
           onClick={() => onOpenShare?.()}

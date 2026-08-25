@@ -9,6 +9,8 @@ import type { Deck } from '../deck/types';
  * would replace its transport without the callers noticing.
  */
 
+import type { CommentAction } from '../comments/types';
+
 export interface CollabPeer {
   clientId: string;
   userId: string;
@@ -19,12 +21,19 @@ export interface CollabPeer {
   /** Pointer position in the 1920x1080 design space, absent when off-canvas. */
   x?: number;
   y?: number;
+  /** Live cursor chat message (Figma-style ephemeral chat). */
+  chat?: {
+    text: string;
+    sentAt: number;
+  };
   at: number;
 }
 
 export type CollabMessage =
   | { kind: 'edit'; clientId: string; deck: Deck; userId: string }
   | { kind: 'presence'; peer: CollabPeer }
+  | { kind: 'chat'; clientId: string; chat?: { text: string; sentAt: number } }
+  | { kind: 'comment'; clientId: string; action: CommentAction }
   | { kind: 'leave'; clientId: string };
 
 /** A peer that has not been heard from in this long has closed its tab. */

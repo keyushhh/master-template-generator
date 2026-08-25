@@ -94,7 +94,17 @@ import { useAuth } from '../features/auth/authStore';
 import { useCollab } from '../features/collab/useCollab';
 import { PresenceStack } from '../features/collab/PresenceStack';
 import { RemoteCursors } from '../features/collab/RemoteCursors';
+import { CursorChat } from '../features/collab/CursorChat';
+import { CommentsLayer } from '../features/comments/CommentsLayer';
+import {
+  applyCommentAction,
+  loadDeckComments,
+  saveDeckComments,
+} from '../features/comments/commentsStore';
+import type { DeckComment, CommentAction } from '../features/comments/types';
 import { VersionHistoryPanel } from '../features/deck/VersionHistoryPanel';
+import { DEMO_USERS } from '../features/auth/demoUsers';
+import { addNotification } from '../features/notifications/notificationStore';
 
 // Undo/redo history for the committed deck.
 const HISTORY_LIMIT = 50;
@@ -320,11 +330,170 @@ export function MasterTemplatePage() {
     applyingRemoteRef.current = false;
   }, []);
 
-  const { peers, broadcastDeck, reportSlide, reportPointer } = useCollab({
+  // Comments and Cursor Chat State
+  const [comments, setComments] = useState<DeckComment[]>(() => loadDeckComments(activeId));
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [draftCommentPos, setDraftCommentPos] = useState<{ x: number; y: number } | null>(null);
+  const [isCommentMode, setIsCommentMode] = useState(false);
+  const [showComments, setShowComments] = useState(true);
+  const [showResolvedComments, setShowResolvedComments] = useState(false);
+  const [cursorChatActive, setCursorChatActive] = useState(false);
+
+  // Reload comments when activeId changes
+  useEffect(() => {
+    setComments(loadDeckComments(activeId));
+    setActiveCommentId(null);
+    setDraftCommentPos(null);
+  }, [activeId]);
+
+  // Handle incoming remote comment action
+  const handleRemoteComment = useCallback((action: CommentAction) => {
+    setComments((prev) => {
+      const next = applyCommentAction(prev, action);
+      saveDeckComments(activeId, next);
+      return next;
+    });
+  }, [activeId]);
+
+  const { peers, broadcastDeck, reportSlide, reportPointer, reportChat, broadcastComment } = useCollab({
     projectId: activeId,
     user,
     onRemoteDeck: applyRemoteDeck,
+    onRemoteComment: handleRemoteComment,
   });
+
+  const handleSaveComment = useCallback(
+    (slideId: string, x: number, y: number, content: string) => {
+      if (!user) return;
+      const newComment: DeckComment = {
+        id: `cmt_${crypto.randomUUID()}`,
+        projectId: activeId,
+        slideId,
+        x,
+        y,
+        userId: user.id,
+        userName: user.name,
+        userColor: user.color,
+        content,
+        createdAt: Date.now(),
+        resolved: false,
+        replies: [],
+      };
+      const action: CommentAction = { type: 'create', comment: newComment };
+      setComments((prev) => {
+        const next = applyCommentAction(prev, action);
+        saveDeckComments(activeId, next);
+        return next;
+      });
+      broadcastComment(action);
+      setIsCommentMode(false);
+
+      // Trigger notifications for any mentioned users
+      DEMO_USERS.forEach((u) => {
+        if (content.includes(`@${u.name}`) && u.id !== user.id) {
+          addNotification(u.id, {
+            authorName: user.name,
+            authorColor: user.color,
+            type: 'mention',
+            title: `${user.name} mentioned you in a comment`,
+            description: `"${content}"`,
+            deckName: projectName || 'Presentation Deck',
+            projectId: activeId ?? undefined,
+          });
+        }
+      });
+    },
+    [activeId, user, projectName, broadcastComment]
+  );
+
+  const handleReplyComment = useCallback(
+    (commentId: string, content: string) => {
+      if (!user) return;
+      const reply = {
+        id: `rpl_${crypto.randomUUID()}`,
+        userId: user.id,
+        userName: user.name,
+        userColor: user.color,
+        content,
+        createdAt: Date.now(),
+      };
+      const action: CommentAction = { type: 'reply', commentId, reply };
+      setComments((prev) => {
+        const next = applyCommentAction(prev, action);
+        saveDeckComments(activeId, next);
+        return next;
+      });
+      broadcastComment(action);
+
+      // Trigger notifications for any mentioned users in reply
+      DEMO_USERS.forEach((u) => {
+        if (content.includes(`@${u.name}`) && u.id !== user.id) {
+          addNotification(u.id, {
+            authorName: user.name,
+            authorColor: user.color,
+            type: 'mention',
+            title: `${user.name} mentioned you in a reply`,
+            description: `"${content}"`,
+            deckName: projectName || 'Presentation Deck',
+            projectId: activeId ?? undefined,
+          });
+        }
+      });
+    },
+    [activeId, user, projectName, broadcastComment]
+  );
+
+  const handleToggleResolveComment = useCallback(
+    (commentId: string) => {
+      const target = comments.find((c) => c.id === commentId);
+      if (!target) return;
+      const nextResolved = !target.resolved;
+      const action: CommentAction = {
+        type: 'resolve',
+        commentId,
+        resolved: nextResolved,
+        resolvedBy: user?.name,
+      };
+      setComments((prev) => {
+        const next = applyCommentAction(prev, action);
+        saveDeckComments(activeId, next);
+        return next;
+      });
+      broadcastComment(action);
+    },
+    [activeId, comments, user, broadcastComment]
+  );
+
+  const handleDeleteComment = useCallback(
+    (commentId: string) => {
+      const action: CommentAction = { type: 'delete', commentId };
+      setComments((prev) => {
+        const next = applyCommentAction(prev, action);
+        saveDeckComments(activeId, next);
+        return next;
+      });
+      broadcastComment(action);
+    },
+    [activeId, broadcastComment]
+  );
+
+  const handleMoveComment = useCallback(
+    (commentId: string, x: number, y: number) => {
+      const action: CommentAction = { type: 'move', commentId, x, y };
+      setComments((prev) => {
+        const next = applyCommentAction(prev, action);
+        saveDeckComments(activeId, next);
+        return next;
+      });
+      broadcastComment(action);
+    },
+    [activeId, broadcastComment]
+  );
+
+  const openCommentsCount = useMemo(
+    () => comments.filter((c) => !c.resolved).length,
+    [comments]
+  );
 
   // Access can change from a tab that is not on this deck at all, so this
   // listens to the store rather than to the deck's own channel.
@@ -1402,6 +1571,59 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     return () => window.removeEventListener('keydown', onKey);
   }, [timeTravel]);
 
+  // Figma-style shortcuts:
+  // "/" activates Cursor Chat
+  // "C" toggles Comment Mode
+  // "Shift + C" toggles Comments visibility
+  // "Escape" exits comment mode / clears cursor chat
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const isInput = Boolean(
+        el && (
+          el.isContentEditable ||
+          el.tagName === 'INPUT' ||
+          el.tagName === 'TEXTAREA' ||
+          el.closest('input, textarea, [contenteditable="true"]')
+        )
+      );
+
+      if (e.key === 'Escape') {
+        if (isCommentMode || activeCommentId || draftCommentPos || cursorChatActive) {
+          e.preventDefault();
+          setIsCommentMode(false);
+          setActiveCommentId(null);
+          setDraftCommentPos(null);
+          setCursorChatActive(false);
+        }
+        return;
+      }
+
+      if (isInput) return;
+
+      const isSlash = e.key === '/' || e.code === 'Slash';
+      const isKeyC = (e.key.toLowerCase() === 'c' || e.code === 'KeyC') && !e.metaKey && !e.ctrlKey && !e.altKey;
+
+      if (isSlash && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setCursorChatActive(true);
+      } else if (isKeyC) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          setShowComments((v) => !v);
+        } else {
+          setIsCommentMode((v) => !v);
+          if (activeCommentId || draftCommentPos) {
+            setActiveCommentId(null);
+            setDraftCommentPos(null);
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isCommentMode, activeCommentId, draftCommentPos, cursorChatActive]);
+
   // "?" opens the keyboard shortcuts overlay and "G" the slide sorter, unless
   // the user is typing somewhere. Both are guarded on the same "is this a text
   // field" check, since a bare letter key is only a shortcut outside one.
@@ -2302,6 +2524,9 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         canExport={displayDeck.slides.some((s) => !s.hidden)}
         onOpenShare={() => setShareOpen(true)}
         onOpenHistory={() => setHistoryOpen(true)}
+        showComments={showComments}
+        onToggleShowComments={() => setShowComments((v) => !v)}
+        openCommentsCount={openCommentsCount}
         peers={peers}
         onFollowPeer={setCurrentSlideId}
         reachableSlideIds={followableSlideIds}
@@ -2315,6 +2540,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
       />
 
       <div
+        style={{ cursor: isCommentMode ? 'crosshair' : undefined }}
         onPointerMove={(e) => {
           const stage = (e.target as HTMLElement).closest?.('[data-slide]')
             ?? document.querySelector('[data-slide]');
@@ -2347,6 +2573,39 @@ function pristineDeckFor(templateId: string | undefined): Deck {
       />
       </div>
       <RemoteCursors peers={peers} slideId={currentSlideId} />
+
+      {/* Figma-style Canvas Comments Layer */}
+      {user && (
+        <CommentsLayer
+          slideId={currentSlideId}
+          comments={comments}
+          activeCommentId={activeCommentId}
+          draftPosition={draftCommentPos}
+          isCommentMode={isCommentMode}
+          onExitCommentMode={() => setIsCommentMode(false)}
+          showComments={showComments}
+          showResolved={showResolvedComments}
+          currentUser={user}
+          onSelectComment={setActiveCommentId}
+          onDraftPositionChange={setDraftCommentPos}
+          onSaveComment={handleSaveComment}
+          onReplyComment={handleReplyComment}
+          onToggleResolveComment={handleToggleResolveComment}
+          onDeleteComment={handleDeleteComment}
+          onMoveComment={handleMoveComment}
+        />
+      )}
+
+      {/* Figma-style Live Cursor Chat */}
+      {user && (
+        <CursorChat
+          active={cursorChatActive}
+          onClose={() => setCursorChatActive(false)}
+          onTextChange={reportChat}
+          userColor={user.color}
+          userName={user.name}
+        />
+      )}
 
       {/* One editing toolbar. This used to be three stacked bars (insert,
           format, session); the stack was heavier than the tools we're competing

@@ -645,3 +645,115 @@ export function DatabaseIcon({ size = 14 }: IconProps) {
     </Lucide>
   );
 }
+
+/** Lucide: message-square (Comment) */
+export function CommentIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </Lucide>
+  );
+}
+
+/** Lucide: message-circle (Cursor Chat) */
+export function ChatIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z" />
+    </Lucide>
+  );
+}
+
+/** Lucide: check-circle-2 */
+export function CheckCircleIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m9 12 2 2 4-4" />
+    </Lucide>
+  );
+}
+
+/** Lucide: at-sign */
+export function MentionIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
+    </Lucide>
+  );
+}
+
+/** Lucide: smile */
+export function SmileIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <line x1="9" x2="9.01" y1="9" y2="9" />
+      <line x1="15" x2="15.01" y1="9" y2="9" />
+    </Lucide>
+  );
+}
+
+/** Lucide: arrow-up (Send) */
+export function SendIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="5 12 12 5 19 12" />
+    </Lucide>
+  );
+}
+
+/** Lucide: more-horizontal */
+export function MoreHorizontalIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+      <circle cx="5" cy="12" r="1" />
+    </Lucide>
+  );
+}
+
+/** Lucide: user-plus */
+export function UserPlusIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="22" y1="11" x2="16" y2="11" />
+    </Lucide>
+  );
+}
+
+/** Lucide: heart */
+export function HeartIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+    </Lucide>
+  );
+}
+
+/** Lucide: zap (lightning) */
+export function LightningIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </Lucide>
+  );
+}
+
+/** Lucide: bell */
+export function BellIcon({ size = 14 }: IconProps) {
+  return (
+    <Lucide size={size}>
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </Lucide>
+  );
+}
+

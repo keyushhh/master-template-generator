@@ -3,6 +3,7 @@ import type { Collaborator, CollaboratorRole } from '../deck/deckStore';
 import { CheckIcon, ChevronDownIcon, CloseIcon, LinkIcon } from '../ui/icons';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import { DEMO_USERS, findDemoUser, initialsOf, userById } from '../auth/demoUsers';
+import { addNotification } from '../notifications/notificationStore';
 
 interface ShareModalProps {
   open: boolean;
@@ -212,6 +213,19 @@ export function ShareModal({
       return;
     }
     onInvite?.(match.id, inviteRole);
+    if (currentUserId) {
+      const sender = userById(currentUserId);
+      if (sender) {
+        addNotification(match.id, {
+          authorName: sender.name,
+          authorColor: sender.color,
+          type: inviteRole === 'editor' ? 'invite_edit' : 'invite_view',
+          title: `${sender.name} invited you to ${inviteRole === 'editor' ? 'edit' : 'view'}`,
+          description: `You have been added as an ${inviteRole === 'editor' ? 'Editor' : 'Viewer'} on "${deckName}".`,
+          deckName: deckName,
+        });
+      }
+    }
     onShowToast(`${match.name} can now ${inviteRole === 'editor' ? 'edit' : 'view'} this deck.`, 'success');
     setInviteEmail('');
     setInviteError(null);
