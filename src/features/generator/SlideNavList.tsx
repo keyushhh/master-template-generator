@@ -1,13 +1,14 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { SlideInstance } from '../deck/types';
+import type { SlideInstance, SlideTransition } from '../deck/types';
 import type { DocumentNode } from '../business-record/parser/ast';
 import { SlideStage } from './PresentationCanvas';
-import { CopyIcon, CreateIcon, DuplicateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, GripIcon, LayersIcon, TrashIcon, WarningIcon } from '../ui/icons';
+import { CopyIcon, CreateIcon, DuplicateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FlashIcon, GripIcon, LayersIcon, TrashIcon, WarningIcon } from '../ui/icons';
 import type { DeckTheme } from '../theme/deckTheme';
 import { describeIssue, SEVERE_BY } from '../fit/fitScan';
 import { pruneFit, useSlideFit } from '../fit/fitStore';
 import { ConfirmModal, cannotBeUndone } from '../ui/ConfirmModal';
+import { TRANSITIONS } from '../deck/slideTransitions';
 
 interface SlideNavListProps {
   slides: SlideInstance[];
@@ -23,6 +24,8 @@ interface SlideNavListProps {
   /** Open the layout switcher for this slide. */
   onChangeLayout: (instanceId: string) => void;
   onDelete: (instanceId: string) => void;
+  /** `null` resets the slide to the deck's own transition. */
+  onSetTransition: (instanceId: string, transition: SlideTransition | null) => void;
   onRename: (instanceId: string, title: string) => void;
   /** Move `fromId` to sit just before `toId` in the deck order. */
   onReorder: (fromId: string, toId: string) => void;
@@ -250,7 +253,7 @@ function CardAction({
   );
 }
 
-export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDuplicate, onChangeLayout, onDelete, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
+export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDuplicate, onChangeLayout, onDelete, onSetTransition, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
   // Double-click-to-rename state: which row is being renamed + its draft text.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -279,11 +282,16 @@ export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDu
     pruneFit(slides.map((s) => s.instanceId));
   }, [slides]);
 
+  /** Whether the transition row's inline options are expanded. Reset whenever
+   *  the menu itself changes so it never reopens already-expanded. */
+  const [txExpanded, setTxExpanded] = useState(false);
+
   useLayoutEffect(() => {
     if (!menu) {
       setMenuHeight(0);
       return;
     }
+    setTxExpanded(false);
     // Runs before paint, so the measured position is the first one drawn - the
     // menu never visibly jumps from "below" to "above".
     setMenuHeight(menuRef.current?.offsetHeight ?? 0);
@@ -582,6 +590,51 @@ export function SlideNavList({ slides, ast, logoUrl, theme, onToggleHidden, onDu
                 setMenu(null);
               }}
             />
+            <div className="my-1 h-px bg-neutral-200" />
+            {(() => {
+              const activeSlide = slides.find((sl) => sl.instanceId === menu.id);
+              return (
+                <>
+                  <MenuRow
+                    icon={<FlashIcon size={15} />}
+                    label="Transition"
+                    hint={activeSlide?.transition ? TRANSITIONS.find((t) => t.id === activeSlide.transition)?.label : 'Deck default'}
+                    onClick={() => setTxExpanded((v) => !v)}
+                  />
+                  {txExpanded && (
+                    <div className="pb-1">
+                      {TRANSITIONS.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            onSetTransition(menu.id, t.id);
+                            setMenu(null);
+                          }}
+                          className={`w-full flex items-center justify-between gap-2.5 pl-8 pr-3 py-[6px] text-[12px] font-medium transition-colors cursor-pointer ${
+                            activeSlide?.transition === t.id ? 'text-emerald-700 bg-emerald-50' : 'text-neutral-600 hover:bg-neutral-100'
+                          }`}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                      {activeSlide?.transition && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSetTransition(menu.id, null);
+                            setMenu(null);
+                          }}
+                          className="w-full flex items-center gap-2.5 pl-8 pr-3 py-[6px] text-[11.5px] font-medium text-neutral-400 hover:bg-neutral-100 cursor-pointer"
+                        >
+                          Use deck default
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             <div className="my-1 h-px bg-neutral-200" />
             <MenuRow
               icon={<TrashIcon size={15} />}

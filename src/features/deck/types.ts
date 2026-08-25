@@ -465,6 +465,9 @@ export interface SlideInstance {
    *  should follow the template. */
   titleCustomized?: boolean;
   content: SlideContent;
+  /** Overrides the deck's transition for this slide only. Absent means it
+   *  follows the deck. */
+  transition?: SlideTransition;
 }
 
 export interface Deck {
@@ -490,4 +493,13 @@ export interface Deck {
    *  active template's own slide types instead of always falling back to the
    *  classic s1-s14 set. */
   presentationTemplateId?: string;
+  /** How one slide gives way to the next in present mode. Absent means Fade,
+   *  the house default, so a deck saved before transitions existed presents
+   *  the same way a new one does rather than hard-cutting. */
+  transition?: SlideTransition;
 }
+
+/** The transitions present mode offers. Deliberately short: a deck reads as one
+ *  piece when every slide changes the same way, and a picker of twenty does the
+ *  opposite. */
+export type SlideTransition = 'none' | 'fade' | 'push' | 'wipe' | 'rise';

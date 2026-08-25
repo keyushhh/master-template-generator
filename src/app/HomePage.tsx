@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+// Lazy, not static: the seeding panel is dev-only, and a static import ships it
+// and its sample client data to every production visitor regardless.
+const DevPanel = lazy(() => import('../features/dev/DevPanel').then((m) => ({ default: m.DevPanel })));
 import { FitStage } from '../features/generator/FitStage';
 import { PresentMode } from '../features/generator/PresentMode';
-import { DevPanel } from '../features/dev/DevPanel';
 import { HelpMenu } from '../features/help/HelpMenu';
 import { ProfileMenu } from '../features/identity/ProfileMenu';
 import { NotificationBell } from '../features/notifications/NotificationBell';
@@ -1941,7 +1943,11 @@ export function HomePage() {
         />
       )}
 
-      <DevPanel loading={loading} onSetLoading={setLoading} onDataChanged={reload} deckCount={projects.length} />
+      {import.meta.env.DEV && (
+        <Suspense fallback={null}>
+          <DevPanel loading={loading} onSetLoading={setLoading} onDataChanged={reload} deckCount={projects.length} />
+        </Suspense>
+      )}
       <ScrollToTop />
     </div>
   );

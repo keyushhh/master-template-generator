@@ -4,7 +4,7 @@ import { SourceMaterialModal } from './SourceMaterialModal';
 import { AddIcon, DocumentIcon, FlashIcon } from '../ui/icons';
 // Sidebar for presenting the generated slides list and actions
 import type { DocumentNode } from '../business-record/parser/ast';
-import type { Deck } from '../deck/types';
+import type { Deck, SlideTransition } from '../deck/types';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 
 /** How many px off a scroll extreme still counts as "at the top" / "at the
@@ -28,6 +28,7 @@ interface GeneratorSidebarProps {
   onDuplicate: (instanceId: string) => void;
   onChangeLayout: (instanceId: string) => void;
   onDelete: (instanceId: string) => void;
+  onSetTransition: (instanceId: string, transition: SlideTransition | null) => void;
   onRename: (instanceId: string, title: string) => void;
   onReorder: (fromId: string, toId: string) => void;
   /** Add a blank slide at `index` in the deck. */
@@ -58,6 +59,7 @@ export function GeneratorSidebar({
   onDuplicate,
   onChangeLayout,
   onDelete,
+  onSetTransition,
   onRename,
   onReorder,
   onAddBlank,
@@ -156,6 +158,7 @@ export function GeneratorSidebar({
               onDuplicate={onDuplicate}
               onChangeLayout={onChangeLayout}
               onDelete={onDelete}
+              onSetTransition={onSetTransition}
               onRename={onRename}
               onReorder={onReorder}
               onInsertAfter={onInsertAfter}

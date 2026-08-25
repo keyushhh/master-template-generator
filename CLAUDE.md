@@ -102,8 +102,7 @@ the app as private or local-only in UI copy any more: a deck can now be shared.
 - `.pptx` is native and editable (`pptxNative.ts`), one build function per template.
   Not a screenshot.
 - PDF, PNG and HTML are captures of the live canvas, so canvas-side CSS reaches them
-  for free. `htmlExport.ts`'s `generateHtmlPresentation` is dead code; the real HTML
-  export is in `exportHelper.ts`.
+  for free. HTML export lives in `exportHelper.ts`.
 - **No silent degradation.** If a video was too large to embed, or a font could not
   be embedded, collect a note and toast it. Finding out during a client presentation
   is the failure mode being avoided.

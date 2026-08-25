@@ -43,6 +43,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ showToast }}>
       {children}
       <div
+        aria-live="polite"
+        aria-atomic="false"
         style={{
           position: 'fixed',
           top: 20,
@@ -57,7 +59,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            role="status"
             style={{
               display: 'flex',
               alignItems: 'flex-start',

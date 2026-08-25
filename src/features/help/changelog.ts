@@ -14,6 +14,24 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.2.0',
+    date: '2026-08-25',
+    summary: 'Slides move when you present, and the studio opens faster.',
+    added: [
+      'Slides now change with a transition rather than a hard cut. Pick one from the bar while presenting and see it straight away: Fade, Push, Wipe, Rise, or Cut for no transition at all. The choice stays with the deck, so it presents the same way next time.',
+      'Going back reverses the transition rather than repeating it, so arrowing to the previous slide reads as going back.',
+      'A single slide can carry its own transition instead of the deck’s. Set it from the slide’s … menu in the sidebar, or from the transition picker itself while presenting; a small dot marks a slide that overrides the deck.',
+    ],
+    improved: [
+      'The gallery opens on about half the code it used to, so the library appears sooner on a slow connection.',
+      'A transition is skipped for anyone whose system asks for reduced motion. They get the cut, not a slower version of the same movement.',
+    ],
+    fixed: [
+      'A slide that failed to draw took the whole studio with it and left only a Reload button. The header, the slide list and the rest of the deck now stay, and the slide itself offers to try again.',
+      'Messages such as a finished export or a full-storage warning were not reliably announced by screen readers.',
+    ],
+  },
+  {
     version: '3.1.0',
     date: '2026-08-25',
     summary: 'Reactions throw real confetti, and the bell reacts when something lands.',

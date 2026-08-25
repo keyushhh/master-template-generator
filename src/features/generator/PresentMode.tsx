@@ -3,7 +3,8 @@ import { SlideStage } from './PresentationCanvas';
 import { FitStage } from './FitStage';
 import { PresentVideoLayer } from '../formatting/PresentVideoLayer';
 import type { DocumentNode } from '../business-record/parser/ast';
-import type { Deck, SlideInstance } from '../deck/types';
+import type { Deck, SlideInstance, SlideTransition } from '../deck/types';
+import { DEFAULT_TRANSITION, TRANSITIONS, prefersReducedMotion, resolveTransition, transitionMs } from '../deck/slideTransitions';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 import {
   ChevronBackIcon,
@@ -11,6 +12,7 @@ import {
   CloseIcon,
   DocumentTextIcon,
   EyeOffIcon,
+  FlashIcon,
   LaserPointerIcon,
   LayersIcon,
   PauseCircleIcon,
@@ -24,6 +26,8 @@ import {
  *  presenter remote defaults to, so it should be the one this does too. */
 const LASER_COLORS = ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#a855f7'];
 
+
+
 interface PresentModeProps {
   open: boolean;
   onClose: () => void;
@@ -36,6 +40,11 @@ interface PresentModeProps {
   onIndexChange?: (index: number) => void;
   /** The deck's resolved theme. */
   theme?: DeckTheme;
+  /** Fires when the presenter picks a different transition, so the choice is
+   *  kept on the deck rather than lost when the presentation closes. */
+  /** Fires with the just-picked transition and which slide it applies to:
+   *  the current one, or every slide (deck-level) via `null`. */
+  onTransitionChange?: (transition: SlideTransition | null, scope: 'slide' | 'deck', slideId: string) => void;
 }
 
 /** Milliseconds of no pointer movement before the chrome fades away. */
@@ -145,6 +154,7 @@ export function PresentMode({
   startIndex = 0,
   onIndexChange,
   theme = WOZKU_THEME,
+  onTransitionChange,
 }: PresentModeProps) {
   const visible = useMemo(() => deck.slides.filter((s) => !s.hidden), [deck.slides]);
   const [index, setIndex] = useState(startIndex);
@@ -286,6 +296,33 @@ export function PresentMode({
 
   const next = useCallback(() => setIndex((i) => Math.min(i + 1, total - 1)), [total]);
   const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
+
+  const transition = resolveTransition(visible[Math.min(index, Math.max(visible.length - 1, 0))], deck);
+  const [txPickerOpen, setTxPickerOpen] = useState(false);
+  const [txScope, setTxScope] = useState<'slide' | 'deck'>('slide');
+  /** The slide being left behind, held on screen only while it animates away. */
+  const [outgoing, setOutgoing] = useState<{ slide: SlideInstance; num: string; back: boolean } | null>(null);
+  const lastIndexRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      lastIndexRef.current = null;
+      setOutgoing(null);
+      return;
+    }
+    const from = lastIndexRef.current;
+    lastIndexRef.current = index;
+    // `null` is the first settle after opening: there is no slide to leave yet.
+    if (from === null || from === index) return;
+    if (transition === 'none' || prefersReducedMotion()) return;
+    const leaving = visible[Math.min(from, Math.max(visible.length - 1, 0))];
+    if (!leaving) return;
+    setOutgoing({ slide: leaving, num: pad(from + 1), back: index < from });
+    // Torn down on a timer rather than animationend, which never fires if the
+    // animation is switched off underneath us.
+    const done = window.setTimeout(() => setOutgoing(null), transitionMs(transition) + 40);
+    return () => window.clearTimeout(done);
+  }, [open, index, transition, visible]);
 
   const togglePlay = useCallback(() => {
     setAutoPlay((v) => {
@@ -437,16 +474,44 @@ export function PresentMode({
 
   const activeStrokes = penStrokes[slide.instanceId] ?? [];
 
+  const back = outgoing?.back ?? false;
+  // Direction is one set of custom properties rather than a second set of
+  // keyframes, so going back is the forward animation read the other way.
+  const txVars = {
+    '--tx-from': back ? '-100%' : '100%',
+    '--tx-to': back ? '100%' : '-100%',
+    '--tx-clip': back ? 'inset(0 100% 0 0)' : 'inset(0 0 0 100%)',
+    '--tx-rise': back ? '-3%' : '3%',
+  } as React.CSSProperties;
+
   const slideBox = (
     <div style={{ position: 'relative', boxShadow: '0 30px 80px rgba(0,0,0,0.55)', flexShrink: 0 }}>
-      <SlideStage
-        slide={slide}
-        ast={ast}
-        num={pad(index + 1)}
-        scale={scale}
-        logoUrl={deck.logoUrl}
-        theme={theme}
-      />
+      <div className="wg-tx" data-tx={outgoing ? transition : 'none'} style={txVars}>
+        {outgoing && (
+          <div className="wg-tx-out" aria-hidden>
+            <SlideStage
+              slide={outgoing.slide}
+              ast={ast}
+              num={outgoing.num}
+              scale={scale}
+              logoUrl={deck.logoUrl}
+              theme={theme}
+            />
+          </div>
+        )}
+        {/* Keyed on the slide, so the incoming layer is a new element every step
+            and its entrance animation restarts instead of being skipped. */}
+        <div className="wg-tx-in" key={slide.instanceId}>
+          <SlideStage
+            slide={slide}
+            ast={ast}
+            num={pad(index + 1)}
+            scale={scale}
+            logoUrl={deck.logoUrl}
+            theme={theme}
+          />
+        </div>
+      </div>
       <div
         ref={stageRef}
         onClick={toolMode === 'pointer' ? next : undefined}
@@ -1134,6 +1199,151 @@ export function PresentMode({
                 Clear Ink
               </BarButton>
             ) : null}
+
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <BarButton
+                label="Slide transition"
+                onClick={() => setTxPickerOpen((v) => !v)}
+                active={txPickerOpen}
+                wide
+              >
+                <FlashIcon size={15} />
+                {TRANSITIONS.find((t) => t.id === transition)?.label ?? 'Fade'}
+                {slide.transition && (
+                  <span
+                    aria-hidden
+                    title="This slide overrides the deck default"
+                    style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--emerald-400)', marginLeft: 2 }}
+                  />
+                )}
+              </BarButton>
+              {txPickerOpen && (
+                <>
+                  <div onClick={() => setTxPickerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                  <div
+                    role="menu"
+                    aria-label="Slide transition"
+                    style={{
+                      position: 'absolute',
+                      bottom: 'calc(100% + 10px)',
+                      left: 0,
+                      zIndex: 41,
+                      minWidth: 226,
+                      padding: 5,
+                      background: CHROME_BG,
+                      border: CHROME_BORDER,
+                      borderRadius: 'var(--radius-sharp)',
+                      boxShadow: '0 16px 36px rgba(0,0,0,0.45)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 3,
+                        padding: '4px 4px 8px',
+                        marginBottom: 4,
+                        borderBottom: '1px solid rgba(255,255,255,0.1)',
+                      }}
+                    >
+                      {(['slide', 'deck'] as const).map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setTxScope(s)}
+                          style={{
+                            flex: 1,
+                            padding: '5px 0',
+                            border: 'none',
+                            borderRadius: 'var(--radius-sharp)',
+                            background: txScope === s ? 'rgba(255,255,255,0.14)' : 'transparent',
+                            color: txScope === s ? '#fff' : 'rgba(255,255,255,0.55)',
+                            fontFamily: 'var(--font-sans)',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 0.2,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {s === 'slide' ? 'This slide' : 'Whole deck'}
+                        </button>
+                      ))}
+                    </div>
+                    {TRANSITIONS.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={t.id === transition}
+                        onClick={() => {
+                          onTransitionChange?.(t.id, txScope, slide.instanceId);
+                          setTxPickerOpen(false);
+                          // Show it straight away rather than making the
+                          // presenter change slide to find out what they picked.
+                          if (t.id !== 'none' && !prefersReducedMotion()) {
+                            setOutgoing({ slide, num: pad(index + 1), back: false });
+                            window.setTimeout(() => setOutgoing(null), transitionMs(t.id) + 40);
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'baseline',
+                          gap: 8,
+                          width: '100%',
+                          padding: '7px 9px',
+                          border: 'none',
+                          borderRadius: 'var(--radius-sharp)',
+                          background: t.id === transition ? 'var(--emerald-600)' : 'transparent',
+                          color: t.id === transition ? '#fff' : 'rgba(255,255,255,0.86)',
+                          fontFamily: 'var(--font-sans)',
+                          fontSize: 12.5,
+                          fontWeight: 600,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t.label}
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 500,
+                            opacity: t.id === transition ? 0.8 : 0.5,
+                            marginLeft: 'auto',
+                          }}
+                        >
+                          {t.note}
+                        </span>
+                      </button>
+                    ))}
+                    {slide.transition && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onTransitionChange?.(null, 'slide', slide.instanceId);
+                          setTxPickerOpen(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          marginTop: 3,
+                          padding: '6px 9px',
+                          border: 'none',
+                          borderTop: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: 0,
+                          background: 'transparent',
+                          color: 'rgba(255,255,255,0.55)',
+                          fontFamily: 'var(--font-sans)',
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reset this slide to the deck default
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
 
             <BarButton label="Blank the screen (B)" onClick={() => { setBlank(true); broadcast({ type: 'BLANK', blank: true }); }}>
               <EyeOffIcon size={16} />

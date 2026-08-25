@@ -98,16 +98,6 @@
   padding: 2px 8px 8px;
   scrollbar-gutter: stable;
 }
-.wg-doc .sidenav-fade {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 20px;
-  background: linear-gradient(var(--chrome-surface), transparent);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .15s ease;
-}
-.wg-doc .sidenav-fade.is-visible { opacity: 1; }
 
 /* The primary action floats under the rail, outside it. */
 .wg-doc .sidenav-cta {
@@ -171,20 +161,6 @@
 }
 
 /* Upload zone - explicit values to survive the * { padding:0 } reset */
-.wg-doc .upload-zone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  min-height: 140px;
-  padding: 32px 20px;
-  border: 1.5px dashed var(--neutral-300);
-  cursor: pointer;
-  transition: border-color .15s ease, background .15s ease;
-}
-.wg-doc .upload-zone:hover { border-color: var(--emerald-500); background: var(--emerald-50); }
-.wg-doc .upload-zone.dragging { border-color: var(--emerald-500); background: var(--emerald-50); }
 
 /* ================= PRINT / PDF EXPORT ================= */
 @media print {

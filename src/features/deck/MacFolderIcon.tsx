@@ -1,5 +1,4 @@
 import { useId, useState } from 'react';
-import { motion } from 'motion/react';
 import type { FolderColor } from './deckStore';
 
 interface MacFolderIconProps {
@@ -14,6 +13,10 @@ interface MacFolderIconProps {
    *  steps. Takes over from `size` when given. */
   sizePx?: number;
 }
+
+/** Stands in for the spring this used to animate on: same duration, same small
+ *  overshoot at the end, no library. */
+const SPRING = '420ms cubic-bezier(0.34, 1.56, 0.64, 1)';
 
 const BASE_WIDTH = 321;
 const BASE_HEIGHT = 270;
@@ -146,39 +149,32 @@ export function MacFolderIcon({
         {!isEmpty && (
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
             {CARDS.map((card, i) => (
-              <motion.div
+              <div
                 key={i}
                 className="absolute"
-                initial={false}
-                animate={{
-                  y: hovered ? card.hoverY : card.restY,
-                  x: hovered ? card.hoverX : card.restX,
-                  rotate: hovered ? card.hoverRotate : card.restRotate,
-                }}
-                transition={{
-                  type: 'spring',
-                  stiffness: 120,
-                  damping: 13,
-                  delay: hovered ? card.delay : 0,
+                style={{
+                  translate: `${hovered ? card.hoverX : card.restX}px ${hovered ? card.hoverY : card.restY}px`,
+                  rotate: `${hovered ? card.hoverRotate : card.restRotate}deg`,
+                  transition: `translate ${SPRING}, rotate ${SPRING}`,
+                  transitionDelay: hovered ? `${card.delay}s` : '0s',
                 }}
               >
                 <Card filterId={`${uid}-card-${i}`} theme={theme} />
-              </motion.div>
+              </div>
             ))}
           </div>
         )}
 
-        <motion.div
+        <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-4"
           style={{
             transformOrigin: 'bottom center',
             transformStyle: 'preserve-3d',
             width: 321,
             height: 241,
+            transform: `rotateX(${hovered ? FLAP_TILT_HOVER : FLAP_TILT_REST}deg)`,
+            transition: `transform ${SPRING}`,
           }}
-          initial={false}
-          animate={{ rotateX: hovered ? FLAP_TILT_HOVER : FLAP_TILT_REST }}
-          transition={{ type: 'spring', stiffness: 120, damping: 14 }}
         >
           <div
             className="absolute inset-0"
@@ -231,7 +227,7 @@ export function MacFolderIcon({
               </filter>
             </defs>
           </svg>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

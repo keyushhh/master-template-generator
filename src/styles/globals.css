@@ -160,3 +160,74 @@ input[list]::-webkit-calendar-picker-indicator {
 @media (prefers-reduced-motion: reduce) {
   .t-badge, .t-badge-dot, .t-bell { animation: none !important; transition: none !important; }
 }
+
+/* -------------------------------------------------------------------------
+   Slide transitions (present mode)
+   Two layers: the outgoing slide sits absolutely over the incoming one and
+   animates away, so the incoming slide is never a blank frame. Direction is
+   passed in as --tx-from/--tx-to rather than doubled into forward and back
+   keyframes, so going back is the same animation read the other way.
+   ------------------------------------------------------------------------- */
+.wg-tx {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  /* Forward is the default; going back swaps these inline. */
+  --tx-from: 100%;
+  --tx-to: -100%;
+  --tx-ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.wg-tx-out {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.wg-tx-in { position: relative; z-index: 1; }
+
+.wg-tx[data-tx='fade'] .wg-tx-out { animation: wg-tx-fade-out 0.28s var(--tx-ease) both; }
+
+.wg-tx[data-tx='push'] .wg-tx-in  { animation: wg-tx-push-in  0.44s var(--tx-ease) both; }
+.wg-tx[data-tx='push'] .wg-tx-out { animation: wg-tx-push-out 0.44s var(--tx-ease) both; }
+
+.wg-tx[data-tx='wipe'] .wg-tx-in  { animation: wg-tx-wipe-in 0.46s var(--tx-ease) both; z-index: 3; }
+
+.wg-tx[data-tx='rise'] .wg-tx-in  { animation: wg-tx-rise-in  0.4s var(--tx-ease) both; z-index: 3; }
+.wg-tx[data-tx='rise'] .wg-tx-out { animation: wg-tx-fade-out 0.24s linear both; }
+
+@keyframes wg-tx-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes wg-tx-push-in {
+  from { transform: translateX(var(--tx-from)); }
+  to { transform: none; }
+}
+
+@keyframes wg-tx-push-out {
+  from { transform: none; }
+  to { transform: translateX(var(--tx-to)); }
+}
+
+/* Clipped rather than moved: the incoming slide is uncovered in place, which
+   keeps its type still while the edge travels. */
+@keyframes wg-tx-wipe-in {
+  from { clip-path: var(--tx-clip, inset(0 0 0 100%)); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes wg-tx-rise-in {
+  from { opacity: 0; transform: translateY(var(--tx-rise, 3%)) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Present mode skips the whole two-layer render when this is set, so there is
+   nothing here to switch off. Kept as a backstop for a preference that changes
+   mid-presentation. */
+@media (prefers-reduced-motion: reduce) {
+  .wg-tx-in, .wg-tx-out { animation: none !important; }
+  .wg-tx-out { display: none; }
+}

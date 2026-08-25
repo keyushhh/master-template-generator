@@ -2,6 +2,10 @@ import { Component, type ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
+  /** Shown instead of the full-page message, for a boundary around one region.
+   *  A crash in the canvas should cost the canvas, not the header and the slide
+   *  list the user needs in order to get out of it. */
+  fallback?: (reset: () => void) => ReactNode;
 }
 
 interface State {
@@ -21,8 +25,11 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Unhandled render error:', error, info.componentStack);
   }
 
+  reset = () => this.setState({ error: null });
+
   render() {
     if (!this.state.error) return this.props.children;
+    if (this.props.fallback) return this.props.fallback(this.reset);
     return (
       <div
         style={{

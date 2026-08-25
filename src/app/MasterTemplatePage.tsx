@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { ErrorBoundary } from './ErrorBoundary';
 import { GeneratorSidebar } from '../features/generator/GeneratorSidebar';
 import { PresentationCanvas, slideIsDark } from '../features/generator/PresentationCanvas';
 import { fontLabel, slotLabel } from '../features/formatting/labels';
@@ -2599,6 +2600,14 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onDuplicate={handleDuplicate}
         onChangeLayout={setSwitchTargetId}
         onDelete={handleDelete}
+        onSetTransition={(instanceId, transition) =>
+          mutateDeck((prev) => ({
+            ...prev,
+            slides: prev.slides.map((s) =>
+              s.instanceId === instanceId ? { ...s, transition: transition ?? undefined } : s
+            ),
+          }))
+        }
         onRename={handleRename}
         onReorder={handleReorder}
         onAddBlank={handleAddBlank}
@@ -2724,6 +2733,26 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         }}
         onPointerLeave={() => reportPointer()}
       >
+      {/* Scoped so a render error on one slide costs the canvas and not the
+          header, the slide list and the way out of the deck. */}
+      <ErrorBoundary
+        fallback={(retry) => (
+          <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+            <p className="text-sm font-bold text-neutral-900">This slide could not be drawn</p>
+            <p className="max-w-sm text-xs text-neutral-500">
+              The rest of the deck is fine and your work is saved. Try the slide again, or pick
+              another one from the list.
+            </p>
+            <button
+              type="button"
+              onClick={retry}
+              className="h-8 cursor-pointer border-none bg-neutral-900 px-4 text-xs font-bold text-white"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+      >
       <PresentationCanvas
         ast={ast}
         deck={displayDeck}
@@ -2747,6 +2776,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         }}
         onPickVideo={setVideoPickerFor}
       />
+      </ErrorBoundary>
 
       {/* Multiplayer Selection Bounding Boxes Layer */}
       <PeerSelectionsLayer
@@ -3001,6 +3031,18 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         // Present while looking at slide nine to rehearse it should not mean
         // arrowing back through eight slides first.
         startIndex={presentStartIndex}
+        onTransitionChange={(transition, scope, slideId) => {
+          if (scope === 'deck') {
+            mutateDeck((prev) => ({ ...prev, transition: transition ?? undefined }));
+          } else {
+            mutateDeck((prev) => ({
+              ...prev,
+              slides: prev.slides.map((s) =>
+                s.instanceId === slideId ? { ...s, transition: transition ?? undefined } : s
+              ),
+            }));
+          }
+        }}
       />
       <BrandKitModal
         open={brandKitOpen}
