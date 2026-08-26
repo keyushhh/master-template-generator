@@ -14,6 +14,24 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.3.0',
+    date: '2026-08-26',
+    summary: 'Every template is a deck you can present, not three slides and a gap.',
+    added: [
+      'Each template now opens with nine or ten different slide types instead of three or four. Agenda, a full-slide statement, a headline number, three pillars, a metrics dashboard, a before-and-after table, a timeline and a quote have been added across Product Showcase, UX Journey, Mobile Editorial, Product & Data SaaS, Investor Syndicate Memo, The Editorial, AI-Native, Startup, Swiss Enterprise Minimal and The Wave Organic.',
+      'Every new slide arrives written, so a template reads as a finished deck you edit rather than a set of empty layouts.',
+    ],
+    improved: [
+      'The template gallery previews the whole deck, not just the cover. Step through every slide of the selected template with the arrows beside the preview, and a small counter on the slide says where you are.',
+      'The new slides are painted in each template’s own colours, so an agenda in Product Showcase is black and emerald while the same layout in The Wave Organic is off-white and teal.',
+      'All of them export to PowerPoint as native, editable slides, the same as the layouts beside them.',
+    ],
+    fixed: [
+      'Template thumbnails left a sliver of the card showing along their right and bottom edges. They were measuring themselves while the gallery was still animating open.',
+      'Start a deck on an empty library now asks where the deck should be saved, the same as New deck does.',
+    ],
+  },
+  {
     version: '3.2.0',
     date: '2026-08-25',
     summary: 'Slides move when you present, and the studio opens faster.',

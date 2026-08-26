@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import { FitStage } from '../generator/FitStage';
 import { themeById, type DeckTheme } from '../theme/deckTheme';
-import { CheckIcon, CloseIcon, SearchIcon, TrashIcon } from '../ui/icons';
+import { CheckIcon, ChevronBackIcon, ChevronForwardIcon, CloseIcon, SearchIcon, TrashIcon } from '../ui/icons';
 import { ensureFonts } from '../fonts/loadFont';
 import { deleteDeckTemplate, instantiateDeckTemplate, listDeckTemplates, type SavedDeckTemplate } from './deckTemplateStore';
 import type { Deck } from './types';
@@ -239,6 +239,17 @@ export function NewDeckModal({
   }, [activeTemplate]);
 
   const previewDeck = useMemo(() => activeTemplate.build(), [activeTemplate]);
+  const previewSlides = useMemo(() => previewDeck.slides.filter((s) => !s.hidden), [previewDeck]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const previewSlide = previewSlides[Math.min(previewIndex, previewSlides.length - 1)];
+
+  // A different template starts at its own cover, not at slide 7 of the last one.
+  useEffect(() => setPreviewIndex(0), [activeTemplate]);
+
+  const stepPreview = (delta: number) => {
+    if (previewSlides.length < 2) return;
+    setPreviewIndex((i) => (i + delta + previewSlides.length) % previewSlides.length);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -399,19 +410,55 @@ export function NewDeckModal({
                 </div>
               </div>
 
-              {/* Live Slide 1 Preview */}
+              {/* Every slide in the template, steppable before committing to it */}
               <div className="flex flex-col gap-1.5">
                 <span className="font-mono text-[9px] font-bold tracking-[0.14em] uppercase text-neutral-400">
-                  Cover Preview
+                  Preview
                 </span>
-                <div
-                  className="rounded-none overflow-hidden border border-neutral-200 bg-neutral-50"
-                  style={{ boxShadow: '0 4px 14px -4px rgba(0,0,0,0.1)' }}
-                >
-                  {previewDeck.slides[0] && (
-                    <FitStage slide={previewDeck.slides[0]} ast={null} num="01" theme={theme} />
-                  )}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => stepPreview(-1)}
+                    disabled={previewSlides.length < 2}
+                    aria-label="Previous slide"
+                    className="shrink-0 h-7 w-7 flex items-center justify-center border border-neutral-200 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400 disabled:opacity-30 disabled:cursor-default cursor-pointer bg-white"
+                  >
+                    <ChevronBackIcon size={13} />
+                  </button>
+                  <div
+                    className="relative flex-1 min-w-0 rounded-none overflow-hidden border border-neutral-200 bg-neutral-50"
+                    style={{ boxShadow: '0 4px 14px -4px rgba(0,0,0,0.1)' }}
+                  >
+                    {previewSlide && (
+                      <FitStage
+                        key={previewSlide.instanceId}
+                        slide={previewSlide}
+                        ast={null}
+                        num={String(previewIndex + 1).padStart(2, '0')}
+                        theme={theme}
+                      />
+                    )}
+                    <span
+                      aria-live="polite"
+                      className="absolute bottom-1.5 right-1.5 px-2 py-[3px] rounded-full text-[10px] font-semibold text-white pointer-events-none"
+                      style={{ background: 'rgba(0, 0, 0, 0.72)', backdropFilter: 'blur(4px)' }}
+                    >
+                      {previewIndex + 1} of {previewSlides.length}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => stepPreview(1)}
+                    disabled={previewSlides.length < 2}
+                    aria-label="Next slide"
+                    className="shrink-0 h-7 w-7 flex items-center justify-center border border-neutral-200 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400 disabled:opacity-30 disabled:cursor-default cursor-pointer bg-white"
+                  >
+                    <ChevronForwardIcon size={13} />
+                  </button>
                 </div>
+                <span className="text-[11px] text-neutral-500 truncate">
+                  {previewSlide?.title}
+                </span>
               </div>
 
               {/* Deck Name Input */}

@@ -43,8 +43,13 @@ export function FitStage({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // offsetWidth, not getBoundingClientRect: the rect is the *painted* width,
+    // so a thumbnail measured while the modal was still playing its scale(0.975)
+    // entrance kept that scale for good, leaving a sliver of the card showing
+    // down the slide's right and bottom edges. A ResizeObserver never corrects
+    // it, because the layout box never changed.
     const update = () => {
-      const w = el.getBoundingClientRect().width;
+      const w = el.offsetWidth;
       if (w > 0) setScale(w / 1920);
     };
     update();

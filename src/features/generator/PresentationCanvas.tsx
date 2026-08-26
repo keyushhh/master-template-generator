@@ -71,6 +71,8 @@ import {
   InvestorMemoSlideTerms,
   InvestorMemoSlideClosing,
 } from '../templates/slides/InvestorMemoSlides';
+import { SHARED_RENDERERS } from '../templates/slides/SharedSlides';
+import { SHARED_DARK_IDS } from '../templates/sharedLayouts';
 
 /** Overlay shapes actually shown for this slide right now - everything, minus
  *  any shape pinned to a different 'blank' layout than the one in effect
@@ -3949,6 +3951,10 @@ const SLIDE_RENDERERS: Record<string, (props: SlideRenderProps) => React.ReactEl
   investor_memo_cover: InvestorMemoSlideCover,
   investor_memo_terms: InvestorMemoSlideTerms,
   investor_memo_closing: InvestorMemoSlideClosing,
+
+  // Agenda, statement, stat, pillars, gauge, versus, phases and quote, one set
+  // per template in that template's own palette.
+  ...SHARED_RENDERERS,
 };
 
 const DARK_TEMPLATES = new Set([
@@ -3980,6 +3986,7 @@ const DARK_TEMPLATES = new Set([
   'investor_memo_cover',
   'investor_memo_terms',
   'investor_memo_closing',
+  ...SHARED_DARK_IDS,
 ]);
 
 /** Imported slides carry their own background colour, so darkness is a

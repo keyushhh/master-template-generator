@@ -23,6 +23,7 @@
 
 import type { SlideContent, SlideInstance, SlideTemplateId } from './types';
 import { TEMPLATE_SLIDES } from './deckBuilder';
+import { SHARED_EXPORT_AS, SHARED_LAYOUT_NAMES, SHARED_PALETTES } from '../templates/sharedLayouts';
 
 /** Fields nearly every template renders. */
 const UNIVERSAL: (keyof SlideContent)[] = ['heading', 'eyebrow', 'body', 'hudLabel'];
@@ -52,8 +53,22 @@ const TEMPLATE_FIELDS: Record<string, (keyof SlideContent)[]> = {
   imported: ['shapes', 'importedBase'],
 };
 
+// A shared layout reads exactly the fields of the classic slide it exports as.
+for (const prefix of Object.keys(SHARED_PALETTES)) {
+  for (const name of SHARED_LAYOUT_NAMES) {
+    TEMPLATE_FIELDS[`${prefix}_${name}`] = TEMPLATE_FIELDS[SHARED_EXPORT_AS[name]];
+  }
+}
+
 /** How many items each template renders from its list, where it caps. */
 const LIST_CAPS: Record<string, number> = { s2: 4, s7: 3, s12: 3 };
+
+const SHARED_CAPS: Partial<Record<(typeof SHARED_LAYOUT_NAMES)[number], number>> = {
+  agenda: 6, gauge: 4, versus: 5, phases: 4, pillars: 3,
+};
+for (const prefix of Object.keys(SHARED_PALETTES)) {
+  for (const [name, cap] of Object.entries(SHARED_CAPS)) LIST_CAPS[`${prefix}_${name}`] = cap;
+}
 
 /** Lists whose item shape is {title, description} - freely interchangeable. */
 const TITLE_DESC_LISTS = ['parts', 'steps', 'phases'] as const;

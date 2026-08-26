@@ -20,7 +20,7 @@ PDF, images and standalone HTML.
 
 ```
 npx tsc -p tsconfig.app.json --noEmit
-npm test        # theme, brand kit, preflight, fonts, formatting seam, pptx format, dashes
+npm test        # theme, brand kit, preflight, fonts, formatting seam, pptx format, shared slides, dashes
 npm run build
 ```
 

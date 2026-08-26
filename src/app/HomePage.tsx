@@ -1228,7 +1228,7 @@ export function HomePage() {
                 back on brand.
               </p>
               <button
-                onClick={() => setNewDeckOpen(true)}
+                onClick={() => setDeckTypeModalOpen(true)}
                 className="self-start flex items-center gap-2 h-[42px] px-5 text-[13px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer"
               >
                 <AddIcon size={15} />

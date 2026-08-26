@@ -6,6 +6,7 @@ import { parseVideoSource } from '../formatting/videoSource';
 import { applyToPptx, caseText, offsetFor, styleFor } from '../formatting/resolve';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 import { clampOpacity, clampRotation } from '../formatting/rails';
+import { sharedExportId } from '../templates/sharedLayouts';
 
 /**
  * Native (editable) pptxgenjs equivalent of PresentationCanvas.tsx's DOM
@@ -1026,8 +1027,15 @@ function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['con
   addHudTop(slide, content.hudLabel ?? 'Metrics Dashboard', num, { label: 'hudLabel' });
   addEditorialLabel(slide, content.eyebrow ?? 'Temporal Performance', 140, 260, { slot: 'eyebrow' });
 
-  const chartTop = 320;
-  const chartBottom = 670;
+  // Templates that give this layout a heading (AI-Native, Startup, the shared
+  // gauge) had it drawn on canvas and dropped here, so it is optional but real.
+  const titled = !!content.heading;
+  if (titled) {
+    addText(slide, content.heading!, box(140, 300, 1640, 120), { size: 76, bold: true, lineSpacingMultiple: 1, slot: 'heading' });
+  }
+
+  const chartTop = titled ? 470 : 320;
+  const chartBottom = titled ? 720 : 670;
   const chartH = chartBottom - chartTop;
   const chartX = 140;
   const chartW = 1640;
@@ -1047,7 +1055,7 @@ function buildMetricsDashboard(slide: pptxgen.Slide, content: SlideInstance['con
     });
   });
 
-  const kpiY = 750;
+  const kpiY = titled ? 800 : 750;
   const kpiColW = (1640 - 40 * 2) / 3;
   kpis.slice(0, 3).forEach((k, i) => {
     const x = 140 + i * (kpiColW + 40);
@@ -1067,6 +1075,11 @@ function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['con
   const rows = content.rows?.length ? content.rows : DEFAULT_ROWS;
   addHudTop(slide, content.hudLabel ?? 'Comparative Framework', num, { label: 'hudLabel' });
   addEditorialLabel(slide, content.eyebrow ?? 'Benchmark Comparison', 140, 260, { slot: 'eyebrow' });
+
+  const titled = !!content.heading;
+  if (titled) {
+    addText(slide, content.heading!, box(140, 300, 1640, 120), { size: 76, bold: true, lineSpacingMultiple: 1, slot: 'heading' });
+  }
 
   const cellFont = rows.length > 6 ? 18 : rows.length > 4 ? 22 : 26;
   const headers = ['Analysis Category', 'Current Variable', 'Target Variable', 'Performance Delta'];
@@ -1113,7 +1126,7 @@ function buildComparativeTable(slide: pptxgen.Slide, content: SlideInstance['con
 
   slide.addTable([headerRow, ...bodyRows], {
     x: inch(140),
-    y: inch(330),
+    y: inch(titled ? 470 : 330),
     w: inch(1640),
     colW,
     autoPage: false,
@@ -1691,7 +1704,7 @@ async function buildSlideBody(
   // Behind-shapes first, so the template's own content paints over them.
   await addOverlayShapes(slide, c, 'behind');
 
-  switch (instance.templateId) {
+  switch (sharedExportId(instance.templateId) ?? instance.templateId) {
     case 's1':
     case 'editorial_cover':
     case 'ai_native_cover':
