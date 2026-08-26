@@ -15,7 +15,7 @@ interface UADataLike {
   platform?: string;
 }
 
-export const IS_APPLE: boolean = (() => {
+export function detectIsApple(): boolean {
   if (typeof navigator === 'undefined') return false;
   const uaData = (navigator as Navigator & { userAgentData?: UADataLike }).userAgentData;
   const platform = uaData?.platform ?? navigator.platform ?? '';
@@ -23,7 +23,9 @@ export const IS_APPLE: boolean = (() => {
   // iPadOS reports as "MacIntel" above, but older iPads and some in-app browsers
   // only reveal themselves in the UA string.
   return /mac os x|iphone|ipad/i.test(navigator.userAgent ?? '');
-})();
+}
+
+export const IS_APPLE: boolean = detectIsApple();
 
 /** The primary modifier, as a symbol on Apple platforms and a word elsewhere. */
 export const MOD_KEY = IS_APPLE ? '⌘' : 'Ctrl';
@@ -33,3 +35,29 @@ export const MOD_KEY = IS_APPLE ? '⌘' : 'Ctrl';
 export function hasModifier(e: KeyboardEvent): boolean {
   return IS_APPLE ? e.metaKey : e.ctrlKey;
 }
+
+/** Formats modifier and navigation keys according to platform target. */
+export function formatShortcutKey(key: string, isApple: boolean): string {
+  switch (key) {
+    case 'Mod':
+    case 'MOD':
+    case '⌘':
+    case 'Ctrl':
+      return isApple ? '⌘' : 'Ctrl';
+    case 'Alt':
+    case 'Option':
+    case '⌥':
+      return isApple ? '⌥ Option' : 'Alt';
+    case 'Shift':
+    case '⇧':
+      return isApple ? 'Shift' : 'Shift';
+    case 'Enter':
+    case 'Return':
+      return isApple ? 'Return' : 'Enter';
+    case 'Delete':
+      return isApple ? 'Delete' : 'Delete';
+    default:
+      return key;
+  }
+}
+
