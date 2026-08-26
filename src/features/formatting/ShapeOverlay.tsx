@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OverlayShape } from '../deck/types';
 import { ChartVisual } from './chartRender';
+import type { DeckTheme } from '../theme/deckTheme';
 import { applyToCss } from './resolve';
 import { VideoShapeVisual } from './VideoShapeVisual';
 import { MIN_SIZE, clampToSlide, guidesFromSiblings, snapMove, snapResize, type ExtraGuides, type Handle, type Rect } from './snap';
@@ -43,6 +44,10 @@ interface ShapeOverlayProps {
   onPatch: (id: string, patch: Partial<OverlayShape>) => void;
   /** Asks the owner to open the video source picker for this shape. */
   onPickVideo?: (id: string) => void;
+  /** The deck's theme, so an inserted chart is drawn in the deck's colours. */
+  theme?: DeckTheme;
+  /** True on a dark slide, so chart labels are readable on it. */
+  dark?: boolean;
 }
 
 /** Reads the live scale of the slide this overlay sits in.
@@ -84,7 +89,7 @@ function slideScale(el: HTMLElement | null): number {
 }
 
 export function ShapeOverlay({
-  shapes, editing, selectedId, onSelect, selectedCell, onPatch, onPickVideo,
+  shapes, editing, selectedId, onSelect, selectedCell, onPatch, onPickVideo, theme, dark,
 }: ShapeOverlayProps) {
   /** Which text box is in text-entry mode. Kept separate from selection so a
    *  selected text box can still be dragged - only an actively-edited one
@@ -442,6 +447,9 @@ export function ShapeOverlay({
                 chartType={shape.chartType ?? 'bar'}
                 categories={shape.chartCategories ?? []}
                 series={shape.chartSeries ?? []}
+                colors={shape.chartColors}
+                theme={theme}
+                dark={dark}
                 width={rect.w}
                 height={rect.h}
               />

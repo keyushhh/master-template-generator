@@ -1,6 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SlideInstance, SlideTransition } from '../deck/types';
+import { variantGroupOf, variantLabel } from '../deck/variants';
 import type { DocumentNode } from '../business-record/parser/ast';
 import { SlideStage } from './PresentationCanvas';
 import { CreateIcon, DuplicateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FlashIcon, GripIcon, LayersIcon, TrashIcon, WarningIcon } from '../ui/icons';
@@ -24,6 +25,10 @@ interface SlideNavListProps {
   theme?: DeckTheme;
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
+  /** Add a second version of this slide, kept beside it. */
+  onAddVariant: (instanceId: string) => void;
+  /** Show this version of its slide and put the other versions away. */
+  onChooseVariant: (instanceId: string) => void;
   /** Open the layout switcher for this slide. */
   onChangeLayout: (instanceId: string) => void;
   onDelete: (instanceId: string) => void;
@@ -256,7 +261,7 @@ function CardAction({
   );
 }
 
-export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidden, onDuplicate, onChangeLayout, onDelete, onSetTransition, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
+export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidden, onDuplicate, onAddVariant, onChooseVariant, onChangeLayout, onDelete, onSetTransition, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
   // Double-click-to-rename state: which row is being renamed + its draft text.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -497,24 +502,59 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
                           );
                         })()}
 
-                        {slide.hidden && (
-                          <div
-                            className="absolute top-1.5 left-1.5 z-10"
-                            style={{
-                              padding: '2px 7px',
-                              borderRadius: 'var(--radius-sharp)',
-                              background: 'rgba(23,23,23,0.82)',
-                              color: '#fff',
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: 8.5,
-                              fontWeight: 700,
-                              letterSpacing: '0.1em',
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            Hidden
-                          </div>
-                        )}
+                        {/* One badge, two meanings. On an ordinary slide,
+                            hidden is hidden. On a slide with versions, hidden
+                            means "not the version you picked", which is worth
+                            saying differently and worth being able to change
+                            from here. */}
+                        {(() => {
+                          const label = variantLabel(slides, slide.instanceId);
+                          if (label) {
+                            const count = variantGroupOf(slides, slide.instanceId).length;
+                            const shown = !slide.hidden;
+                            return (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); if (!shown) onChooseVariant(slide.instanceId); }}
+                                title={shown ? `Version ${label} of ${count}, the one in the deck` : `Use version ${label} of ${count}`}
+                                className="absolute top-1.5 left-1.5 z-10"
+                                style={{
+                                  padding: '2px 7px',
+                                  borderRadius: 'var(--radius-sharp)',
+                                  background: shown ? 'var(--emerald-600)' : 'rgba(23,23,23,0.82)',
+                                  color: '#fff',
+                                  fontFamily: 'var(--font-mono)',
+                                  fontSize: 8.5,
+                                  fontWeight: 700,
+                                  letterSpacing: '0.1em',
+                                  textTransform: 'uppercase',
+                                  cursor: shown ? 'default' : 'pointer',
+                                }}
+                              >
+                                {`Version ${label} of ${count}`}
+                              </button>
+                            );
+                          }
+                          if (!slide.hidden) return null;
+                          return (
+                            <div
+                              className="absolute top-1.5 left-1.5 z-10"
+                              style={{
+                                padding: '2px 7px',
+                                borderRadius: 'var(--radius-sharp)',
+                                background: 'rgba(23,23,23,0.82)',
+                                color: '#fff',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: 8.5,
+                                fontWeight: 700,
+                                letterSpacing: '0.1em',
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              Hidden
+                            </div>
+                          );
+                        })()}
 
                         <FitBadge slideId={slide.instanceId} />
 
@@ -630,6 +670,19 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
           >
             <MenuRow icon={<LayersIcon size={15} />} label="Change layout" onClick={() => { onChangeLayout(menu.id); setMenu(null); }} />
             <MenuRow icon={<DuplicateIcon size={15} />} label="Duplicate" hint={`${MOD_KEY}D`} onClick={() => { onDuplicate(menu.id); setMenu(null); }} />
+            <MenuRow
+              icon={<LayersIcon size={15} />}
+              label={variantLabel(slides, menu.id) ? 'Add a version' : 'Make a variant'}
+              hint={variantLabel(slides, menu.id) ? `${variantGroupOf(slides, menu.id).length} so far` : undefined}
+              onClick={() => { onAddVariant(menu.id); setMenu(null); }}
+            />
+            {variantLabel(slides, menu.id) && slides.find((sl) => sl.instanceId === menu.id)?.hidden && (
+              <MenuRow
+                icon={<EyeIcon size={15} />}
+                label="Use this version"
+                onClick={() => { onChooseVariant(menu.id); setMenu(null); }}
+              />
+            )}
             <MenuRow icon={<InsertAfterIcon />} label="Insert after" onClick={() => { onInsertAfter(menu.id); setMenu(null); }} />
             <MenuRow
               icon={<CreateIcon size={15} />}

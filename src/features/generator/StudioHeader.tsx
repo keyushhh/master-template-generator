@@ -67,6 +67,8 @@ interface StudioHeaderProps {
   onOpenShare?: () => void;
   /** Writes the open deck to a file, and reads one back as a new deck. */
   onBackupDeck?: () => void;
+  onSaveRecord?: () => void;
+  onBrandCheck?: () => void;
   onRestoreDeck?: (file: File) => void;
   storage?: { readable: string; percent: number; nearLimit: boolean };
   onOpenHistory?: () => void;
@@ -189,6 +191,8 @@ export function StudioHeader({
   canExport,
   onOpenShare,
   onBackupDeck,
+  onSaveRecord,
+  onBrandCheck,
   onRestoreDeck,
   storage,
   onOpenHistory,
@@ -369,6 +373,8 @@ export function StudioHeader({
             onOpenActivity={onToggleActivity}
             onOpenShare={onOpenShare}
             onBackupDeck={onBackupDeck}
+            onSaveRecord={onSaveRecord}
+            onBrandCheck={onBrandCheck}
             onRestoreDeck={onRestoreDeck}
             storage={storage}
             onOpenExport={() => canExport && onOpenReview()}

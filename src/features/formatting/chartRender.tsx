@@ -11,8 +11,8 @@
  */
 
 import type { OverlayChartSeries, OverlayChartType } from '../deck/types';
-
-const SERIES_COLORS = ['#10B981', '#171717', '#A7F3D0', '#525252', '#6EE7B7'];
+import { WOZKU_THEME, css as themeCss, type DeckTheme } from '../theme/deckTheme';
+import { chartColorsFor, cssHex } from './chartPalette';
 
 // The vertical axis is always 100 logical units; the horizontal one is scaled
 // by the box's actual aspect ratio so one logical unit is the same physical
@@ -28,13 +28,23 @@ interface ChartVisualProps {
   width: number;
   height: number;
   dark?: boolean;
+  /** The deck's theme, so a chart is drawn in the deck's own colours rather
+   *  than Wozku's. Defaults to Wozku's for a caller with no deck. */
+  theme?: DeckTheme;
+  /** Per-index colour overrides from the shape. */
+  colors?: string[];
 }
 
-export function ChartVisual({ chartType, categories, series, width, height, dark }: ChartVisualProps) {
-  const ink = dark ? '#ffffff' : '#171717';
-  const grid = dark ? 'rgba(255,255,255,0.18)' : 'rgba(23,23,23,0.12)';
+export function ChartVisual({ chartType, categories, series, width, height, dark, theme = WOZKU_THEME, colors }: ChartVisualProps) {
+  const onDark = dark ?? Boolean(theme.styleSystem?.isDarkSlideDefault);
+  const ink = themeCss(onDark ? theme.ink.onDark : theme.ink.onLight);
+  const grid = onDark ? 'rgba(255,255,255,0.18)' : 'rgba(23,23,23,0.12)';
 
   if (!categories.length || !series.length) return null;
+
+  // One colour per thing that will be drawn: a series for bar and line, a
+  // category for pie, which is what each of them cycles colour by.
+  const palette = chartColorsFor(theme, chartType === 'pie' ? categories.length : series.length, colors).map(cssHex);
 
   const aspect = height > 0 && width > 0 ? width / height : 16 / 9;
   const vbw = VBH * aspect;
@@ -44,7 +54,7 @@ export function ChartVisual({ chartType, categories, series, width, height, dark
   const padB = VBH * 0.12;
 
   if (chartType === 'pie') {
-    return <PieChart categories={categories} values={series[0]?.values ?? []} ink={ink} vbw={vbw} />;
+    return <PieChart categories={categories} values={series[0]?.values ?? []} ink={ink} vbw={vbw} palette={palette} onDark={onDark} />;
   }
 
   const plotW = vbw - padL - padR;
@@ -60,10 +70,10 @@ export function ChartVisual({ chartType, categories, series, width, height, dark
       ))}
 
       {chartType === 'bar' && (
-        <BarSeries categories={categories} series={series} max={max} plotW={plotW} plotH={plotH} padL={padL} padT={padT} />
+        <BarSeries categories={categories} series={series} max={max} plotW={plotW} plotH={plotH} padL={padL} padT={padT} palette={palette} />
       )}
       {chartType === 'line' && (
-        <LineSeries categories={categories} series={series} max={max} plotW={plotW} plotH={plotH} padL={padL} padT={padT} />
+        <LineSeries categories={categories} series={series} max={max} plotW={plotW} plotH={plotH} padL={padL} padT={padT} palette={palette} />
       )}
 
       {categories.map((cat, i) => {
@@ -79,8 +89,8 @@ export function ChartVisual({ chartType, categories, series, width, height, dark
 }
 
 function BarSeries({
-  categories, series, max, plotW, plotH, padL, padT,
-}: { categories: string[]; series: OverlayChartSeries[]; max: number; plotW: number; plotH: number; padL: number; padT: number }) {
+  categories, series, max, plotW, plotH, padL, padT, palette,
+}: { categories: string[]; series: OverlayChartSeries[]; max: number; plotW: number; plotH: number; padL: number; padT: number; palette: string[] }) {
   const groupW = plotW / categories.length;
   const barW = (groupW * 0.6) / series.length;
   return (
@@ -88,12 +98,15 @@ function BarSeries({
       {categories.map((_, ci) =>
         series.map((s, si) => {
           const v = s.values[ci] ?? 0;
-          const h = (v / max) * plotH;
+          // A stub rather than nothing at zero: a category plotted at zero is a
+          // fact worth seeing on the axis, and an invisible bar reads as a
+          // broken chart instead of an empty one.
+          const h = Math.max((v / max) * plotH, 0.5);
           const x = padL + groupW * ci + groupW * 0.2 + si * barW;
           const y = padT + plotH - h;
           return (
             <rect key={`${ci}-${si}`} x={x} y={y} width={barW * 0.86} height={h}
-              fill={SERIES_COLORS[si % SERIES_COLORS.length]} rx={0.6} />
+              fill={palette[si % palette.length]} rx={0.6} />
           );
         })
       )}
@@ -102,8 +115,8 @@ function BarSeries({
 }
 
 function LineSeries({
-  categories, series, max, plotW, plotH, padL, padT,
-}: { categories: string[]; series: OverlayChartSeries[]; max: number; plotW: number; plotH: number; padL: number; padT: number }) {
+  categories, series, max, plotW, plotH, padL, padT, palette,
+}: { categories: string[]; series: OverlayChartSeries[]; max: number; plotW: number; plotH: number; padL: number; padT: number; palette: string[] }) {
   const step = plotW / Math.max(1, categories.length - 1 || 1);
   return (
     <>
@@ -119,13 +132,13 @@ function LineSeries({
             <polyline
               points={pts.map(([x, y]) => `${x},${y}`).join(' ')}
               fill="none"
-              stroke={SERIES_COLORS[si % SERIES_COLORS.length]}
+              stroke={palette[si % palette.length]}
               strokeWidth={1.2}
               strokeLinejoin="round"
               strokeLinecap="round"
             />
             {pts.map(([x, y], i) => (
-              <circle key={i} cx={x} cy={y} r={1.1} fill={SERIES_COLORS[si % SERIES_COLORS.length]} />
+              <circle key={i} cx={x} cy={y} r={1.1} fill={palette[si % palette.length]} />
             ))}
           </g>
         );
@@ -134,7 +147,7 @@ function LineSeries({
   );
 }
 
-function PieChart({ categories, values, ink, vbw }: { categories: string[]; values: number[]; ink: string; vbw: number }) {
+function PieChart({ categories, values, ink, vbw, palette, onDark }: { categories: string[]; values: number[]; ink: string; vbw: number; palette: string[]; onDark: boolean }) {
   const total = values.reduce((a, b) => a + b, 0) || 1;
   const cx = vbw / 2;
   const cy = VBH / 2 - 3;
@@ -153,12 +166,16 @@ function PieChart({ categories, values, ink, vbw }: { categories: string[]; valu
     const [sx, sy] = [cx + r * Math.cos((start * Math.PI) / 180), cy + r * Math.sin((start * Math.PI) / 180)];
     const [ex, ey] = [cx + r * Math.cos((end * Math.PI) / 180), cy + r * Math.sin((end * Math.PI) / 180)];
     const path = `M ${cx} ${cy} L ${sx} ${sy} A ${r} ${r} 0 ${large} 1 ${ex} ${ey} Z`;
-    return { cat, path, color: SERIES_COLORS[i % SERIES_COLORS.length] };
+    return { cat, path, color: palette[i % palette.length] };
   });
 
   return (
     <svg viewBox={`0 0 ${vbw} ${VBH}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-      {slices.map((s) => <path key={s.cat} d={s.path} fill={s.color} stroke="#fff" strokeWidth={0.5} />)}
+      {/* The hairline between slices is the slide's own ground, so two adjacent
+          slices stay separable on a dark deck as well as a light one. */}
+      {slices.map((s) => (
+        <path key={s.cat} d={s.path} fill={s.color} stroke={onDark ? '#0B0B0D' : '#FFFFFF'} strokeWidth={0.5} />
+      ))}
       {slices.map((s, i) => (
         <g key={s.cat} transform={`translate(4, ${cy + r + 8 + i * 5})`}>
           <rect width={3} height={3} fill={s.color} />

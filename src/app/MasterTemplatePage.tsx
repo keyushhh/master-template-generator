@@ -11,6 +11,8 @@ import { SlideSorter } from '../features/generator/SlideSorter';
 import { PresentMode } from '../features/generator/PresentMode';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
 import { FindReplaceModal } from '../features/search/FindReplaceModal';
+import { BrandAuditModal } from '../features/preflight/BrandAuditModal';
+import { snapAll, snapDrift } from '../features/preflight/brandAudit';
 import {
   duplicateShape,
   duplicateSlide,
@@ -69,6 +71,8 @@ import {
   buildDeckFromDocument,
   mintInstanceId,
 } from '../features/deck/deckBuilder';
+import { addVariant, chooseVariant, tidyVariants } from '../features/deck/variants';
+import { deckToRecord, recordFileName } from '../features/business-record/deckToRecord';
 import { DOCUMENT_TEMPLATE_BUILDERS, fitSlideText } from '../features/deck/templateDocumentBuilders';
 import { canCustomizeBackground } from '../features/deck/slideBackground';
 import { ConfirmModal } from '../features/ui/ConfirmModal';
@@ -205,6 +209,7 @@ export function MasterTemplatePage() {
   // Once, on a first visit, and replayable from the Help menu afterwards.
   const [tourOpen, setTourOpen] = useState(() => shouldShowTour());
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [brandAuditOpen, setBrandAuditOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [versions, setVersions] = useState<DeckVersion[]>(() => listVersions(boot.id));
@@ -536,18 +541,22 @@ export function MasterTemplatePage() {
   /** Route a deck mutation to the draft while editing, else commit directly. */
   const mutateDeck = useCallback(
     (fn: (prev: Deck) => Deck) => {
+      // Every edit passes through tidyVariants, which is where a slide with
+      // versions keeps its one-of-them-is-visible rule whatever the edit was:
+      // a delete, a reorder, an undo. A no-op on a deck with no variants.
+      const edit = (prev: Deck) => tidyVariants(fn(prev));
       if (draft !== null) {
         dispatchDraft({
           type: 'edit',
           fn: (prev) => {
-            const next = fn(prev);
+            const next = edit(prev);
             if (!applyingRemoteRef.current) broadcastRef.current(next);
             return next;
           },
         });
         setDirty(true);
       } else {
-        commitDeck(fn(deck));
+        commitDeck(edit(deck));
       }
     },
     [draft, deck, commitDeck]
@@ -1532,6 +1541,22 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     [mutateDeck]
   );
 
+  /** A second version of this slide, kept beside it and not yet chosen. */
+  const handleAddVariant = useCallback(
+    (instanceId: string) => {
+      mutateDeck((prev) => addVariant(prev, instanceId));
+      showToast('Version B added. It stays out of the deck until you choose it.', 'success');
+    },
+    [mutateDeck, showToast]
+  );
+
+  const handleChooseVariant = useCallback(
+    (instanceId: string) => {
+      mutateDeck((prev) => chooseVariant(prev, instanceId));
+    },
+    [mutateDeck]
+  );
+
   const handleDelete = useCallback(
     (instanceId: string) => {
       mutateDeck((prev) => ({
@@ -2315,6 +2340,21 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     showToast(`Saved ${deckFileName(name)}`);
   }, [activeId, projects, ast, displayDeck, baselineDeck, showToast]);
 
+  /** The deck written back out as the Business Record it could have come from,
+   *  so the record follows the deck instead of going stale the first time
+   *  somebody edits a slide. */
+  const handleSaveRecord = useCallback(() => {
+    const name = projects.find((p) => p.id === activeId)?.name || 'Deck';
+    const markdown = deckToRecord(displayDeck, ast, name);
+    const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = recordFileName(name);
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Saved ${recordFileName(name)}. Formatting, images and charts stay in the deck.`);
+  }, [activeId, projects, ast, displayDeck, showToast]);
+
   /** Reads a backup file back in, as a new deck rather than over this one. */
   const handleRestoreDeck = useCallback(async (file: File) => {
     try {
@@ -2385,6 +2425,13 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         keywords: 'download pptx powerpoint pdf png save',
         disabled: visible.length === 0,
         run: () => setReviewOpen(true),
+      },
+      {
+        id: 'brand_check',
+        group: 'Deck',
+        label: 'Brand check…',
+        keywords: 'brand audit off-brand palette type scale grid drift snap',
+        run: () => setBrandAuditOpen(true),
       },
       {
         id: 'find_replace',
@@ -2605,6 +2652,8 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onGenerate={handleGenerate}
         onToggleHidden={handleToggleHidden}
         onDuplicate={handleDuplicate}
+        onAddVariant={handleAddVariant}
+        onChooseVariant={handleChooseVariant}
         onChangeLayout={setSwitchTargetId}
         onDelete={handleDelete}
         onSetTransition={(instanceId, transition) =>
@@ -2664,6 +2713,8 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onSwitchDeck={handleSwitchDeck}
         onNewDeck={() => setNewDeckOpen(true)}
         onBackupDeck={handleBackupDeck}
+        onSaveRecord={handleSaveRecord}
+        onBrandCheck={() => setBrandAuditOpen(true)}
         onRestoreDeck={handleRestoreDeck}
         storage={storage}
         onDuplicateDeck={handleDuplicateCurrentDeck}
@@ -3107,6 +3158,9 @@ function pristineDeckFor(templateId: string | undefined): Deck {
           categories={selectedOverlayShape.chartCategories ?? []}
           series={selectedOverlayShape.chartSeries ?? []}
           onChange={handleChartDataChange}
+          theme={deckTheme}
+          colors={selectedOverlayShape.chartColors}
+          onColorsChange={(chartColors) => patchSelectedShape({ chartColors })}
           onClose={() => setChartEditorOpen(false)}
         />
       )}
@@ -3189,6 +3243,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         // Present while looking at slide nine to rehearse it should not mean
         // arrowing back through eight slides first.
         startIndex={presentStartIndex}
+        onChooseVariant={handleChooseVariant}
         onTransitionChange={(transition, scope, slideId) => {
           if (scope === 'deck') {
             mutateDeck((prev) => ({ ...prev, transition: transition ?? undefined }));
@@ -3217,6 +3272,18 @@ function pristineDeckFor(templateId: string | undefined): Deck {
       <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
       <FirstRunTour open={tourOpen} onClose={() => setTourOpen(false)} />
+      <BrandAuditModal
+        open={brandAuditOpen}
+        onClose={() => setBrandAuditOpen(false)}
+        deck={displayDeck}
+        theme={deckTheme}
+        onSnap={(drift) => mutateDeck((prev) => snapDrift(prev, drift))}
+        onSnapAll={(drifts) => {
+          mutateDeck((prev) => snapAll(prev, drifts));
+          showToast(`Snapped ${drifts.length} ${drifts.length === 1 ? 'thing' : 'things'} back to brand`, 'success');
+        }}
+        onJumpToSlide={(slideId) => setCurrentSlideId(slideId)}
+      />
       <FindReplaceModal
         open={findReplaceOpen}
         onClose={() => setFindReplaceOpen(false)}

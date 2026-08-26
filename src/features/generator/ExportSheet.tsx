@@ -14,7 +14,7 @@ import { brandCheckReport } from '../preflight/brandCheck';
 import { catalogNow, fontByFamily, isBundled } from '../fonts/fontCatalog';
 import { familiesInDeck } from '../fonts/deckFonts';
 
-type ExportKind = 'pptx' | 'pdf' | 'png' | 'html';
+type ExportKind = 'pptx' | 'pdf' | 'handout' | 'png' | 'html';
 
 interface ExportSheetProps {
   open: boolean;
@@ -52,6 +52,15 @@ const FORMATS: {
     headline: 'Exactly what you see, permanently.',
     detail:
       'Each slide flattened to a 1920 × 1080 page. Nothing can reflow or substitute a font on someone else’s machine. The safe one to attach to an email.',
+  },
+  {
+    kind: 'handout',
+    tab: 'Handout',
+    ext: '.pdf',
+    suffix: '-handout',
+    headline: 'The leave-behind, with what you said.',
+    detail:
+      'Portrait pages, three slides each, with the speaker notes beside every slide and a contents page in front. What clients ask for after the meeting.',
   },
   {
     kind: 'html',
@@ -192,6 +201,17 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
         const ids = visible.map((s) => s.instanceId);
         const onProgress = (current: number, total: number) => setProgress({ current, total });
         if (kind === 'pdf') await mod.exportToPDF(ids, projectName, onProgress);
+        else if (kind === 'handout') {
+          await mod.exportHandoutPDF(
+            visible.map((s) => ({ id: s.instanceId, title: s.title, notes: s.notes })),
+            projectName,
+            onProgress
+          );
+          const withNotes = visible.filter((s) => s.notes?.trim()).length;
+          if (withNotes === 0) {
+            showToast('None of these slides have speaker notes, so the handout is slides only.', 'info');
+          }
+        }
         else if (kind === 'png') await mod.exportSlidesAsPngZip(ids, projectName, onProgress);
         else {
           const report = await mod.exportToPPTX(

@@ -4069,6 +4069,8 @@ export function SlideStage({
           editing={false}
           onSelect={() => { }}
           onPatch={() => { }}
+          theme={theme}
+          dark={isDark}
         />
         {!slide.content.hideFooter && (
           <div className="footer-row" style={{ zIndex: 10 }}>
@@ -4362,6 +4364,8 @@ export function PresentationCanvas({
                   )
                 }
                 onPickVideo={onPickVideo}
+                theme={theme}
+                dark={isDark}
               />
 
               {!slide.content.hideFooter && (

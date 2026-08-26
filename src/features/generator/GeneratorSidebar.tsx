@@ -27,6 +27,8 @@ interface GeneratorSidebarProps {
   onGenerate: () => void;
   onToggleHidden: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
+  onAddVariant: (instanceId: string) => void;
+  onChooseVariant: (instanceId: string) => void;
   onChangeLayout: (instanceId: string) => void;
   onDelete: (instanceId: string) => void;
   onSetTransition: (instanceId: string, transition: SlideTransition | null) => void;
@@ -59,6 +61,8 @@ export function GeneratorSidebar({
   onGenerate,
   onToggleHidden,
   onDuplicate,
+  onAddVariant,
+  onChooseVariant,
   onChangeLayout,
   onDelete,
   onSetTransition,
@@ -152,6 +156,8 @@ export function GeneratorSidebar({
               theme={theme}
               onToggleHidden={onToggleHidden}
               onDuplicate={onDuplicate}
+              onAddVariant={onAddVariant}
+              onChooseVariant={onChooseVariant}
               onChangeLayout={onChangeLayout}
               onDelete={onDelete}
               onSetTransition={onSetTransition}

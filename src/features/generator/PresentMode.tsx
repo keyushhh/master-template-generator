@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { SlideStage } from './PresentationCanvas';
 import { FitStage } from './FitStage';
 import { PresentVideoLayer } from '../formatting/PresentVideoLayer';
@@ -6,6 +7,9 @@ import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, SlideInstance, SlideTransition } from '../deck/types';
 import { TRANSITIONS, prefersReducedMotion, resolveTransition, transitionMs } from '../deck/slideTransitions';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
+import { variantGroupOf } from '../deck/variants';
+import { PRESENTER_CHANNEL, postPresenter, type PresenterMessage } from './presenterChannel';
+import { TARGET_MINUTES, formatSeconds, paceReading, rehearsalSummary } from './rehearsal';
 import {
   ChevronBackIcon,
   ChevronForwardIcon,
@@ -45,6 +49,9 @@ interface PresentModeProps {
   /** Fires with the just-picked transition and which slide it applies to:
    *  the current one, or every slide (deck-level) via `null`. */
   onTransitionChange?: (transition: SlideTransition | null, scope: 'slide' | 'deck', slideId: string) => void;
+  /** Switches which version of a slide the room sees. Absent means the caller
+   *  cannot edit the deck, and the control is then absent rather than dead. */
+  onChooseVariant?: (instanceId: string) => void;
 }
 
 /** Milliseconds of no pointer movement before the chrome fades away. */
@@ -155,16 +162,42 @@ export function PresentMode({
   onIndexChange,
   theme = WOZKU_THEME,
   onTransitionChange,
+  onChooseVariant,
 }: PresentModeProps) {
   const visible = useMemo(() => deck.slides.filter((s) => !s.hidden), [deck.slides]);
   const [index, setIndex] = useState(startIndex);
   const currentSlideId = visible[Math.min(index, Math.max(visible.length - 1, 0))]?.instanceId;
+  /** The versions of the slide on screen, when it has more than one. Switching
+   *  between them mid-presentation is the whole reason for keeping both: the
+   *  question in the room decides which chart you show. */
+  const variants = useMemo(
+    () => (currentSlideId ? variantGroupOf(deck.slides, currentSlideId) : []),
+    [deck.slides, currentSlideId]
+  );
   const [presenter, setPresenter] = useState(false);
   const [blank, setBlank] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
 
   const [elapsed, setElapsed] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
+
+  /** Seconds spent on each slide this run, and the length the deck is aiming
+   *  for. A target is what turns the stopwatch into a rehearsal: with one set,
+   *  the bar reports pace and leaving the presentation shows where the time
+   *  went. */
+  const [timings, setTimings] = useState<Record<string, number>>({});
+  const [targetMinutes, setTargetMinutes] = useState<number | null>(null);
+  const [rehearseMenu, setRehearseMenu] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+
+  // Read by the HELLO reply. Refs rather than deps, so answering the audience
+  // window does not mean re-subscribing to the channel on every slide change.
+  const indexRef = useRef(index);
+  const blankRef = useRef(blank);
+  indexRef.current = index;
+  blankRef.current = blank;
+  const slideIdRef = useRef(currentSlideId);
+  slideIdRef.current = currentSlideId;
 
   const [toolMode, setToolMode] = useState<'pointer' | 'laser' | 'pen'>('pointer');
   const [laserPos, setLaserPos] = useState<{ x: number; y: number } | null>(null);
@@ -255,24 +288,77 @@ export function PresentMode({
   const [teleprompterFontSize, setTeleprompterFontSize] = useState<number>(16);
   const notesRef = useRef<HTMLDivElement>(null);
 
+  /** The second-screen window, while one is open. */
+  const audienceRef = useRef<Window | null>(null);
+  const [audienceOpen, setAudienceOpen] = useState(false);
+
   useEffect(() => {
     if (!open) return;
-    const channel = new BroadcastChannel('wozku_presenter_channel');
-    channel.onmessage = (e) => {
-      if (e.data?.type === 'INDEX' && typeof e.data.index === 'number') setIndex(e.data.index);
-      else if (e.data?.type === 'PLAY' && typeof e.data.autoPlay === 'boolean') setAutoPlay(e.data.autoPlay);
-      else if (e.data?.type === 'BLANK' && typeof e.data.blank === 'boolean') setBlank(e.data.blank);
+    const channel = new BroadcastChannel(PRESENTER_CHANNEL);
+    channel.onmessage = (e: MessageEvent<PresenterMessage>) => {
+      const data = e.data;
+      if (!data) return;
+      if (data.type === 'INDEX') setIndex(data.index);
+      else if (data.type === 'PLAY') setAutoPlay(data.autoPlay);
+      else if (data.type === 'BLANK') setBlank(data.blank);
+      // The audience window asking for something to show. It holds no deck of
+      // its own, so what it gets is what is on this screen right now, unsaved
+      // edits included.
+      else if (data.type === 'HELLO') {
+        setAudienceOpen(true);
+        postPresenter({ type: 'DECK', deck, ast, theme, index: indexRef.current, blank: blankRef.current });
+      }
     };
     return () => channel.close();
-  }, [open]);
+  }, [open, deck, ast, theme]);
 
-  const broadcast = (data: any) => {
-    try {
-      const channel = new BroadcastChannel('wozku_presenter_channel');
-      channel.postMessage(data);
-      channel.close();
-    } catch {}
-  };
+  // The second screen follows state rather than being told by each control:
+  // blanking has four routes into it (the bar, the B key, a click on the blanked
+  // screen, moving slide) and only one of them used to say so out loud.
+  useEffect(() => {
+    if (open && audienceOpen) postPresenter({ type: 'INDEX', index });
+  }, [open, audienceOpen, index]);
+
+  useEffect(() => {
+    if (open && audienceOpen) postPresenter({ type: 'BLANK', blank });
+  }, [open, audienceOpen, blank]);
+
+  useEffect(() => {
+    if (open && audienceOpen) {
+      postPresenter({ type: 'DECK', deck, ast, theme, index: indexRef.current, blank: blankRef.current });
+    }
+  }, [open, audienceOpen, deck, ast, theme]);
+
+  /** Opens the audience window, or closes it if it is already up. */
+  const toggleAudience = useCallback(() => {
+    const existing = audienceRef.current;
+    if (existing && !existing.closed) {
+      existing.close();
+      audienceRef.current = null;
+      setAudienceOpen(false);
+      return;
+    }
+    const win = window.open(
+      `${window.location.origin}/audience`,
+      'wozku-audience',
+      'popup=yes,width=1280,height=720'
+    );
+    audienceRef.current = win;
+    // It says HELLO when it loads, which is what actually sets audienceOpen. A
+    // popup blocker therefore leaves this off rather than showing a control for
+    // a window that never opened.
+    if (win) win.focus();
+  }, []);
+
+  // Ends with the presentation: a slide left up on the projector after the
+  // presenter has closed the deck is worse than a blank screen.
+  useEffect(() => {
+    if (open) return;
+    postPresenter({ type: 'BYE' });
+    audienceRef.current?.close();
+    audienceRef.current = null;
+    setAudienceOpen(false);
+  }, [open]);
 
   useEffect(() => {
     if (!teleprompterAutoScroll || !notesRef.current) return;
@@ -295,6 +381,9 @@ export function PresentMode({
 
   const next = useCallback(() => setIndex((i) => Math.min(i + 1, total - 1)), [total]);
   const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
+
+  const pace = paceReading(elapsed, targetMinutes, index + 1, total);
+  const summary = rehearsalSummary(visible, timings, targetMinutes);
 
   const transition = resolveTransition(visible[Math.min(index, Math.max(visible.length - 1, 0))], deck);
   const [txPickerOpen, setTxPickerOpen] = useState(false);
@@ -323,6 +412,21 @@ export function PresentMode({
     return () => window.clearTimeout(done);
   }, [open, index, transition, visible]);
 
+  /**
+   * Leaving a rehearsal shows where the time went; leaving a presentation just
+   * leaves. The difference is whether a target was set, which is the one thing
+   * only a person rehearsing ever does.
+   */
+  const requestClose = useCallback(() => {
+    if (targetMinutes && Object.keys(timings).length > 0) {
+      setTimerRunning(false);
+      setAutoPlay(false);
+      setSummaryOpen(true);
+      return;
+    }
+    onClose();
+  }, [targetMinutes, timings, onClose]);
+
   const togglePlay = useCallback(() => {
     setAutoPlay((v) => {
       const nextState = !v;
@@ -337,6 +441,8 @@ export function PresentMode({
     setIndex(Math.min(startIndex, Math.max(0, total - 1)));
     setElapsed(0);
     setTimerRunning(false);
+    setTimings({});
+    setSummaryOpen(false);
     setBlank(false);
     setPicker(false);
     setSidebarHover(false);
@@ -382,7 +488,14 @@ export function PresentMode({
   // Timer interval
   useEffect(() => {
     if (!open || !timerRunning) return;
-    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+    const id = window.setInterval(() => {
+      setElapsed((s) => s + 1);
+      // The second is credited to whatever is on screen when it ends, which is
+      // why this reads the ref rather than closing over the slide: the interval
+      // outlives any one slide.
+      const on = slideIdRef.current;
+      if (on) setTimings((t) => ({ ...t, [on]: (t[on] ?? 0) + 1 }));
+    }, 1000);
     return () => window.clearInterval(id);
   }, [open, timerRunning]);
 
@@ -414,8 +527,10 @@ export function PresentMode({
       switch (e.key) {
         case 'Escape':
           if (picker) setPicker(false);
+          else if (rehearseMenu) setRehearseMenu(false);
+          else if (summaryOpen) onClose();
           else if (blank) setBlank(false);
-          else onClose();
+          else requestClose();
           return;
         case 'ArrowRight':
         case 'ArrowDown':
@@ -461,7 +576,7 @@ export function PresentMode({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose, next, prev, total, picker, blank]);
+  }, [open, onClose, requestClose, next, prev, total, picker, blank, rehearseMenu, summaryOpen]);
 
   if (!open || total === 0) return null;
 
@@ -469,7 +584,10 @@ export function PresentMode({
   const upcoming: SlideInstance | null = index + 1 < total ? visible[index + 1] : null;
   const atStart = index === 0;
   const atEnd = index === total - 1;
-  const chromeVisible = !idle || picker || sidebarHover;
+  // A menu that is open counts as activity. Without this the bar fades out from
+  // under the target picker two and a half seconds after it was opened, and the
+  // choice you were reading disappears mid-read.
+  const chromeVisible = !idle || picker || sidebarHover || rehearseMenu || txPickerOpen;
 
   const activeStrokes = penStrokes[slide.instanceId] ?? [];
 
@@ -1110,6 +1228,107 @@ export function PresentMode({
                 >
                   {formatElapsed(elapsed)}
                 </span>
+
+                {/* Rehearsing: a target length, then how the run is going
+                    against it. Without a target this is a stopwatch, which is
+                    what it has always been. */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <BarButton
+                    label={targetMinutes ? `Rehearsing against ${targetMinutes} minutes` : 'Rehearse: set a target length'}
+                    onClick={() => setRehearseMenu((v) => !v)}
+                    active={Boolean(targetMinutes)}
+                    activeColor={pace.state === 'over' || pace.state === 'behind' ? '#b45309' : undefined}
+                    wide
+                  >
+                    <RefreshIcon size={14} />
+                    {targetMinutes ? pace.label || `${targetMinutes} min` : 'Rehearse'}
+                  </BarButton>
+
+                  {rehearseMenu && createPortal(
+                    <div
+                      style={{
+                        // Portalled to the body, and fixed. The bar is both a
+                        // horizontal scroll container and a backdrop-filtered
+                        // element, so a menu inside it is clipped by the first
+                        // and positioned against the second: it rendered behind
+                        // the slide instead of above the bar.
+                        position: 'fixed',
+                        bottom: 66,
+                        right: 20,
+                        minWidth: 190,
+                        padding: 6,
+                        background: CHROME_BG,
+                        border: CHROME_BORDER,
+                        borderRadius: 'var(--radius-sharp)',
+                        boxShadow: '0 18px 40px -12px rgba(0,0,0,0.6)',
+                        zIndex: 240,
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: 'block', padding: '4px 8px 6px',
+                          fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
+                          letterSpacing: '0.12em', textTransform: 'uppercase',
+                          color: 'rgba(255,255,255,0.4)',
+                        }}
+                      >
+                        How long have you got?
+                      </span>
+                      {TARGET_MINUTES.map((minutes) => (
+                        <button
+                          key={minutes}
+                          type="button"
+                          onClick={() => {
+                            setTargetMinutes(minutes);
+                            setRehearseMenu(false);
+                            setTimerRunning(true);
+                          }}
+                          style={{
+                            display: 'block', width: '100%', padding: '6px 8px',
+                            textAlign: 'left', border: 'none', cursor: 'pointer',
+                            background: targetMinutes === minutes ? 'var(--emerald-600)' : 'transparent',
+                            color: targetMinutes === minutes ? '#fff' : 'rgba(255,255,255,0.82)',
+                            fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 600,
+                          }}
+                        >
+                          {`${minutes} minutes`}
+                        </button>
+                      ))}
+                      <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '5px 0' }} />
+                      <button
+                        type="button"
+                        onClick={() => { setSummaryOpen(true); setRehearseMenu(false); setTimerRunning(false); }}
+                        disabled={Object.keys(timings).length === 0}
+                        style={{
+                          display: 'block', width: '100%', padding: '6px 8px',
+                          textAlign: 'left', border: 'none',
+                          background: 'transparent',
+                          color: Object.keys(timings).length ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.3)',
+                          fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 600,
+                          cursor: Object.keys(timings).length ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        Where did the time go?
+                      </button>
+                      {targetMinutes && (
+                        <button
+                          type="button"
+                          onClick={() => { setTargetMinutes(null); setRehearseMenu(false); }}
+                          style={{
+                            display: 'block', width: '100%', padding: '6px 8px',
+                            textAlign: 'left', border: 'none', background: 'transparent',
+                            color: 'rgba(255,255,255,0.55)',
+                            fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          Stop rehearsing
+                        </button>
+                      )}
+                    </div>,
+                    document.body
+                  )}
+                </div>
+
                 <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', margin: '0 5px' }} />
               </>
             )}
@@ -1350,7 +1569,22 @@ export function PresentMode({
               )}
             </div>
 
-            <BarButton label="Blank the screen (B)" onClick={() => { setBlank(true); broadcast({ type: 'BLANK', blank: true }); }}>
+            {onChooseVariant && variants.length > 1 && currentSlideId && (
+              <BarButton
+                label={`Show the next version of this slide (${variants.length} versions)`}
+                onClick={() => {
+                  const at = variants.findIndex((v) => v.instanceId === currentSlideId);
+                  const next = variants[(at + 1) % variants.length];
+                  if (next) onChooseVariant(next.instanceId);
+                }}
+                wide
+              >
+                <LayersIcon size={15} />
+                {`Version ${String.fromCharCode(65 + variants.findIndex((v) => v.instanceId === currentSlideId))} of ${variants.length}`}
+              </BarButton>
+            )}
+
+            <BarButton label="Blank the screen (B)" onClick={() => setBlank(true)}>
               <EyeOffIcon size={16} />
             </BarButton>
             <BarButton
@@ -1361,6 +1595,15 @@ export function PresentMode({
             >
               <DocumentTextIcon size={15} />
               Notes
+            </BarButton>
+            <BarButton
+              label={audienceOpen ? 'Close the audience screen' : 'Open a slide-only window for a second display'}
+              onClick={toggleAudience}
+              active={audienceOpen}
+              wide
+            >
+              <LayersIcon size={15} />
+              Screen 2
             </BarButton>
 
             <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', margin: '0 5px' }} />
@@ -1374,12 +1617,127 @@ export function PresentMode({
 
             <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', margin: '0 5px' }} />
 
-            <BarButton label="Exit present mode (Esc)" onClick={onClose}>
+            <BarButton label="Exit present mode (Esc)" onClick={requestClose}>
               <CloseIcon size={16} />
             </BarButton>
           </div>
         </div>
       </div>
+
+      {/* Where the time went. Shown on the way out of a rehearsal rather than
+          in a panel during it: watching a clock is not rehearsing. */}
+      {summaryOpen && (
+        <div
+          style={{
+            position: 'absolute', inset: 0, zIndex: 60,
+            background: 'rgba(10,10,12,0.94)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}
+        >
+          <div style={{ width: 'min(560px, 100%)', maxHeight: '84vh', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--emerald-400)',
+              }}
+            >
+              Rehearsal
+            </span>
+            <h2
+              style={{
+                margin: 0, fontFamily: 'var(--font-display)', fontSize: 26,
+                fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2, color: '#fff',
+              }}
+            >
+              {summary.verdict}
+            </h2>
+
+            <div style={{ overflowY: 'auto', borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+              {summary.rows.map((row) => (
+                <div
+                  key={row.instanceId}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 30, flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 11,
+                      fontWeight: 700, color: 'rgba(255,255,255,0.4)', fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {pad(row.n)}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {row.title}
+                  </span>
+                  {/* The bar is the share of the run, so the slide that ate the
+                      time is visible without reading a single number. */}
+                  <span style={{ width: 120, height: 4, flexShrink: 0, background: 'rgba(255,255,255,0.12)' }}>
+                    <span
+                      style={{
+                        display: 'block', height: '100%',
+                        width: `${Math.max(2, Math.round(row.share * 100))}%`,
+                        background: row.overlong ? '#f59e0b' : 'var(--emerald-500)',
+                      }}
+                    />
+                  </span>
+                  <span
+                    style={{
+                      width: 56, flexShrink: 0, textAlign: 'right',
+                      fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
+                      color: row.overlong ? '#fbbf24' : '#fff', fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {formatSeconds(row.seconds)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSummaryOpen(false);
+                  setTimings({});
+                  setElapsed(0);
+                  setIndex(0);
+                  setTimerRunning(true);
+                }}
+                style={{
+                  height: 38, padding: '0 16px', fontSize: 13, fontWeight: 700,
+                  color: 'var(--neutral-900)', background: '#fff', border: 'none', cursor: 'pointer',
+                }}
+              >
+                Run it again
+              </button>
+              <button
+                type="button"
+                onClick={() => setSummaryOpen(false)}
+                style={{
+                  height: 38, padding: '0 16px', fontSize: 13, fontWeight: 600,
+                  color: '#fff', background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.25)', cursor: 'pointer',
+                }}
+              >
+                Keep presenting
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  marginLeft: 'auto', height: 38, padding: '0 16px', fontSize: 13, fontWeight: 700,
+                  color: '#fff', background: 'var(--emerald-600)', border: 'none', cursor: 'pointer',
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

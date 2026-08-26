@@ -75,6 +75,8 @@ import { DeckTable, type Sort, type SortKey } from '../features/library/DeckTabl
 import { relativeTime } from '../features/library/relativeTime';
 import { Pagination } from '../features/library/Pagination';
 import { FolderChip } from '../features/library/FolderChip';
+import { findDeckText, type DeckTextHit } from '../features/search/deckText';
+import { TextHitChip } from '../features/search/TextHitChip';
 
 const VIEW_KEY = 'wozku-library-view-v1';
 const FOLDER_ZOOM_KEY = 'wozku-folder-zoom-v1';
@@ -721,6 +723,19 @@ export function HomePage() {
     [folders, activeFolderId]
   );
 
+  /** Where each deck says the query, for the decks whose names do not. Held as
+   *  a map so the filter and the result chips agree about what matched. */
+  const textHits = useMemo(() => {
+    const map = new Map<string, DeckTextHit>();
+    const q = query.trim();
+    if (q.length < 2) return map;
+    for (const p of projects) {
+      const hit = findDeckText(p.deck, q);
+      if (hit) map.set(p.id, hit);
+    }
+    return map;
+  }, [projects, query]);
+
   /**
    * The decks this screen is about.
    *
@@ -758,9 +773,9 @@ export function HomePage() {
         if (accessFilter === 'mine' && role !== 'owner') return false;
         if (accessFilter === 'shared' && role === 'owner') return false;
       }
-      return !q || p.name.toLowerCase().includes(q);
+      return !q || p.name.toLowerCase().includes(q) || textHits.get(p.id) !== undefined;
     });
-  }, [projects, query, kitFilter, themeOf, activeFolderId, user, accessFilter]);
+  }, [projects, query, kitFilter, themeOf, activeFolderId, user, accessFilter, textHits]);
 
   const teamDeckCount = useMemo(() => projects.filter((p) => !p.isSandbox).length, [projects]);
   const sandboxCount = useMemo(() => projects.filter((p) => p.isSandbox).length, [projects]);
@@ -1686,6 +1701,7 @@ export function HomePage() {
                       <DeckTable
                         rows={sortedShown}
                         showFolderOrigin={showFolderOrigin}
+                        textHit={(p) => (p.name.toLowerCase().includes(query.trim().toLowerCase()) ? null : textHits.get(p.id) ?? null)}
                         total={rest.length}
                         page={page}
                         pageSize={pageSize}
@@ -1768,6 +1784,12 @@ export function HomePage() {
                                             folders. */}
                                         {showFolderOrigin && p.folderId && folderById.get(p.folderId) && (
                                           <FolderChip folder={folderById.get(p.folderId)!} />
+                                        )}
+                                        {/* Why this deck is in the results at
+                                            all, when the query is not in its
+                                            name. */}
+                                        {!p.name.toLowerCase().includes(query.trim().toLowerCase()) && textHits.get(p.id) && (
+                                          <TextHitChip hit={textHits.get(p.id)!} />
                                         )}
                                       </span>
                                       <span className="relative">

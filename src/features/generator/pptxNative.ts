@@ -5,6 +5,7 @@ import { getVideo } from '../deck/mediaStore';
 import { parseVideoSource } from '../formatting/videoSource';
 import { applyToPptx, caseText, offsetFor, styleFor } from '../formatting/resolve';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
+import { chartColorsFor } from '../formatting/chartPalette';
 import { clampOpacity, clampRotation } from '../formatting/rails';
 import { sharedExportId } from '../templates/sharedLayouts';
 
@@ -1681,10 +1682,19 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
       // Plain string literals rather than the pptxgen.ChartType enum - this
       // file only imports pptxgenjs's types, not its runtime, and the string
       // literals are the same values the enum resolves to.
-      slide.addChart(s.chartType ?? 'bar', data, {
+      // Same palette function the canvas draws with, so the file cannot come
+      // out in different colours from the slide it was exported from - and a
+      // client kit's charts are in the client's colours, not Wozku's.
+      const chartType = s.chartType ?? 'bar';
+      slide.addChart(chartType, data, {
         ...b,
         showLegend: data.length > 1,
         showTitle: false,
+        chartColors: chartColorsFor(
+          theme(),
+          chartType === 'pie' ? (s.chartCategories?.length ?? data[0]?.values.length ?? 1) : data.length,
+          s.chartColors
+        ),
       });
       continue;
     }

@@ -14,6 +14,30 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.5.0',
+    date: '2026-08-26',
+    summary: 'Two versions of a slide, a window for the projector, rehearsing against the clock, and the deck writes its own record back out.',
+    added: [
+      'Make a variant keeps two versions of one slide side by side. Only the version you pick is in the deck, so numbering, export and present are unaffected, and you can switch between them mid-presentation when the room asks the other question.',
+      'Screen 2 opens a window with nothing in it but the slide, to drag onto a projector or a second display. It follows the presenting window, blanks with it, and picks the deck up again if you start presenting a second time.',
+      'Rehearse against a target length. The bar says whether you are on pace, and leaving the rehearsal shows where the time went, slide by slide, with the ones that ate it flagged.',
+      'Save the Business Record writes the deck back out as the Markdown record it could have come from, so the record follows the deck instead of going stale the first time somebody edits a slide. Generating from it again rebuilds the same slides.',
+      'Brand check lists every size, colour, typeface and position that is not one the templates use, with a one-click way to put each back. Off brand on purpose stays: nothing changes until you say so.',
+      'A brand kit can be read off the client’s logo. Drop the logo in and the colours come back in order of how much of the mark they cover, with one proposed as the accent.',
+      'Handout export: portrait pages, three slides each, the speaker notes beside every slide, and a contents page in front.',
+      'Library search now reaches inside the decks. A deck you remember by a line on slide nine is findable by that line, and the result says which slide it was.',
+      'The app installs to the dock or home screen and opens without a connection, which is the state a laptop is in before a client meeting more often than anyone plans for.',
+      'A chart takes a dropped CSV file as well as a pasted spreadsheet table.',
+      'A chart series, or a pie slice, can be set to a different colour from the deck palette, or to a typed hex, and put back to the deck’s own colour in one click.',
+    ],
+    fixed: [
+      'A chart drew itself in Wozku’s green whatever brand kit the deck was on, because chart colours were hardcoded rather than taken from the deck. Charts now use the deck’s own palette, and the PowerPoint export uses the same one, so the file matches the slide.',
+      'Adding a category or a series to a chart added an invisible one: it arrived at zero, and a bar of zero height is nothing to look at. A new category now arrives at the same magnitude as the data beside it, ready to type over, and a category that really is zero shows a mark on the axis instead of vanishing.',
+      'Chart labels were drawn in dark ink on every slide, including the dark ones they could not be read on.',
+      'PDF, image, HTML and handout export all failed on the first slide with an unsupported colour function. Chrome changed how it writes out a resolved colour, and the export’s colour handling had been written against the old spelling. Every modern colour value is now resolved by the browser itself, so this cannot break again the next time the spelling changes.',
+    ],
+  },
+  {
     version: '3.4.0',
     date: '2026-08-26',
     summary: 'Add a written slide instead of a blank one, and the studio says when a screen is too small.',

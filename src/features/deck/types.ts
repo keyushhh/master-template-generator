@@ -218,6 +218,13 @@ export interface OverlayShape {
   chartType?: OverlayChartType;
   chartCategories?: string[];
   chartSeries?: OverlayChartSeries[];
+  /** kind === 'chart' - per-index colour overrides, bare hex with no '#'. The
+   *  index is the series for a bar or line chart and the category for a pie,
+   *  which is what each of those cycles colour by. An empty string, or an index
+   *  past the end, means the deck's own chart palette - so absent (every chart
+   *  until someone changes one) is exactly the old behaviour. See
+   *  features/formatting/chartPalette.ts. */
+  chartColors?: string[];
   /** kind === 'video' - a YouTube/Vimeo page link or a direct file URL. */
   videoUrl?: string;
   /** kind === 'video' - id of an uploaded file in the IndexedDB media store, since the bytes can't live in a deck. */
@@ -476,6 +483,11 @@ export interface SlideInstance {
   /** Overrides the deck's transition for this slide only. Absent means it
    *  follows the deck. */
   transition?: SlideTransition;
+  /** Ties this slide to its other versions: every slide sharing a
+   *  `variantGroup` is one take on the same slide, and at most one of them is
+   *  visible. Absent, which is every slide until someone makes a variant,
+   *  means an ordinary standalone slide. See features/deck/variants.ts. */
+  variantGroup?: string;
 }
 
 export interface Deck {

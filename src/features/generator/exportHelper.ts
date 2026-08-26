@@ -12,27 +12,42 @@ import { getVideo } from '../deck/mediaStore';
 import { embedWithOptions, parseVideoSource } from '../formatting/videoSource';
 
 /**
- * html2canvas's CSS parser doesn't understand `color-mix()` (or the `color()`
- * function Chrome normalizes it to) and throws while parsing it - whether it
- * appears in a stylesheet rule or, as with the slide background glow, inline
- * on the element itself. Rewrite both to plain `rgba()` on html2canvas's
- * *cloned* document right before capture; production styles are untouched.
+ * html2canvas's CSS parser understands `rgb()`, `rgba()` and hex, and throws on
+ * everything CSS Color 4 added. Modern colour values reach a slide two ways:
+ * `color-mix()`, which the app writes by hand for the background glow and which
+ * Tailwind writes for every `/40` opacity utility, and the wide-gamut functions
+ * a browser now computes those to.
+ *
+ * That second half is why this needed rewriting: Chrome used to serialise a
+ * resolved `color-mix(in oklab, ...)` as `color(srgb ...)` and now serialises it
+ * as `oklab(...)`, so the scrubber that had handled it stopped, and every
+ * capture-based export (PDF, PNG, HTML, handout) failed on the first slide with
+ * "unsupported color function". Rather than chase Chrome's serialisation, every
+ * value that is not already a legacy colour is now painted onto a 1x1 canvas
+ * and read back as the sRGB bytes it produced: whatever the browser can draw,
+ * this can convert.
+ *
+ * All of it happens on html2canvas's *cloned* document; production styles are
+ * untouched.
  */
-const COLOR_FN_RE = /color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/gi;
 
-function colorFnToRgba(_m: string, r: string, g: string, b: string, a?: string): string {
-  const chan = (v: string) => Math.round(parseFloat(v) * 255);
-  const alpha = a !== undefined ? parseFloat(a) : 1;
-  return `rgba(${chan(r)}, ${chan(g)}, ${chan(b)}, ${alpha})`;
-}
+/** The properties html2canvas reads a colour out of. */
+const COLOR_PROPS = [
+  'color', 'background-color', 'background-image', 'border-top-color', 'border-right-color',
+  'border-bottom-color', 'border-left-color', 'outline-color', 'box-shadow',
+  'text-decoration-color', 'text-shadow', 'fill', 'stroke', 'caret-color',
+] as const;
 
-/** Balanced-paren extraction of every `color-mix(...)` call in a CSS value string. */
-function findColorMixCalls(text: string): string[] {
+/** Colour functions html2canvas cannot parse, all resolved the same way. */
+const MODERN_COLOR_FNS = ['color-mix(', 'oklab(', 'oklch(', 'lab(', 'lch(', 'hwb(', 'color('];
+
+/** Balanced-paren extraction of every `name(...)` call in a CSS value string. */
+function findCalls(text: string, name: string): string[] {
   const calls: string[] = [];
   let i = 0;
-  while ((i = text.indexOf('color-mix(', i)) !== -1) {
+  while ((i = text.indexOf(name, i)) !== -1) {
     let depth = 0;
-    let j = i + 'color-mix('.length - 1;
+    let j = i + name.length - 1;
     do {
       if (text[j] === '(') depth++;
       else if (text[j] === ')') depth--;
@@ -45,56 +60,127 @@ function findColorMixCalls(text: string): string[] {
 }
 
 /**
- * Resolves a standalone `color-mix(...)` expression to a concrete color by
- * assigning it to a custom property on a live probe element - `getComputedStyle`
- * resolves both `var()` references and the mix itself, just into Chrome's
- * `color(srgb ...)` form, which we then convert to `rgba()`.
+ * Any CSS colour, as the sRGB it paints.
+ *
+ * The 1x1 canvas is the trick: `fillStyle` accepts every colour syntax the
+ * browser supports but hands the string straight back, so the value has to be
+ * *drawn* for the browser to resolve it into channels. An unparseable value
+ * leaves fillStyle at the sentinel, and the original string is returned rather
+ * than a silent black.
  */
-function resolveColorMixExpr(doc: Document, probe: HTMLElement, expr: string): string {
-  probe.style.setProperty('--wg-color-mix-probe', expr);
-  probe.style.color = 'var(--wg-color-mix-probe)';
-  const computed = doc.defaultView?.getComputedStyle(probe).color ?? '';
-  return computed.replace(COLOR_FN_RE, colorFnToRgba) || 'transparent';
+function paintToRgba(color: string): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return color;
+  const SENTINEL = '#010203';
+  ctx.fillStyle = SENTINEL;
+  ctx.fillStyle = color;
+  if (ctx.fillStyle === SENTINEL) return color;
+  ctx.clearRect(0, 0, 1, 1);
+  ctx.fillRect(0, 0, 1, 1);
+  try {
+    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+    return `rgba(${r}, ${g}, ${b}, ${Number((a / 255).toFixed(3))})`;
+  } catch {
+    return color;
+  }
 }
 
-function replaceColorMixInText(doc: Document, probe: HTMLElement, text: string): string {
+/**
+ * Resolves one colour expression to `rgba()`.
+ *
+ * The probe element is what makes `var()` inside the expression work: the app's
+ * own `color-mix()` values reference custom properties, and only a live element
+ * in the document can say what those are.
+ */
+function resolveColorExpr(doc: Document, probe: HTMLElement, expr: string): string {
+  probe.style.setProperty('--wg-color-probe', expr);
+  probe.style.color = 'var(--wg-color-probe)';
+  const computed = doc.defaultView?.getComputedStyle(probe).color ?? '';
+  return paintToRgba(computed || expr);
+}
+
+/** Every modern colour function in a value string, replaced with `rgba()`. */
+function replaceModernColors(doc: Document, probe: HTMLElement, text: string): string {
   let result = text;
-  for (const call of findColorMixCalls(text)) {
-    result = result.replace(call, resolveColorMixExpr(doc, probe, call));
+  for (const fn of MODERN_COLOR_FNS) {
+    for (const call of findCalls(result, fn)) {
+      result = result.replace(call, resolveColorExpr(doc, probe, call));
+    }
   }
   return result;
 }
 
-function resolveColorMixForHtml2Canvas(clonedDoc: Document) {
+function hasModernColor(text: string): boolean {
+  return MODERN_COLOR_FNS.some((fn) => text.includes(fn));
+}
+
+function resolveColorMixForHtml2Canvas(clonedDoc: Document, targetId?: string) {
   const probe = clonedDoc.createElement('div');
   probe.style.cssText = 'position:absolute;top:-9999px;left:-9999px;visibility:hidden;';
   clonedDoc.body.appendChild(probe);
 
   // Inline styles (e.g. the slide background glow's radial-gradient stop).
-  clonedDoc.querySelectorAll<HTMLElement>('[style*="color-mix("]').forEach((el) => {
+  clonedDoc.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
     const raw = el.getAttribute('style');
-    if (raw) el.setAttribute('style', replaceColorMixInText(clonedDoc, probe, raw));
+    if (raw && hasModernColor(raw)) el.setAttribute('style', replaceModernColors(clonedDoc, probe, raw));
   });
 
-  // Stylesheet rules (dark-mode/edit-mode chrome) - rewritten in place so any
-  // future rule keeps working even though the slide renderers never use them.
+  // Stylesheet rules (the Tailwind palette, dark-mode and edit-mode chrome).
+  // Recursively, because Tailwind v4 emits its utilities inside `@layer` and
+  // its variants inside `@media`, and a scan that only looked at top-level
+  // rules therefore saw almost none of the palette: every `text-rose-400` on a
+  // slide is an `oklch()` sitting two levels down.
+  // Duck-typed rather than `instanceof CSSStyleRule`, which is the other half of
+  // why this never fired: html2canvas clones into an iframe, so every rule
+  // object comes from that frame's realm and fails an instanceof against this
+  // window's constructors.
+  const scrub = (rules: CSSRuleList) => {
+    for (let i = rules.length - 1; i >= 0; i--) {
+      const rule = rules[i] as CSSRule & { cssRules?: CSSRuleList; style?: CSSStyleDeclaration };
+      if (rule.cssRules) {
+        scrub(rule.cssRules);
+        continue;
+      }
+      if (!rule.style || !hasModernColor(rule.cssText)) continue;
+      for (const prop of Array.from(rule.style)) {
+        const value = rule.style.getPropertyValue(prop);
+        if (hasModernColor(value)) {
+          const priority = rule.style.getPropertyPriority(prop);
+          rule.style.setProperty(prop, replaceModernColors(clonedDoc, probe, value), priority);
+        }
+      }
+    }
+  };
+
   for (const sheet of Array.from(clonedDoc.styleSheets)) {
-    let rules: CSSRuleList;
     try {
-      rules = sheet.cssRules;
+      if (sheet.cssRules) scrub(sheet.cssRules);
     } catch {
       continue; // cross-origin stylesheet (CDN fonts) - inaccessible, and irrelevant here
     }
-    if (!rules) continue;
-    for (let i = rules.length - 1; i >= 0; i--) {
-      const rule = rules[i];
-      if (rule.cssText.includes('color-mix(') && rule instanceof CSSStyleRule) {
-        for (const prop of Array.from(rule.style)) {
-          const value = rule.style.getPropertyValue(prop);
-          if (value.includes('color-mix(')) {
-            const priority = rule.style.getPropertyPriority(prop);
-            rule.style.setProperty(prop, replaceColorMixInText(clonedDoc, probe, value), priority);
-          }
+  }
+
+  // Belt as well as braces: whatever the cascade still resolves to a modern
+  // colour on an element about to be drawn is written back onto that element as
+  // rgba. The rule pass above cannot catch everything - a value can arrive from
+  // a stylesheet this document cannot read, or from a var() chain that resolves
+  // somewhere else - and html2canvas reads computed styles, so this is the
+  // reading it actually takes.
+  const view = clonedDoc.defaultView;
+  // Only the subtree html2canvas is about to draw. Every slide in the deck is
+  // mounted at once, so walking the whole clone would cost ten times what the
+  // capture needs and would do it again for every slide.
+  const scope = (targetId && clonedDoc.getElementById(targetId)) || clonedDoc.body;
+  if (view && scope) {
+    for (const el of [scope, ...Array.from(scope.querySelectorAll<HTMLElement>('*'))]) {
+      const computed = view.getComputedStyle(el);
+      for (const prop of COLOR_PROPS) {
+        const value = computed.getPropertyValue(prop);
+        if (value && hasModernColor(value)) {
+          el.style.setProperty(prop, replaceModernColors(clonedDoc, probe, value));
         }
       }
     }
@@ -141,7 +227,7 @@ async function captureSlide(id: string): Promise<HTMLCanvasElement | null> {
       height: SLIDE_H,
       windowWidth: SLIDE_W,
       windowHeight: SLIDE_H,
-      onclone: resolveColorMixForHtml2Canvas,
+      onclone: (doc: Document) => resolveColorMixForHtml2Canvas(doc, id),
     });
   } finally {
     Object.assign(el.style, saved);
@@ -259,6 +345,115 @@ export async function exportToPDF(
 
   onProgress?.(total, total);
   if (placed > 0) pdf.save(`${sanitize(title)}.pdf`);
+}
+
+/** One slide, as the handout needs it: a picture and what you said over it. */
+export interface HandoutSlide {
+  /** DOM id of the mounted slide, same as every other capture path. */
+  id: string;
+  title: string;
+  notes?: string;
+}
+
+/**
+ * The leave-behind: three slides to a page with the speaker notes beside them,
+ * behind a contents page.
+ *
+ * The PDF export is the deck itself, which is the wrong document to email after
+ * a meeting: it is 16:9, it prints one slide per sheet, and it drops the half
+ * of the argument that was spoken. A handout is portrait, reads as a document,
+ * and puts the notes next to the slide they belong to.
+ *
+ * Same capture as every other export, so what lands on the page is what the
+ * canvas drew, including anything CSS-only.
+ */
+export async function exportHandoutPDF(
+  slides: HandoutSlide[],
+  title: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<void> {
+  const total = slides.length;
+  if (total === 0) return;
+
+  // A4 portrait in points, which is what a handout gets printed on.
+  const PAGE_W = 595;
+  const PAGE_H = 842;
+  const MARGIN = 46;
+  const ROWS = 3;
+  const IMG_W = 250;
+  const IMG_H = Math.round((IMG_W * SLIDE_H) / SLIDE_W);
+  const GUTTER = 18;
+  const NOTES_X = MARGIN + IMG_W + GUTTER;
+  const NOTES_W = PAGE_W - NOTES_X - MARGIN;
+  const ROW_H = Math.floor((PAGE_H - MARGIN * 2) / ROWS);
+
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4', compress: true });
+  pdf.setFont('helvetica', 'normal');
+
+  // Contents. A handout gets skimmed for the one slide the reader remembers,
+  // and a list of titles is the only way to find it without paging through.
+  pdf.setFontSize(20);
+  pdf.setTextColor(20, 22, 26);
+  pdf.text(title, MARGIN, MARGIN + 14, { maxWidth: PAGE_W - MARGIN * 2 });
+  pdf.setFontSize(9);
+  pdf.setTextColor(115, 115, 115);
+  pdf.text(`${total} ${total === 1 ? 'slide' : 'slides'} with speaker notes`, MARGIN, MARGIN + 32);
+
+  let y = MARGIN + 62;
+  pdf.setFontSize(10.5);
+  slides.forEach((slide, i) => {
+    if (y > PAGE_H - MARGIN) {
+      pdf.addPage('a4', 'portrait');
+      y = MARGIN + 14;
+    }
+    pdf.setTextColor(163, 163, 163);
+    pdf.text(String(i + 1).padStart(2, '0'), MARGIN, y);
+    pdf.setTextColor(23, 23, 23);
+    pdf.text(slide.title || 'Untitled slide', MARGIN + 26, y, { maxWidth: PAGE_W - MARGIN * 2 - 26 });
+    y += 17;
+  });
+
+  let row = ROWS;
+  for (let i = 0; i < total; i++) {
+    onProgress?.(i, total);
+    const canvas = await captureSlide(slides[i].id);
+    if (!canvas) continue;
+
+    if (row >= ROWS) {
+      pdf.addPage('a4', 'portrait');
+      row = 0;
+    }
+    const top = MARGIN + row * ROW_H;
+
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.82), 'JPEG', MARGIN, top, IMG_W, IMG_H);
+    pdf.setDrawColor(229, 229, 229);
+    pdf.rect(MARGIN, top, IMG_W, IMG_H);
+
+    pdf.setFontSize(8);
+    pdf.setTextColor(163, 163, 163);
+    pdf.text(String(i + 1).padStart(2, '0'), NOTES_X, top + 9);
+    pdf.setFontSize(10.5);
+    pdf.setTextColor(23, 23, 23);
+    pdf.text(slides[i].title || 'Untitled slide', NOTES_X + 20, top + 9, { maxWidth: NOTES_W - 20 });
+
+    const notes = slides[i].notes?.trim();
+    pdf.setFontSize(9);
+    pdf.setTextColor(notes ? 82 : 163, notes ? 82 : 163, notes ? 82 : 163);
+    // Clipped to the row rather than allowed to run into the next slide: a
+    // handout with overlapping notes is worse than one that stops.
+    const lines = pdf.splitTextToSize(notes || 'No notes on this slide.', NOTES_W) as string[];
+    const maxLines = Math.floor((ROW_H - 34) / 12);
+    pdf.text(lines.slice(0, maxLines), NOTES_X, top + 26, { lineHeightFactor: 1.35 });
+    if (lines.length > maxLines) {
+      pdf.setTextColor(163, 163, 163);
+      pdf.text('…', NOTES_X, top + 26 + maxLines * 12);
+    }
+
+    row++;
+  }
+
+  onProgress?.(total, total);
+  pdf.save(`${sanitize(title)}-handout.pdf`);
 }
 
 /**

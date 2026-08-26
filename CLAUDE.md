@@ -115,13 +115,28 @@ the app as private or local-only in UI copy any more: a deck can now be shared.
 
 - `.pptx` is native and editable (`pptxNative.ts`), one build function per template.
   Not a screenshot.
-- PDF, PNG and HTML are captures of the live canvas, so canvas-side CSS reaches them
-  for free. HTML export lives in `exportHelper.ts`.
+- PDF, PNG, HTML and the handout are captures of the live canvas, so canvas-side CSS
+  reaches them for free. All of it lives in `exportHelper.ts`.
+- html2canvas only parses `rgb()`/`rgba()`/hex. Everything CSS Color 4 added
+  (`color-mix()`, `oklch()`, the whole Tailwind v4 palette) is rewritten on the
+  cloned document by `resolveColorMixForHtml2Canvas`, which resolves each value by
+  painting it to a 1x1 canvas. Do not narrow that to a specific spelling: Chrome
+  has already changed how it serialises a resolved colour once, and it broke every
+  capture-based export.
 - **No silent degradation.** If a video was too large to embed, or a font could not
   be embedded, collect a note and toast it. Finding out during a client presentation
   is the failure mode being avoided.
 - Theme reaches the exporter through `setExportTheme` and must be cleared in a
   `finally`, or one client's palette leaks into the next export.
+
+## Installed and offline
+
+`public/sw.js` caches the shell and the hashed bundles, so the app opens with no
+connection and installs from the browser. Navigations are network-first on purpose:
+a cache-first shell is how a deck tool gets stuck on last month's build. Bump
+`CACHE` in that file whenever it changes, or the old caches are never dropped. The
+manifest icons are SVG, which Chrome installs from; shipping raster icons is the
+one thing left for iOS.
 
 ## Present mode
 

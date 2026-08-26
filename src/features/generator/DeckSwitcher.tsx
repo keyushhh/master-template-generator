@@ -15,6 +15,7 @@ import {
   CopyIcon,
   CreateIcon,
   CloudUploadIcon,
+  DocumentTextIcon,
   DownloadIcon,
   FolderIcon,
   HistoryIcon,
@@ -76,6 +77,10 @@ interface FileMenuProps {
   onTriggerRenameActive?: () => void;
   /** Writes this deck to a file so it can leave the browser. */
   onBackupDeck?: () => void;
+  /** Writes the deck out as a Business Record markdown file. */
+  onSaveRecord?: () => void;
+  /** Opens the brand check: every override that is off the deck's rails. */
+  onBrandCheck?: () => void;
   /** Reads a deck file back in as a new deck. */
   onRestoreDeck?: (file: File) => void;
   /** How much of the browser's storage budget the app is using. */
@@ -101,6 +106,8 @@ export function DeckSwitcher({
   canReset = false,
   onTriggerRenameActive,
   onBackupDeck,
+  onSaveRecord,
+  onBrandCheck,
   onRestoreDeck,
   storage,
   isEditMode = false,
@@ -394,6 +401,40 @@ export function DeckSwitcher({
               <span className="flex items-center gap-2.5">
                 <DownloadIcon size={14} />
                 <span>Save a backup file</span>
+              </span>
+            </button>
+          )}
+
+          {onBrandCheck && (
+            <button
+              type="button"
+              onClick={() => {
+                onBrandCheck();
+                setOpen(false);
+              }}
+              title="Every size, colour and position that is not one the templates use"
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[12.5px] font-medium text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer text-left"
+            >
+              <span className="flex items-center gap-2.5">
+                <CheckIcon size={14} />
+                <span>Brand check...</span>
+              </span>
+            </button>
+          )}
+
+          {onSaveRecord && (
+            <button
+              type="button"
+              onClick={() => {
+                onSaveRecord();
+                setOpen(false);
+              }}
+              title="The deck’s own words as a Business Record, ready to edit and generate from again"
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[12.5px] font-medium text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer text-left"
+            >
+              <span className="flex items-center gap-2.5">
+                <DocumentTextIcon size={14} />
+                <span>Save the Business Record</span>
               </span>
             </button>
           )}

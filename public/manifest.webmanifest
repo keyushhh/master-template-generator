@@ -1,0 +1,15 @@
+{
+  "name": "Wozku Studio",
+  "short_name": "Wozku",
+  "description": "Turns a business record into branded slides, then exports editable PowerPoint, PDF, images and HTML.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#F1F2F4",
+  "theme_color": "#14161A",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

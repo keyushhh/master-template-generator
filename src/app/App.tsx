@@ -14,6 +14,11 @@ const HomePage = lazy(() => import('./HomePage').then((m) => ({ default: m.HomeP
 const MasterTemplatePage = lazy(() =>
   import('./MasterTemplatePage').then((m) => ({ default: m.MasterTemplatePage }))
 );
+// The second-display window. Not behind RequireAuth on purpose: it reads
+// nothing, and the deck it shows is handed to it by the window that opened it.
+const AudienceScreen = lazy(() =>
+  import('../features/generator/AudienceScreen').then((m) => ({ default: m.AudienceScreen }))
+);
 
 export function App() {
   return (
@@ -30,6 +35,7 @@ export function App() {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/" element={<RequireAuth><HomePage /></RequireAuth>} />
                 <Route path="/studio" element={<RequireAuth><MasterTemplatePage /></RequireAuth>} />
+                <Route path="/audience" element={<AudienceScreen />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>

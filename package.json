@@ -12,7 +12,7 @@
     "test": "npm run test:unit && npm run test:checks",
     "test:unit": "vitest run",
     "test:watch": "vitest",
-    "test:checks": "node scripts/pptx-theme-check.mjs && node scripts/brand-kit-check.mjs && node scripts/preflight-check.mjs && node scripts/pptx-font-check.mjs && node scripts/font-catalog-check.mjs && node scripts/resolve-check.mjs && node scripts/pptx-format-check.mjs && node scripts/overflow-check.mjs && node scripts/typesize-check.mjs && node scripts/shared-slides-check.mjs && node scripts/pdf-import-check.mjs && node scripts/pptx-import-check.mjs && node scripts/image-fit-check.mjs && node scripts/a11y-check.mjs && node scripts/dash-check.mjs",
+    "test:checks": "node scripts/pptx-theme-check.mjs && node scripts/brand-kit-check.mjs && node scripts/preflight-check.mjs && node scripts/pptx-font-check.mjs && node scripts/font-catalog-check.mjs && node scripts/resolve-check.mjs && node scripts/pptx-format-check.mjs && node scripts/overflow-check.mjs && node scripts/typesize-check.mjs && node scripts/shared-slides-check.mjs && node scripts/pdf-import-check.mjs && node scripts/pptx-import-check.mjs && node scripts/image-fit-check.mjs && node scripts/chart-color-check.mjs && node scripts/a11y-check.mjs && node scripts/dash-check.mjs",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "test:pptx": "node scripts/pptx-theme-check.mjs",
@@ -26,7 +26,8 @@
     "test:overflow": "node scripts/overflow-check.mjs",
     "test:dashes": "node scripts/dash-check.mjs",
     "test:import": "node scripts/pdf-import-check.mjs && node scripts/pptx-import-check.mjs",
-    "test:a11y": "node scripts/a11y-check.mjs"
+    "test:a11y": "node scripts/a11y-check.mjs",
+    "test:charts": "node scripts/chart-color-check.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",

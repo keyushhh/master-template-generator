@@ -14,6 +14,7 @@ import {
   isHex6,
 } from './deckTheme';
 import type { BrandKit } from './brandKitStore';
+import { logoPalette, proposeAccent, type LogoColour } from './logoPalette';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
 
@@ -107,6 +108,11 @@ export function BrandKitModal({
    *  face, which is the same thing absence means in the saved kit. */
   const [draftFonts, setDraftFonts] = useState<KitFonts>({});
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  /** Colours read off a dropped logo, most of the mark first. */
+  const [logoColours, setLogoColours] = useState<LogoColour[]>([]);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [logoHover, setLogoHover] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open);
@@ -115,6 +121,8 @@ export function BrandKitModal({
     if (!open) {
       setEditing(null);
       setPendingDeleteId(null);
+      setLogoColours([]);
+      setLogoError(null);
     }
   }, [open]);
 
@@ -134,6 +142,29 @@ export function BrandKitModal({
   if (!open) return null;
 
   const cover = deck.slides.find((s) => !s.hidden) ?? deck.slides[0];
+
+  /** Reads a logo's colours and proposes one of them as the accent. */
+  const readLogo = async (file: File) => {
+    setLogoError(null);
+    try {
+      const src = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('That file could not be read.'));
+        reader.readAsDataURL(file);
+      });
+      const colours = await logoPalette(src);
+      if (!colours.length) {
+        setLogoError('No colours could be read from that image.');
+        return;
+      }
+      setLogoColours(colours);
+      const accent = proposeAccent(colours);
+      if (accent) setDraftAccent(accent);
+    } catch (err) {
+      setLogoError(err instanceof Error ? err.message : 'That file could not be read.');
+    }
+  };
 
   const startNew = () => {
     setEditing('new');
@@ -284,6 +315,76 @@ export function BrandKitModal({
                       style={{ background: css(hex) }}
                     />
                   ))}
+                </div>
+
+                {/* ── The colour, read off the client's own logo ───────────
+                    The hex is on the logo, and the logo is the file the user
+                    already has. This reads it rather than sending them to
+                    another tool for six characters. What comes back is a
+                    suggestion: the largest area in a mark is often its
+                    background, and an accent is a judgement about which colour
+                    means "this is the point". */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setLogoHover(true); }}
+                  onDragLeave={() => setLogoHover(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setLogoHover(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) void readLogo(file);
+                  }}
+                  className={`flex flex-col gap-2 p-3 border border-dashed ${logoHover ? 'border-emerald-500 bg-emerald-50/40' : 'border-neutral-300'}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[12px] text-neutral-700">
+                      {logoError
+                        ? logoError
+                        : logoColours.length
+                          ? 'The colours in that logo, by how much of it they cover.'
+                          : 'Drop the client’s logo here to read its colours.'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      className="shrink-0 h-[30px] px-3 text-[12px] font-bold text-neutral-900 bg-white border border-neutral-300 hover:border-neutral-400 transition-colors cursor-pointer"
+                    >
+                      Choose a logo
+                    </button>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void readLogo(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </div>
+
+                  {logoColours.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {logoColours.map((colour) => (
+                        <button
+                          key={colour.hex}
+                          onClick={() => setDraftAccent(colour.hex)}
+                          title={`#${colour.hex} · ${Math.round(colour.share * 100)}% of the logo`}
+                          aria-label={`Use #${colour.hex}`}
+                          className={`flex items-center gap-1.5 h-7 pl-1 pr-2 border transition-colors cursor-pointer ${
+                            draftAccent.replace('#', '').toUpperCase() === colour.hex
+                              ? 'border-neutral-900'
+                              : 'border-neutral-200 hover:border-neutral-400'
+                          }`}
+                        >
+                          <span className="block w-5 h-5 border border-neutral-200" style={{ background: css(colour.hex) }} />
+                          <span className="font-mono text-[9px] font-bold tracking-[0.06em] text-neutral-600">
+                            {Math.round(colour.share * 100)}%
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Typefaces ─────────────────────────────────────────────

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { FitStage } from '../generator/FitStage';
 import { FolderChip } from './FolderChip';
+import { TextHitChip } from '../search/TextHitChip';
+import type { DeckTextHit } from '../search/deckText';
 import { css as themeCss, type DeckTheme } from '../theme/deckTheme';
 import type { Deck } from '../deck/types';
 import { hexIsDark, readableInk } from '../deck/slideBackground';
@@ -57,6 +59,8 @@ interface DeckTableProps {
   /** Renders the deck name, as static text or as a rename input. Owned by the
    *  page because renaming state is shared with the hero and the grid. */
   renderName: (p: ProjectSummary, className: string) => React.ReactNode;
+  /** Where this deck says the search query, when its name does not. */
+  textHit?: (p: ProjectSummary) => DeckTextHit | null;
 }
 
 /** What this deck came from. Real metadata rather than a decorative second line:
@@ -233,6 +237,7 @@ export function DeckTable({
   onDuplicate,
   onDelete,
   renderName,
+  textHit,
 }: DeckTableProps) {
   const allShownSelected = rows.length > 0 && rows.every((p) => selected.has(p.id));
   const folderOf = (id: string | null | undefined) =>
@@ -411,6 +416,7 @@ export function DeckTable({
                           {showFolderOrigin && p.folderId && folderOf(p.folderId) && (
                             <FolderChip folder={folderOf(p.folderId)!} />
                           )}
+                          {textHit?.(p) && <TextHitChip hit={textHit(p)!} />}
                           {/* A sandbox deck lives outside the repository, so it
                               says so: it is not shared, and it goes when this
                               browser's storage does. */}

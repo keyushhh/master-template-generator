@@ -26,8 +26,10 @@ export interface BrandCheckIssue {
 /** Every hex the active theme actually uses, so a typed colour that matches
  *  none of them reads as "off palette" rather than "wrong" - a client's
  *  secondary colour picked by eye is a legitimate reason to type a hex, this
- *  just makes sure it was on purpose. */
-function themePalette(theme: DeckTheme): Set<string> {
+ *  just makes sure it was on purpose. Exported because the brand audit asks
+ *  the same question of every slot, and two answers to "is this on palette?"
+ *  is one too many. */
+export function themePalette(theme: DeckTheme): Set<string> {
   return new Set(
     [
       theme.accent.base, theme.accent.bright, theme.accent.deep, theme.accent.tint,
