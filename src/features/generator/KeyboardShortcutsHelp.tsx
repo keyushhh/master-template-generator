@@ -244,7 +244,7 @@ function ShortcutRow({ shortcut, isApple }: { shortcut: Shortcut; isApple: boole
           <span key={i} className="flex items-center gap-1.5">
             <KeyCap label={k} />
             {i < resolvedKeys.length - 1 && (
-              <span className="text-neutral-400 font-mono text-[11px] font-medium">+</span>
+              <span className="text-neutral-600 font-mono text-[11px] font-medium">+</span>
             )}
           </span>
         ))}
@@ -332,7 +332,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
             <button
               onClick={onClose}
               aria-label="Close keyboard shortcuts"
-              className="w-8 h-8 flex items-center justify-center text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-none border border-transparent hover:border-neutral-200 transition-colors cursor-pointer"
+              className="w-8 h-8 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-none border border-transparent hover:border-neutral-200 transition-colors cursor-pointer"
             >
               <CloseIcon size={14} />
             </button>
@@ -357,7 +357,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
                     <span>{label}</span>
                     <span
                       className={`text-[10px] font-mono px-1 py-0.2 rounded-none ${
-                        isActive ? 'bg-neutral-800 text-neutral-200' : 'bg-neutral-100 text-neutral-500'
+                        isActive ? 'bg-neutral-800 text-neutral-200' : 'bg-neutral-100 text-neutral-600'
                       }`}
                     >
                       {count}
@@ -369,7 +369,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
 
             {/* Quick search input */}
             <div className="relative min-w-[200px] sm:w-[240px]">
-              <div className="absolute inset-y-0 left-2.5 flex items-center pointer-events-none text-neutral-400">
+              <div className="absolute inset-y-0 left-2.5 flex items-center pointer-events-none text-neutral-600">
                 <SearchIcon size={13} />
               </div>
               <input
@@ -378,7 +378,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search shortcuts..."
-                className="w-full pl-8 pr-7 py-1.5 text-[12.5px] bg-white border border-neutral-200 rounded-none text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-900 transition-colors"
+                className="w-full pl-8 pr-7 py-1.5 text-[12.5px] bg-white border border-neutral-200 rounded-none text-neutral-900 placeholder:text-neutral-600 focus:outline-none focus:border-neutral-900 transition-colors"
               />
               {searchQuery && (
                 <button
@@ -386,7 +386,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
                     setSearchQuery('');
                     searchInputRef.current?.focus();
                   }}
-                  className="absolute inset-y-0 right-2 flex items-center text-neutral-400 hover:text-neutral-700 cursor-pointer"
+                  className="absolute inset-y-0 right-2 flex items-center text-neutral-600 hover:text-neutral-700 cursor-pointer"
                   aria-label="Clear search"
                 >
                   <CloseIcon size={11} />
@@ -401,7 +401,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
           {filteredShortcuts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center px-4">
               <p className="text-[14px] font-medium text-neutral-700">No shortcuts found</p>
-              <p className="text-[12px] text-neutral-500 mt-1">
+              <p className="text-[12px] text-neutral-600 mt-1">
                 No matching shortcut for &ldquo;{searchQuery}&rdquo;. Try another search term.
               </p>
               <button
@@ -421,7 +421,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
                   <span className="text-[11px] font-mono font-bold uppercase tracking-[0.08em] text-neutral-600">
                     {CATEGORY_TITLES[category]}
                   </span>
-                  <span className="text-[10.5px] font-mono text-neutral-500">
+                  <span className="text-[10.5px] font-mono text-neutral-600">
                     {items.length} {items.length === 1 ? 'action' : 'actions'}
                   </span>
                 </div>
@@ -437,7 +437,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
 
         {/* Footer */}
         <div className="px-6 py-3 bg-neutral-50 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 select-none">
-          <div className="flex items-center gap-2 text-[11.5px] text-neutral-500">
+          <div className="flex items-center gap-2 text-[11.5px] text-neutral-600">
             <span>Press</span>
             <kbd className="px-1.5 py-0.5 text-[10.5px] font-mono bg-white border border-neutral-300 text-neutral-700 rounded-none shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
               Esc
@@ -451,7 +451,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
 
           {/* Dynamic Platform Selector / Switcher */}
           <div className="flex items-center gap-1.5 text-[11.5px] text-neutral-600">
-            <span className="text-neutral-400 font-mono text-[11px]">Platform:</span>
+            <span className="text-neutral-600 font-mono text-[11px]">Platform:</span>
             <div className="inline-flex items-center border border-neutral-200 bg-white p-0.5 rounded-none shadow-xs">
               <button
                 type="button"
