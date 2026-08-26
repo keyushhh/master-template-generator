@@ -78,6 +78,11 @@ import { FolderChip } from '../features/library/FolderChip';
 import { findDeckText, type DeckTextHit } from '../features/search/deckText';
 import { TextHitChip } from '../features/search/TextHitChip';
 
+/** Flag controlling client brand badge & filter visibility in the library.
+ *  Hidden for now to keep the UI clean; ready for upcoming multi-tenant SaaS &
+ *  Super-Admin expansion (see ROADMAP.md). */
+const SHOW_BRANDS = false;
+
 const VIEW_KEY = 'wozku-library-view-v1';
 const FOLDER_ZOOM_KEY = 'wozku-folder-zoom-v1';
 const FOLDER_LIST_KEY = 'wozku-folder-listview-v1';
@@ -1235,7 +1240,7 @@ export function HomePage() {
             )}
 
             {/* Client Filter (Only show on root homepage, not inside folders) */}
-            {activeFolderId === null && kitsInUse.length > 1 && (
+            {SHOW_BRANDS && activeFolderId === null && kitsInUse.length > 1 && (
               <div className="flex items-center gap-2 pt-2 flex-wrap mb-4">
                 <Eyebrow>Client</Eyebrow>
                 <span className="w-2" />
@@ -1353,8 +1358,12 @@ export function HomePage() {
                       </div>
 
                       <div className="flex items-center gap-3 flex-wrap text-[11.5px] text-neutral-600">
-                        <KitChip theme={heroTheme} />
-                        <span className="w-px h-3 bg-neutral-300" />
+                        {SHOW_BRANDS && (
+                          <>
+                            <KitChip theme={heroTheme} />
+                            <span className="w-px h-3 bg-neutral-300" />
+                          </>
+                        )}
                         <span className="font-mono tabular-nums">
                           {String(heroSlides.length).padStart(2, '0')} slides
                         </span>
@@ -1700,6 +1709,7 @@ export function HomePage() {
                     {!isFolderView && view === 'table' ? (
                       <DeckTable
                         rows={sortedShown}
+                        showClient={SHOW_BRANDS}
                         showFolderOrigin={showFolderOrigin}
                         textHit={(p) => (p.name.toLowerCase().includes(query.trim().toLowerCase()) ? null : textHits.get(p.id) ?? null)}
                         total={rest.length}
@@ -1778,7 +1788,7 @@ export function HomePage() {
 
                                     <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-neutral-150 text-[11px] text-neutral-600">
                                       <span className="flex items-center gap-1.5 min-w-0">
-                                        <KitChip theme={theme} />
+                                        {SHOW_BRANDS && <KitChip theme={theme} />}
                                         {/* Where the deck actually lives, on a
                                             library search that reached into
                                             folders. */}

@@ -50,6 +50,8 @@ interface DeckTableProps {
   /** Mark rows that live in a folder. Set while searching the library, where the
    *  list reaches filed decks as well as loose ones. */
   showFolderOrigin?: boolean;
+  /** Whether to show client brand column (defaults to false). */
+  showClient?: boolean;
   onBulkMoveToFolder?: (folderId: string | null) => void;
   onMoveToFolder?: (projectId: string, folderId: string | null) => void;
   onOpen: (id: string) => void;
@@ -230,6 +232,7 @@ export function DeckTable({
   onBulkDelete,
   folders = [],
   showFolderOrigin = false,
+  showClient = false,
   onBulkMoveToFolder,
   onMoveToFolder,
   onOpen,
@@ -353,9 +356,9 @@ export function DeckTable({
                 </span>
               </th>
               <Th label="Deck" col="name" sort={sort} onSort={onSort} />
-              <Th label="Client" col="client" sort={sort} onSort={onSort} width={190} />
-              <Th label="Slides" col="slides" sort={sort} onSort={onSort} width={104} align="right" />
-              <Th label="Edited" col="updated" sort={sort} onSort={onSort} width={140} align="right" />
+              {showClient && <Th label="Client" col="client" sort={sort} onSort={onSort} width={190} />}
+              <Th label="Slides" col="slides" sort={sort} onSort={onSort} width={120} />
+              <Th label="Edited" col="updated" sort={sort} onSort={onSort} width={160} />
               <Th width={116} />
             </tr>
           </thead>
@@ -430,38 +433,37 @@ export function DeckTable({
                     </div>
                   </td>
 
-                  {/* Client, as a pill in the kit's own colour. The ink is
-                      picked against the pill's own background: a kit whose tint
-                      is a dark wash (AI-Native) gets its light accent step, not
-                      the deep one that would vanish into it. */}
-                  <td className="border-b border-neutral-200 px-3 py-2 align-middle">
-                    <span
-                      className="inline-flex items-center gap-1.5 max-w-full px-2 py-[2px] text-[11px] font-semibold border"
-                      style={{
-                        color: themeCss(
-                          readableInk(
-                            theme.accent.tint,
-                            hexIsDark(theme.accent.tint) ? theme.accent.bright : theme.accent.deep
-                          )
-                        ),
-                        borderColor: themeCss(theme.accent.base) + '55',
-                        background: themeCss(theme.accent.tint),
-                      }}
-                    >
+                  {/* Client, as a pill in the kit's own colour. */}
+                  {showClient && (
+                    <td className="border-b border-neutral-200 px-3 py-2 align-middle">
                       <span
-                        aria-hidden
-                        className="shrink-0 w-[6px] h-[6px]"
-                        style={{ background: themeCss(theme.accent.base) }}
-                      />
-                      <span className="truncate">{theme.name}</span>
-                    </span>
-                  </td>
+                        className="inline-flex items-center gap-1.5 max-w-full px-2 py-[2px] text-[11px] font-semibold border"
+                        style={{
+                          color: themeCss(
+                            readableInk(
+                              theme.accent.tint,
+                              hexIsDark(theme.accent.tint) ? theme.accent.bright : theme.accent.deep
+                            )
+                          ),
+                          borderColor: themeCss(theme.accent.base) + '55',
+                          background: themeCss(theme.accent.tint),
+                        }}
+                      >
+                        <span
+                          aria-hidden
+                          className="shrink-0 w-[6px] h-[6px]"
+                          style={{ background: themeCss(theme.accent.base) }}
+                        />
+                        <span className="truncate">{theme.name}</span>
+                      </span>
+                    </td>
+                  )}
 
-                  <td className="border-b border-neutral-200 px-3 py-2 align-middle text-right font-mono text-[11.5px] text-neutral-600 tabular-nums">
+                  <td className="border-b border-neutral-200 px-3 py-2 align-middle text-left font-mono text-[11.5px] text-neutral-600 tabular-nums">
                     {String(visible.length).padStart(2, '0')}
                   </td>
 
-                  <td className="border-b border-neutral-200 px-3 py-2 align-middle text-right text-[11.5px] text-neutral-600 whitespace-nowrap">
+                  <td className="border-b border-neutral-200 px-3 py-2 align-middle text-left text-[11.5px] text-neutral-600 whitespace-nowrap">
                     {relativeTime(p.updatedAt)}
                   </td>
 
