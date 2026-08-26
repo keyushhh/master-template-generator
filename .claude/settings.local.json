@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 '/Users/biradhwaj/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/ba629010-6d29-4c4e-ad1d-8350367417b2/dc555d4b-3dae-42a9-a008-3dda04fc27e9/skills/pptx/scripts/office/soffice.py' --headless --convert-to pdf Forcepoint.pptx)",
+      "Bash(rm -f orig-*.jpg)",
+      "Bash(pdftoppm -jpeg -r 70 Forcepoint.pdf orig)",
+      "Bash(python3 -)",
+      "Bash(python3 -c ' *)",
+      "Bash(time python3 ~/.claude/skills/pptx-brand-restyle/scripts/restyle.py Forcepoint.pptx auto.pptx)",
+      "Bash(rm -f auto.pptx)",
+      "Bash(python3 ~/.claude/skills/pptx-brand-restyle/scripts/restyle.py Forcepoint.pptx auto.pptx)",
+      "Bash(WD=\"/private/tmp/claude-501/-Users-biradhwaj-Desktop-github-files-wozku-master-template-generator/8d153a6b-3ac5-43f5-b47b-5e2f6afd2649/scratchpad\"; cd \"$WD\" && rm -f auto.pptx && python3 ~/.claude/skills/pptx-brand-restyle/scripts/restyle.py Forcepoint.pptx auto.pptx 2>&1 | head -14)",
+      "Bash(python3 ~/.claude/skills/pptx-brand-restyle/scripts/preview.py auto.pptx autorender)",
+      "Read(//Users/biradhwaj/.claude/skills/pptx-brand-restyle/**)",
+      "Bash(cp SKILL.md ~/Downloads/pptx-brand-restyle-SKILL.md)",
+      "Bash(python3 build_v2.py)",
+      "Bash(python3 ~/.claude/skills/pptx-brand-restyle/scripts/preview.py Forcepoint-wozku-v2.pptx r2)",
+      "Bash(rm -rf ql2)",
+      "Bash(mkdir ql2 *)",
+      "Bash(qlmanage -t -s 1500 -o ql2 Forcepoint-wozku-v2.pptx)",
+      "Bash(cp Forcepoint-wozku-v2.pptx ~/Downloads/Forcepoint-wozku-v2.pptx)",
+      "Read(//Users/biradhwaj/Downloads/**)",
+      "Bash(python3 ~/.claude/skills/pptx-brand-restyle/scripts/diagnose.py Forcepoint-wozku-v2.pptx)"
+    ]
+  }
+}
