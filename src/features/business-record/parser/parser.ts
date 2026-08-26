@@ -3,10 +3,7 @@ import type {
   DocumentNode,
   MetadataNode,
   SectionNode,
-  ParagraphNode,
-  BulletListNode,
   BulletListItemNode,
-  UnsupportedNode,
 } from './ast';
 
 export function parse(tokens: Token[]): DocumentNode {
@@ -41,7 +38,7 @@ export function parse(tokens: Token[]): DocumentNode {
   let currentSection: SectionNode | null = null;
 
   // Helper to ensure a section context exists
-  const ensureSectionContext = (line: number) => {
+  const ensureSectionContext = () => {
     if (!currentSection) {
       currentSection = {
         type: 'Section',
@@ -81,7 +78,7 @@ export function parse(tokens: Token[]): DocumentNode {
       }
 
       case 'PARAGRAPH': {
-        ensureSectionContext(token.line);
+        ensureSectionContext();
         if (currentSection) {
           currentSection.children.push({
             type: 'Paragraph',
@@ -92,7 +89,7 @@ export function parse(tokens: Token[]): DocumentNode {
       }
 
       case 'BULLET_ITEM': {
-        ensureSectionContext(token.line);
+        ensureSectionContext();
         if (currentSection) {
           const items: BulletListItemNode[] = [];
           // Group consecutive bullet items
@@ -115,7 +112,7 @@ export function parse(tokens: Token[]): DocumentNode {
       }
 
       case 'UNSUPPORTED': {
-        ensureSectionContext(token.line);
+        ensureSectionContext();
         if (currentSection) {
           currentSection.children.push({
             type: 'Unsupported',

@@ -63,13 +63,13 @@ export function FolderModal({ open, onClose, folderToEdit, onSave }: FolderModal
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-neutral-150">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+            <span className="font-mono text-[10px] font-bold tracking-[0.16em] uppercase text-neutral-600">
               {folderToEdit ? 'Edit Folder' : 'New Folder'}
             </span>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
+            className="w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
           >
             <CloseIcon size={15} />
           </button>

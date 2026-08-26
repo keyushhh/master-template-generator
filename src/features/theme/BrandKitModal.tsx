@@ -61,7 +61,7 @@ function Ramp({ accent }: { accent: string }) {
             className="block w-7 h-7 border border-neutral-200"
             style={{ background: css(ramp[s.key]) }}
           />
-          <span className="font-mono text-[8.5px] uppercase tracking-[0.08em] text-neutral-400">
+          <span className="font-mono text-[8.5px] uppercase tracking-[0.08em] text-neutral-600">
             {s.label}
           </span>
         </div>
@@ -187,17 +187,17 @@ export function BrandKitModal({
       >
         {/* Header */}
         <div className="relative flex flex-col gap-1 px-5 py-4 border-b border-neutral-150 shrink-0">
-          <div className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+          <div className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-600">
             Brand kit
           </div>
           <h2 className="text-[17px] font-bold text-neutral-900">Who is this deck for?</h2>
-          <span className="text-[12px] text-neutral-500">
+          <span className="text-[12px] text-neutral-600">
             One colour, applied across all fourteen layouts. The client&rsquo;s logo is set on the slide itself.
           </span>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-3.5 right-3.5 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+            className="absolute top-3.5 right-3.5 w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
           >
             <CloseIcon size={15} />
           </button>
@@ -214,11 +214,11 @@ export function BrandKitModal({
               </div>
             )}
             <div className="flex flex-col gap-2">
-              <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+              <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-600">
                 Derived steps
               </span>
               <Ramp accent={editing ? draftAccent : previewTheme.accent.base} />
-              <span className="text-[11px] text-neutral-400 leading-snug">
+              <span className="text-[11px] text-neutral-600 leading-snug">
                 Built from your one colour so the four never drift out of relation.
               </span>
             </div>
@@ -228,7 +228,7 @@ export function BrandKitModal({
           <div className="flex-1 min-w-0 overflow-y-auto p-4 flex flex-col gap-4">
             {editing ? (
               <div className="flex flex-col gap-3">
-                <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+                <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-600">
                   {editing === 'new' ? 'New client kit' : 'Edit kit'}
                 </span>
 
@@ -258,7 +258,7 @@ export function BrandKitModal({
                       className="w-[38px] h-[38px] p-0 border border-neutral-200 bg-white cursor-pointer"
                     />
                     <span className="flex items-center h-[38px] px-3 border border-neutral-200 focus-within:border-emerald-500">
-                      <span className="font-mono text-[13px] text-neutral-400 pr-0.5">#</span>
+                      <span className="font-mono text-[13px] text-neutral-600 pr-0.5">#</span>
                       <input
                         value={draftAccent.replace('#', '')}
                         onChange={(e) => setDraftAccent(e.target.value.replace('#', '').toUpperCase().slice(0, 6))}
@@ -298,13 +298,13 @@ export function BrandKitModal({
                     can change just the headings and leave the rest alone. */}
                 <div className="flex flex-col gap-2 pt-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+                    <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-600">
                       Typefaces
                     </span>
                     {(draftFonts.display || draftFonts.sans || draftFonts.mono) && (
                       <button
                         onClick={() => setDraftFonts({})}
-                        className="font-mono text-[9px] uppercase tracking-[0.08em] text-neutral-400 hover:text-neutral-800 transition-colors cursor-pointer"
+                        className="font-mono text-[9px] uppercase tracking-[0.08em] text-neutral-600 hover:text-neutral-800 transition-colors cursor-pointer"
                       >
                         Reset to house
                       </button>
@@ -331,7 +331,7 @@ export function BrandKitModal({
                     ))}
                   </div>
 
-                  <span className="text-[11px] text-neutral-400 leading-snug">
+                  <span className="text-[11px] text-neutral-600 leading-snug">
                     Every face here is a Google Font, so it is embedded into the .pptx and
                     resolves by name in Google Slides. Nothing to install on anyone&rsquo;s machine.
                   </span>
@@ -356,7 +356,7 @@ export function BrandKitModal({
             ) : (
               <>
                 <div className="flex flex-col gap-1.5">
-                  <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+                  <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-600">
                     House
                   </span>
                   {BUILT_IN_THEMES.map((t) => {
@@ -387,11 +387,11 @@ export function BrandKitModal({
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+                  <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-600">
                     Clients
                   </span>
                   {kits.length === 0 ? (
-                    <p className="text-[12px] text-neutral-500 leading-relaxed py-1">
+                    <p className="text-[12px] text-neutral-600 leading-relaxed py-1">
                       No client kits yet. Make one per client and every deck for them starts on their colour.
                     </p>
                   ) : (
@@ -416,7 +416,7 @@ export function BrandKitModal({
                               <span className={`truncate text-[13px] ${active ? 'font-bold text-emerald-800' : 'font-semibold text-neutral-800'}`}>
                                 {kit.name}
                               </span>
-                              <span className="font-mono text-[10.5px] text-neutral-400">#{kit.accent}</span>
+                              <span className="font-mono text-[10.5px] text-neutral-600">#{kit.accent}</span>
                             </span>
                           </button>
                           {active && (
@@ -428,7 +428,7 @@ export function BrandKitModal({
                             onClick={() => startEdit(kit)}
                             aria-label={`Edit ${kit.name}`}
                             title="Edit"
-                            className="shrink-0 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            className="shrink-0 w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                           >
                             <CreateIcon size={14} />
                           </button>
@@ -436,7 +436,7 @@ export function BrandKitModal({
                             onClick={() => setPendingDeleteId(kit.id)}
                             aria-label={`Delete ${kit.name}`}
                             title="Delete"
-                            className="shrink-0 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            className="shrink-0 w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                           >
                             <TrashIcon size={14} />
                           </button>
@@ -466,7 +466,7 @@ export function BrandKitModal({
               <h3 className="text-[15px] font-bold text-neutral-900">
                 Delete &ldquo;{kits.find((k) => k.id === pendingDeleteId)?.name}&rdquo;?
               </h3>
-              <p className="mt-1.5 text-[13px] text-neutral-500 leading-relaxed">
+              <p className="mt-1.5 text-[13px] text-neutral-600 leading-relaxed">
                 Any deck using this kit falls back to the Wozku look. The decks themselves are untouched.
               </p>
               <div className="mt-4 flex justify-end gap-2">

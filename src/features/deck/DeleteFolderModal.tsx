@@ -58,12 +58,12 @@ export function DeleteFolderModal({
         <h3 className="text-[15px] font-bold text-neutral-900">Delete “{folder.name}”?</h3>
 
         {!hasDecks ? (
-          <p className="mt-1.5 text-[13px] text-neutral-500 leading-relaxed">
+          <p className="mt-1.5 text-[13px] text-neutral-600 leading-relaxed">
             This folder is empty. This action cannot be undone.
           </p>
         ) : (
           <>
-            <p className="mt-1.5 text-[13px] text-neutral-500 leading-relaxed">
+            <p className="mt-1.5 text-[13px] text-neutral-600 leading-relaxed">
               It has {deckCount} deck{deckCount === 1 ? '' : 's'} in it. Choose what happens to
               {deckCount === 1 ? ' it' : ' them'}.
             </p>
@@ -85,7 +85,7 @@ export function DeleteFolderModal({
                   <span className="block text-[13px] font-bold text-neutral-800">
                     Keep the deck{deckCount === 1 ? '' : 's'}
                   </span>
-                  <span className="block text-[12px] text-neutral-500 leading-snug">
+                  <span className="block text-[12px] text-neutral-600 leading-snug">
                     Move {deckCount === 1 ? 'it' : 'them'} to Uncategorised and delete the folder.
                   </span>
                 </span>
@@ -107,7 +107,7 @@ export function DeleteFolderModal({
                   <span className="block text-[13px] font-bold text-red-700">
                     Delete the deck{deckCount === 1 ? '' : 's'} too
                   </span>
-                  <span className="block text-[12px] text-neutral-500 leading-snug">
+                  <span className="block text-[12px] text-neutral-600 leading-snug">
                     The folder and everything in it are gone for good. This action cannot be
                     undone.
                   </span>

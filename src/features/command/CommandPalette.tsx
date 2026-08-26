@@ -179,7 +179,7 @@ export function CommandPalette({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2.5 px-4 h-[46px] border-b border-neutral-150 shrink-0">
-          <span className="shrink-0 text-neutral-400 flex items-center">
+          <span className="shrink-0 text-neutral-600 flex items-center">
             <SearchIcon size={15} />
           </span>
           <input
@@ -190,21 +190,21 @@ export function CommandPalette({
             placeholder="Go to a slide, change a layout, export…"
             aria-label="Search commands"
             spellCheck={false}
-            className="flex-1 min-w-0 bg-transparent text-[14px] text-neutral-900 placeholder:text-neutral-400 outline-none"
+            className="flex-1 min-w-0 bg-transparent text-[14px] text-neutral-900 placeholder:text-neutral-600 outline-none"
           />
-          <span className="shrink-0 font-mono text-[10px] text-neutral-400">esc</span>
+          <span className="shrink-0 font-mono text-[10px] text-neutral-600">esc</span>
         </div>
 
         <div ref={listRef} className="flex-1 overflow-y-auto py-1.5">
           {flat.length === 0 && (
-            <div className="px-4 py-6 text-center text-[12.5px] text-neutral-400">
+            <div className="px-4 py-6 text-center text-[12.5px] text-neutral-600">
               Nothing matches &ldquo;{query}&rdquo;
             </div>
           )}
 
           {groups.map((g) => (
             <div key={g.name} className="mb-1">
-              <div className="px-4 pt-2 pb-1 font-mono text-[8.5px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+              <div className="px-4 pt-2 pb-1 font-mono text-[8.5px] font-bold tracking-[0.14em] uppercase text-neutral-600">
                 {g.name}
               </div>
               {g.items.map((c) => {
@@ -233,7 +233,7 @@ export function CommandPalette({
                     {c.hint && (
                       <span
                         className={`shrink-0 font-mono text-[10px] ${
-                          isActive ? 'text-emerald-700/80' : 'text-neutral-400'
+                          isActive ? 'text-emerald-700/80' : 'text-neutral-600'
                         }`}
                       >
                         {c.hint}
@@ -246,7 +246,7 @@ export function CommandPalette({
           ))}
         </div>
 
-        <div className="shrink-0 flex items-center gap-3 px-4 h-[32px] border-t border-neutral-150 bg-neutral-50 font-mono text-[9.5px] text-neutral-400">
+        <div className="shrink-0 flex items-center gap-3 px-4 h-[32px] border-t border-neutral-150 bg-neutral-50 font-mono text-[9.5px] text-neutral-600">
           <span>↑↓ move</span>
           <span>↵ run</span>
           <span className="ml-auto">{MOD_KEY}K</span>

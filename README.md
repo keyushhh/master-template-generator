@@ -9,6 +9,10 @@ editing, persistence or export.
 
 ### Automatic generation
 
+* Twelve presentation templates, each opening with nine to fourteen different
+  slide types (cover, agenda, statement, headline number, three pillars, metrics
+  dashboard, before-and-after table, timeline, quote, closing) written in that
+  template's own voice and painted in its own palette.
 * Upload a structured Markdown document (`.md` or `.markdown`) with YAML
   frontmatter.
 * The parser validates the required metadata keys (`title`, `version`, `type`,
@@ -49,6 +53,16 @@ editing, persistence or export.
 * Brand kits: A client's accent colour and specific typefaces (display, body, mono), 
   applied everywhere the deck is drawn and embedded into the export.
 
+### Accessibility and screen size
+
+* The editor's floor is 768px (iPad portrait). Below that the page says so and
+  offers Present and the library, rather than drawing a layout nobody can work
+  in. Presenting itself works at any size.
+* One focus ring for the whole app, on `:focus-visible`. Small labels are set at
+  or above WCAG AA contrast, and `scripts/a11y-check.mjs` fails the build if
+  either regresses.
+* Moving through the deck and the save state are announced to screen readers.
+
 ### Preflight
 
 * The fit scanner finds text that is cut off and reports it per slide. "Fit all"
@@ -79,6 +93,10 @@ editing, persistence or export.
 * **PNG** captures each slide at 2x and bundles them into a ZIP through `jszip`.
 * **HTML** writes a single self-contained file with slide transitions and
   keyboard controls. Uploaded video is inlined and plays offline.
+* **Backup file** writes the deck's own model as `.wozdeck.json` and reads it
+  back as a new deck, so work can move between browsers and machines. Uploaded
+  video cannot travel in it, and the reader says so rather than opening a deck
+  with silently empty video slots.
 
 ## Tech stack
 
@@ -96,18 +114,34 @@ npm run dev
 Before calling anything done:
 
 ```sh
-npx tsc -p tsconfig.app.json --noEmit
-npm test
-npm run build
+npm run verify
 ```
 
-`npm test` covers the theme, the brand kit, preflight, fonts, the formatting
-seam, the PowerPoint format seam and the writing-style check. Interaction
-changes cannot be proved by these and need clicking through in `npm run dev`.
+That is `typecheck`, `lint`, `test` and `build` in one command. The pieces run
+on their own too:
+
+| Command | What it proves |
+| --- | --- |
+| `npm run typecheck` | The types hold. |
+| `npm run lint` | ESLint, including the React hooks rules. |
+| `npm run test:unit` | Vitest over the logic with no DOM in it: undo/redo, template switching, the deck store, the storage schema, colour maths. |
+| `npm run test:checks` | The node scripts that drive the real exporter, importer, fonts, theme, type sizes, accessibility floor and writing style. |
+| `npm run test:e2e` | One Playwright path: create a deck, edit it, reload, and find the edit still there. Needs `npx playwright install chromium` once. |
+
+CI (`.github/workflows/ci.yml`) runs all of it on every push and pull request.
+
+Interaction changes beyond the smoke path still need clicking through in
+`npm run dev`.
 
 ## Storage
 
-Decks live in `localStorage`, so they do not travel between browsers. Video
-bytes live in IndexedDB and the deck stores only an asset id. Images are
-downscaled to JPEG data URLs. See `CLAUDE.md` for the rules this places on the
-deck model.
+Decks live in `localStorage`, so they do not travel between browsers on their
+own: use a backup file for that. Video bytes live in IndexedDB and the deck
+stores only an asset id. Images are downscaled to JPEG data URLs. See
+`CLAUDE.md` for the rules this places on the deck model.
+
+Every stored session carries a `schemaVersion` (see
+`src/features/deck/schema.ts`). Reads run through `migrate()`, so the app only
+ever sees a current session; a session written by a newer build is handed back
+untouched rather than downgraded. The deck menu shows how much of the browser's
+5MB budget is in use, and warns at 80% rather than only when a save fails.

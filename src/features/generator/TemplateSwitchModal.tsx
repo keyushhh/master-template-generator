@@ -137,7 +137,7 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logo
   const sectionLabel: React.CSSProperties = {
     fontFamily: 'var(--font-mono)', fontSize: 10,
     textTransform: 'uppercase', letterSpacing: '0.14em',
-    color: 'var(--neutral-400)', marginBottom: 8,
+    color: 'var(--neutral-600)', marginBottom: 8,
   };
 
   return (
@@ -163,7 +163,7 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logo
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>
               Change layout
             </h2>
-            <p style={{ marginTop: 6, fontSize: 13, color: 'var(--neutral-500)' }}>
+            <p style={{ marginTop: 6, fontSize: 13, color: 'var(--neutral-600)' }}>
               “{slide.title}”. Your words never change, only the layout does.
             </p>
           </div>
@@ -281,7 +281,7 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logo
                         ))}
                       </ul>
                     ) : (
-                      <span style={{ fontSize: 13, color: 'var(--neutral-400)' }}>Nothing</span>
+                      <span style={{ fontSize: 13, color: 'var(--neutral-600)' }}>Nothing</span>
                     )}
                   </div>
                 ))}
@@ -293,13 +293,13 @@ export function TemplateSwitchModal({ open, slide, onClose, onConfirm, ast, logo
                 )}
 
                 {plan.newTitle && (
-                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--neutral-500)' }}>
+                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--neutral-600)' }}>
                     This slide will be renamed to “{plan.newTitle}”, since it still has its default name.
                     Rename it yourself and future switches will keep your name.
                   </div>
                 )}
 
-                <div style={{ marginTop: 14, fontSize: 12, color: 'var(--neutral-500)' }}>
+                <div style={{ marginTop: 14, fontSize: 12, color: 'var(--neutral-600)' }}>
                   Your inserted shapes, text boxes, formatting and speaker notes are unaffected.
                 </div>
               </div>

@@ -15,7 +15,6 @@ interface FindReplaceModalProps {
   open: boolean;
   onClose: () => void;
   slides: SlideInstance[];
-  activeSlideId: string;
   onJumpToSlide: (slideId: string) => void;
   onReplaceAll: (findText: string, replaceText: string, caseSensitive: boolean) => void;
   onReplaceCurrent: (slideId: string, findText: string, replaceText: string, caseSensitive: boolean) => void;
@@ -118,7 +117,6 @@ export function FindReplaceModal({
   open,
   onClose,
   slides,
-  activeSlideId,
   onJumpToSlide,
   onReplaceAll,
   onReplaceCurrent,
@@ -206,7 +204,7 @@ export function FindReplaceModal({
           <button
             onClick={onClose}
             aria-label="Close Find and Replace"
-            className="p-1 text-neutral-400 hover:text-neutral-800 transition-colors cursor-pointer"
+            className="p-1 text-neutral-600 hover:text-neutral-800 transition-colors cursor-pointer"
           >
             <CloseIcon size={16} />
           </button>
@@ -232,7 +230,7 @@ export function FindReplaceModal({
                 className={`absolute right-2.5 px-1.5 py-0.5 text-[11px] font-mono font-bold rounded border transition-colors cursor-pointer ${
                   caseSensitive
                     ? 'bg-emerald-100 border-emerald-400 text-emerald-800'
-                    : 'bg-white border-neutral-200 text-neutral-400 hover:text-neutral-700'
+                    : 'bg-white border-neutral-200 text-neutral-600 hover:text-neutral-700'
                 }`}
               >
                 Aa
@@ -253,7 +251,7 @@ export function FindReplaceModal({
 
           {/* Status & Navigation */}
           {findText.trim() && (
-            <div className="flex items-center justify-between text-[12px] text-neutral-500 pt-1">
+            <div className="flex items-center justify-between text-[12px] text-neutral-600 pt-1">
               <span>
                 {allMatches.length === 0
                   ? 'No matches found'
@@ -295,8 +293,8 @@ export function FindReplaceModal({
                   }`}
                 >
                   <span className="truncate max-w-[360px]">
-                    <strong className="font-mono text-[11px] text-neutral-500 mr-2">Slide {m.slideIndex}</strong>
-                    <span className="text-neutral-400 mr-1">({m.location}):</span>
+                    <strong className="font-mono text-[11px] text-neutral-600 mr-2">Slide {m.slideIndex}</strong>
+                    <span className="text-neutral-600 mr-1">({m.location}):</span>
                     <span>{m.text}</span>
                   </span>
                 </div>

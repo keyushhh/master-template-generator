@@ -250,7 +250,7 @@ export function DevPanel({ loading, onSetLoading, onDataChanged, deckCount }: De
 
       <button
         onMouseDown={handleMouseDown}
-        onClick={(e) => {
+        onClick={() => {
           if (hasDraggedRef.current) {
             hasDraggedRef.current = false;
             return;

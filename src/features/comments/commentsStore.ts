@@ -1,4 +1,4 @@
-import type { DeckComment, CommentReply, CommentAction } from './types';
+import type { DeckComment, CommentAction } from './types';
 
 const COMMENTS_STORAGE_PREFIX = 'wozku-comments-';
 

@@ -9,11 +9,9 @@ export function tokenize(content: string): Token[] {
   if (lines.length > 0 && lines[0].trim() === '---') {
     let frontmatterValue = '';
     const frontmatterStartLine = 1;
-    let foundClosing = false;
     i = 1;
     while (i < lines.length) {
       if (lines[i].trim() === '---') {
-        foundClosing = true;
         i++;
         break;
       }

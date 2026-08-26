@@ -16,10 +16,13 @@ export interface DemoUser {
   color: string;
 }
 
+// Avatar colours are grounds for white initials, so each one has to clear AA
+// against white: the emerald and amber the app uses elsewhere are 2.5:1 and
+// 2.2:1, which made the initials decorative rather than readable.
 export const DEMO_USERS: DemoUser[] = [
   { id: 'u_admin', name: 'Admin User', email: 'admin@wozku.local', password: '1234', color: '#7C3AED' },
-  { id: 'u_designer', name: 'Studio Designer', email: 'designer@wozku.local', password: '1234', color: '#10B981' },
-  { id: 'u_reviewer', name: 'Client Reviewer', email: 'reviewer@wozku.local', password: '1234', color: '#F59E0B' },
+  { id: 'u_designer', name: 'Studio Designer', email: 'designer@wozku.local', password: '1234', color: '#047857' },
+  { id: 'u_reviewer', name: 'Client Reviewer', email: 'reviewer@wozku.local', password: '1234', color: '#B45309' },
 ];
 
 export function findDemoUser(email: string): DemoUser | undefined {

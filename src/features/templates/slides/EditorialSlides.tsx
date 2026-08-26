@@ -4,7 +4,6 @@ import {
   EditorialLabel,
   SlideRenderProps,
   Logo,
-  PLACEHOLDER,
 } from '../../generator/PresentationCanvas';
 
 /**

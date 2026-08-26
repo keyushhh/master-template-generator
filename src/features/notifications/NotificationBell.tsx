@@ -193,7 +193,7 @@ export function NotificationBell() {
                 Mark all as read
               </button>
             ) : (
-              <span className="text-[11px] font-mono text-neutral-400">
+              <span className="text-[11px] font-mono text-neutral-600">
                 All caught up
               </span>
             )}
@@ -202,7 +202,7 @@ export function NotificationBell() {
           {/* Notifications List */}
           <div className="max-h-[380px] overflow-y-auto divide-y divide-neutral-100">
             {notifications.length === 0 ? (
-              <div className="py-12 text-center text-[12px] font-mono text-neutral-400">
+              <div className="py-12 text-center text-[12px] font-mono text-neutral-600">
                 No notifications
               </div>
             ) : (
@@ -242,7 +242,7 @@ export function NotificationBell() {
                           <span className="text-[12.5px] font-bold text-neutral-900 truncate">
                             {notif.authorName}
                           </span>
-                          <span className="text-[11px] font-mono text-neutral-400 shrink-0">
+                          <span className="text-[11px] font-mono text-neutral-600 shrink-0">
                             {timeAgo(notif.createdAt)}
                           </span>
                         </div>
@@ -260,7 +260,7 @@ export function NotificationBell() {
 
                       {/* Description / Comment Quote */}
                       {notif.description && (
-                        <p className="text-[11.5px] text-neutral-500 line-clamp-2 leading-relaxed mt-1">
+                        <p className="text-[11.5px] text-neutral-600 line-clamp-2 leading-relaxed mt-1">
                           {notif.description}
                         </p>
                       )}
@@ -297,7 +297,7 @@ export function NotificationBell() {
                       )}
 
                       {isInvite && notif.inviteStatus === 'declined' && (
-                        <div className="mt-2 text-[11px] font-medium text-neutral-400">
+                        <div className="mt-2 text-[11px] font-medium text-neutral-600">
                           Invitation declined
                         </div>
                       )}

@@ -69,10 +69,10 @@ function PageSizeMenu({ pageSize, onPageSize }: { pageSize: number; onPageSize: 
         }`}
       >
         <span className="font-bold tabular-nums">{pageSize}</span>
-        <span className="text-neutral-500">per page</span>
+        <span className="text-neutral-600">per page</span>
         <span
           aria-hidden
-          className="text-neutral-400"
+          className="text-neutral-600"
           style={{ display: 'flex', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}
         >
           <ChevronDownIcon size={12} />
@@ -141,7 +141,7 @@ export function Pagination({ total, page, pageSize, onPage, onPageSize }: Pagina
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap px-3 py-2.5">
       <div className="flex items-center gap-2.5">
-        <span className="text-[11.5px] text-neutral-500 tabular-nums whitespace-nowrap">
+        <span className="text-[11.5px] text-neutral-600 tabular-nums whitespace-nowrap">
           {first}&ndash;{last} of {total}
         </span>
         <PageSizeMenu pageSize={pageSize} onPageSize={onPageSize} />
@@ -174,7 +174,7 @@ export function Pagination({ total, page, pageSize, onPage, onPageSize }: Pagina
               <span
                 key={`gap${i}`}
                 aria-hidden
-                className="min-w-[24px] text-center text-[11.5px] text-neutral-400 select-none"
+                className="min-w-[24px] text-center text-[11.5px] text-neutral-600 select-none"
               >
                 &hellip;
               </span>

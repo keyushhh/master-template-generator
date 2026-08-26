@@ -19,13 +19,27 @@ PDF, images and standalone HTML.
 ## Before calling anything done
 
 ```
-npx tsc -p tsconfig.app.json --noEmit
-npm test        # theme, brand kit, preflight, fonts, formatting seam, pptx format, shared slides, dashes
-npm run build
+npm run verify   # typecheck, lint, unit tests, check scripts, build
 ```
 
-Interaction changes cannot be proved by these. Say plainly what was verified by a
-test and what still needs clicking through in `npm run dev`.
+`npm run test:e2e` runs the Playwright smoke path separately (create a deck,
+edit it, reload, the edit is still there) and needs `npx playwright install
+chromium` once. CI runs everything on every push.
+
+Interaction changes beyond the smoke path cannot be proved by these. Say plainly
+what was verified by a test and what still needs clicking through in
+`npm run dev`.
+
+## The floor the app holds
+
+- The editor starts at 768px (iPad portrait). Below that `TooNarrow` refuses,
+  keeping Present and the library reachable. Do not add a phone layout for the
+  canvas; a 1920x1080 stage with two rails does not fit one.
+- Chrome text is never `neutral-400` or `neutral-500`: the grounds are light
+  grey, so both land under WCAG AA on them. `scripts/a11y-check.mjs` enforces
+  this, along with one global `:focus-visible` ring.
+- Stored sessions carry a `schemaVersion`. A new field that can be optional
+  still should be; the version exists for the first change that cannot.
 
 ## Brand rails, not a generic editor
 

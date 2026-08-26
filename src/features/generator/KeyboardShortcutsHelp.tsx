@@ -23,6 +23,7 @@ const GLOBAL_SHORTCUTS: Shortcut[] = [
   { keys: ['Esc'], description: 'Close the open dialog' },
   { keys: ['?'], description: 'Show this shortcuts overlay' },
   { keys: ['G'], description: 'Organize the whole deck at once' },
+  { keys: ['Alt', '↑ / ↓'], description: 'Move the focused slide up or down the deck' },
   { keys: ['←', '→'], description: 'Previous / next slide on the stage' },
 ];
 
@@ -69,7 +70,7 @@ function ShortcutRow({ shortcut }: { shortcut: Shortcut }) {
         {shortcut.keys.map((k, i) => (
           <span key={i} className="flex items-center gap-1">
             <KeyCap label={k} />
-            {i < shortcut.keys.length - 1 && <span className="text-neutral-400 text-[11px]">+</span>}
+            {i < shortcut.keys.length - 1 && <span className="text-neutral-600 text-[11px]">+</span>}
           </span>
         ))}
       </span>
@@ -105,7 +106,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
           <button
             onClick={onClose}
             aria-label="Close"
-            className="shrink-0 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
+            className="shrink-0 w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-red-600 hover:bg-red-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
           >
             <CloseIcon size={14} />
           </button>
@@ -116,7 +117,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
             <ShortcutRow key={i} shortcut={s} />
           ))}
         </div>
-        <div className="sticky top-0 px-5 pt-2 pb-2 bg-white text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-400">
+        <div className="sticky top-0 px-5 pt-2 pb-2 bg-white text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-600">
           While editing
         </div>
         <div className="px-5 divide-y divide-neutral-100">
@@ -124,7 +125,7 @@ export function KeyboardShortcutsHelp({ open, onClose }: { open: boolean; onClos
             <ShortcutRow key={i} shortcut={s} />
           ))}
         </div>
-        <div className="sticky top-0 px-5 pt-3 pb-2 bg-white text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-400">
+        <div className="sticky top-0 px-5 pt-3 pb-2 bg-white text-[11px] font-mono font-bold uppercase tracking-[0.1em] text-neutral-600">
           While presenting
         </div>
         <div className="px-5 pb-4 divide-y divide-neutral-100">

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, ImportedShape, OverlayShape, SlideContent, SlideInstance, SlotOffset, SlotStyle } from '../deck/types';
 import { applyToCss, offsetFor, shiftOffsets, styleFor } from '../formatting/resolve';
-import { clampToSlide, FINE, guidesFromSiblings, SLIDE_W, snapMove, snapResize, snapValue, type ExtraGuides, type Handle, type Rect } from '../formatting/snap';
+import { clampToSlide, FINE, guidesFromSiblings, SLIDE_W, snapMove, snapResize, type ExtraGuides, type Handle, type Rect } from '../formatting/snap';
 import { shapeIdsOf, slotsOf, textMetrics, type Selection, type TextMetrics } from '../formatting/selection';
 import { HIT_PAD_X, HIT_PAD_Y } from '../formatting/group';
 import { ShapeOverlay } from '../formatting/ShapeOverlay';
@@ -502,7 +502,7 @@ export function E({ value, editing, onCommit, multiline, dataField, onActivate, 
       spellCheck={false}
       title="Shift-click to add to the selection · Esc reverts this field"
       onInput={(e) => {
-        const text = (e.currentTarget as HTMLElement).innerText.replace(/ /g, ' ');
+        const text = (e.currentTarget as HTMLElement).innerText.replace(/ /g, ' ');
         onCommit(text);
       }}
       // Focus fires between mousedown and mouseup, so on a shift-click it would
@@ -561,7 +561,7 @@ export function E({ value, editing, onCommit, multiline, dataField, onActivate, 
         document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
       }}
       onBlur={(e) => {
-        const text = (e.target as HTMLElement).innerText.replace(/ /g, ' ').trim();
+        const text = (e.target as HTMLElement).innerText.replace(/ /g, ' ').trim();
         if (text !== value) onCommit(text);
       }}
     >
@@ -866,7 +866,7 @@ export function HudTop({ label, num }: { label: React.ReactNode; num: React.Reac
         fontSize: 16,
         textTransform: 'uppercase',
         letterSpacing: '0.12em',
-        color: 'var(--neutral-500)',
+        color: 'var(--neutral-600)',
         zIndex: 10,
         borderBottom: '1px solid var(--neutral-200)',
         paddingBottom: 20,
@@ -1213,7 +1213,7 @@ export function Logo({
 // Individual slide renderers
 // ---------------------------------------------------------------------------
 
-function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
+function SlideCover({ content, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
   const lines = content.headingLines ?? ['Master Primary', 'Heading.'];
   const layout = content.coverLayout || 'classic';
 
@@ -1318,7 +1318,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
         </div>
 
         <div style={{ position: 'absolute', bottom: 60, left: 80, right: 80, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, letterSpacing: '0.15em', color: 'var(--neutral-500)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, letterSpacing: '0.15em', color: 'var(--neutral-600)' }}>
             <E slot="confidentialLabel"
               value={content.confidentialLabel ?? 'PROPRIETARY AND CONFIDENTIAL'}
               editing={editing}
@@ -1347,7 +1347,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
                 onCommit={(v) => onEdit((c) => ({ ...c, projectLabel: v || undefined }))}
               />
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neutral-500)', marginTop: 4 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--neutral-600)', marginTop: 4 }}>
               <E slot="versionLabel"
                 value={content.versionLabel ?? 'TARGET: $3.5M SEED ROUND'}
                 editing={editing}
@@ -1421,7 +1421,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
         </div>
 
         <div style={{ position: 'absolute', bottom: 60, left: 80, right: 80, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--neutral-500)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--neutral-600)' }}>
             <E slot="confidentialLabel"
               value={content.confidentialLabel ?? 'SERIES SEED // SAN FRANCISCO, CA'}
               editing={editing}
@@ -1446,7 +1446,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
               onCommit={(v) => onEdit((c) => ({ ...c, projectLabel: v || undefined }))}
             />
           </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--neutral-500)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--neutral-600)' }}>
             <E slot="versionLabel"
               value={content.versionLabel ?? 'EDITION 2026 // N° 12'}
               editing={editing}
@@ -1514,7 +1514,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
               <div style={{ width: 40, height: 1, background: 'var(--emerald-600)' }} />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--neutral-500)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--neutral-600)' }}>
                 <E slot="confidentialLabel"
                   value={content.confidentialLabel ?? 'CONFIDENTIAL // PUBLICATION'}
                   editing={editing}
@@ -1623,7 +1623,7 @@ function SlideCover({ ast, content, editing, onEdit, logoUrl, onLogoChange, logo
               fontSize: 18,
               textTransform: 'uppercase',
               letterSpacing: '0.25em',
-              color: 'var(--neutral-500)',
+              color: 'var(--neutral-600)',
               maxWidth: 980,
             }}
           >
@@ -1747,7 +1747,7 @@ function SlideIndex({ content, num, editing, onEdit }: SlideRenderProps) {
                     onCommit={(v) => editPart(i, { title: v || part.title })}
                   />
                 </h4>
-                <p style={{ fontSize: 18, color: 'var(--neutral-500)', lineHeight: 1.5 }}>
+                <p style={{ fontSize: 18, color: 'var(--neutral-600)', lineHeight: 1.5 }}>
                   <E
                     slot={`parts.${i}.description`}
                     value={part.description}
@@ -1805,7 +1805,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
           />
         </h2>
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 120 }}>
-          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
+          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-600)', whiteSpace: 'pre-line' }}>
             <E slot="body"
               value={content.body ?? PLACEHOLDER}
               editing={editing}
@@ -1852,7 +1852,7 @@ function SlideExecutiveSummary({ content, num, editing, onEdit }: SlideRenderPro
   );
 }
 
-function SlideSectionDivider({ ast, content, num, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
+function SlideSectionDivider({ content, num, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
   return (
     <>
       {/* Clean, flat design layout for SlideSectionDivider - no shadows or glow blurs */}
@@ -2007,7 +2007,7 @@ function SlideTwoColumnContext({ content, num, editing, onEdit }: SlideRenderPro
               onCommit={(v) => onEdit((c) => ({ ...c, leftHeading: v || undefined }))}
             />
           </h2>
-          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', marginBottom: 40, whiteSpace: 'pre-line' }}>
+          <p style={{ fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-600)', marginBottom: 40, whiteSpace: 'pre-line' }}>
             <E slot="leftBody"
               value={content.leftBody ?? PLACEHOLDER}
               editing={editing}
@@ -2142,7 +2142,7 @@ function SlideDataMonument({ content, num, editing, onEdit }: SlideRenderProps) 
             onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
           />
         </h3>
-        <p style={{ marginTop: 24, maxWidth: 800, fontSize: 24, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
+        <p style={{ marginTop: 24, maxWidth: 800, fontSize: 24, lineHeight: 1.5, color: 'var(--neutral-600)', whiteSpace: 'pre-line' }}>
           <E slot="body"
             value={content.body ?? PLACEHOLDER}
             editing={editing}
@@ -2238,7 +2238,7 @@ function SlideMetricsDashboard({ content, num, editing, onEdit }: SlideRenderPro
                   textAlign: 'center',
                   fontFamily: 'var(--font-mono)',
                   fontSize: 14,
-                  color: 'var(--neutral-500)',
+                  color: 'var(--neutral-600)',
                 }}
               >
                 <E slot={`bars.${i}.label`} value={b.label} editing={editing} onCommit={(v) => editBar(i, v)} />
@@ -2396,7 +2396,7 @@ function SlideComparativeTable({ content, num, editing, onEdit }: SlideRenderPro
                       borderBottom: '2px solid var(--neutral-900)',
                       fontFamily: 'var(--font-mono)',
                       fontSize: 13,
-                      color: 'var(--neutral-500)',
+                      color: 'var(--neutral-600)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.12em',
                       verticalAlign: 'bottom',
@@ -2547,7 +2547,7 @@ function SlideStrategicRoadmap({ content, num, editing, onEdit }: SlideRenderPro
                       onCommit={(v) => editPhase(i, { title: v || p.title })}
                     />
                   </h4>
-                  <p style={{ fontSize: 18, lineHeight: 1.5, color: 'var(--neutral-500)' }}>
+                  <p style={{ fontSize: 18, lineHeight: 1.5, color: 'var(--neutral-600)' }}>
                     <E
                       slot={`phases.${i}.description`}
                       value={p.description || PLACEHOLDER}
@@ -2613,7 +2613,7 @@ function SlideImageEditorial({ content, editing, onEdit }: SlideRenderProps) {
               onCommit={(v) => onEdit((c) => ({ ...c, heading: v || undefined }))}
             />
           </h2>
-          <p style={{ marginTop: 40, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line' }}>
+          <p style={{ marginTop: 40, fontSize: 32, lineHeight: 1.5, color: 'var(--neutral-600)', whiteSpace: 'pre-line' }}>
             <E slot="body"
               value={content.body ?? PLACEHOLDER}
               editing={editing}
@@ -2743,7 +2743,7 @@ function SlideProcessArchitecture({ content, num, editing, onEdit }: SlideRender
                   onCommit={(v) => editStep(i, { title: v || s.title })}
                 />
               </h4>
-              <p style={{ fontSize: 18, lineHeight: 1.5, color: 'var(--neutral-500)' }}>
+              <p style={{ fontSize: 18, lineHeight: 1.5, color: 'var(--neutral-600)' }}>
                 <E
                   slot={`steps.${i}.description`}
                   value={s.description || PLACEHOLDER}
@@ -3078,7 +3078,7 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
               style={{
                 fontSize: 18,
                 fontFamily: 'var(--font-mono)',
-                color: 'var(--neutral-500)',
+                color: 'var(--neutral-600)',
               }}
             >
               <E slot="role"
@@ -3097,7 +3097,7 @@ function SlideFeaturedQuote({ content, num, editing, onEdit }: SlideRenderProps)
 const DEFAULT_CONTACTS = ['email@placeholder.com', '@social_handle', 'www.domain.com'];
 
 // Exit slide: inherits DISPLAY_HEADING_BASE for unified presentation style
-function SlideExit({ ast, content, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
+function SlideExit({ content, editing, onEdit, logoUrl, onLogoChange, logoScale, onLogoScaleChange }: SlideRenderProps) {
   const contacts = content.contacts && content.contacts.length ? content.contacts : DEFAULT_CONTACTS;
   const editContact = (i: number, v: string) =>
     onEdit((c) => {
@@ -3324,7 +3324,7 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
     </h2>
   );
   const body = (maxWidth?: number) => (
-    <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth }}>
+    <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-600)', whiteSpace: 'pre-line', maxWidth }}>
       <E slot="body"
         value={content.body ?? 'Click to add your content…'}
         editing={editing}
@@ -3361,7 +3361,7 @@ function SlideBlank({ content, num, editing, onEdit, instanceId, onRequestEdit }
     </h3>
   );
   const secondBody = (maxWidth?: number) => (
-    <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-500)', whiteSpace: 'pre-line', maxWidth }}>
+    <p style={{ fontSize: 28, lineHeight: 1.5, color: 'var(--neutral-600)', whiteSpace: 'pre-line', maxWidth }}>
       <E slot="secondBody"
         value={content.secondBody ?? 'Click to add more content…'}
         editing={editing}
@@ -4159,27 +4159,30 @@ export function PresentationCanvas({
     }
   };
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerUp = () => {
     if (isPanning) {
       setIsPanning(false);
       panStartRef.current = null;
     }
   };
 
-  // Fit slide canvas
+  // Fit slide canvas. The vertical budget grows while editing, because the
+  // format toolbar sits over the stage's bottom edge: at 720px tall it used to
+  // cover the last 74px of the slide, which is exactly where a footer, a page
+  // number and a client logo live.
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     const measure = () => {
       const w = el.clientWidth - 96;
-      const h = el.clientHeight - 200;
+      const h = el.clientHeight - (editing ? 320 : 200);
       if (w > 0 && h > 0) setFit(Math.min(w / SLIDE_W, h / 1080));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [editing]);
 
   const scale = fit * zoom;
 
@@ -4215,7 +4218,7 @@ export function PresentationCanvas({
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--neutral-700)' }}>
             Nothing to show yet
           </div>
-          <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.6, color: 'var(--neutral-500)' }}>
+          <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.6, color: 'var(--neutral-600)' }}>
             Every slide is hidden, or this deck is empty. Add a slide from the
             rail, or bring in a source to build one.
           </p>
@@ -4443,6 +4446,19 @@ export function PresentationCanvas({
           pointerEvents: 'none',
         }}
       >
+        {/* Moving through the deck is a change of context, and until now it was
+            announced as nothing at all: the counter and the title are separate
+            nodes, and neither is live. */}
+        <span
+          aria-live="polite"
+          aria-atomic="true"
+          style={{
+            position: 'absolute', width: 1, height: 1, overflow: 'hidden',
+            clip: 'rect(0 0 0 0)', clipPath: 'inset(50%)', whiteSpace: 'nowrap',
+          }}
+        >
+          {`Slide ${index + 1} of ${visibleSlides.length}, ${current.title}`}
+        </span>
         <div style={{ display: 'flex', alignItems: 'center' }}>
         <div style={cluster}>
           <button onClick={() => go(-1)} disabled={index === 0} title="Previous slide (←)" aria-label="Previous slide"
@@ -4464,7 +4480,7 @@ export function PresentationCanvas({
         </div>
         <span
           style={{
-            marginLeft: 10, fontSize: 12, color: 'var(--neutral-500)',
+            marginLeft: 10, fontSize: 12, color: 'var(--neutral-600)',
             maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis',
             whiteSpace: 'nowrap', userSelect: 'none', pointerEvents: 'none',
           }}

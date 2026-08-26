@@ -41,14 +41,14 @@ export function VersionHistoryPanel({ open, onClose, versions, onRestore, canRes
             >
               Version history
             </h2>
-            <p className="text-[12px] text-neutral-500">
+            <p className="text-[12px] text-neutral-600">
               Saved automatically as this deck is edited
             </p>
           </div>
           <button
             onClick={onClose}
             aria-label="Close version history"
-            className="p-1 text-neutral-400 hover:text-neutral-800 transition-colors cursor-pointer"
+            className="p-1 text-neutral-600 hover:text-neutral-800 transition-colors cursor-pointer"
           >
             <CloseIcon size={16} />
           </button>
@@ -56,7 +56,7 @@ export function VersionHistoryPanel({ open, onClose, versions, onRestore, canRes
 
         <div className="overflow-y-auto p-3 flex flex-col gap-1.5">
           {versions.length === 0 ? (
-            <p className="text-[12.5px] text-neutral-500 p-4 text-center leading-relaxed">
+            <p className="text-[12.5px] text-neutral-600 p-4 text-center leading-relaxed">
               No versions yet. The first one is saved shortly after you start editing.
             </p>
           ) : (
@@ -87,7 +87,7 @@ export function VersionHistoryPanel({ open, onClose, versions, onRestore, canRes
                         </span>
                       )}
                     </div>
-                    <div className="text-[11.5px] text-neutral-500 truncate">
+                    <div className="text-[11.5px] text-neutral-600 truncate">
                       {author?.name ?? 'Unknown editor'} · {v.deck.slides.length} slides
                     </div>
                   </div>
@@ -107,7 +107,7 @@ export function VersionHistoryPanel({ open, onClose, versions, onRestore, canRes
         </div>
 
         <div className="px-4 py-3 border-t border-neutral-200 bg-neutral-50 shrink-0">
-          <p className="text-[11px] text-neutral-500 leading-relaxed">
+          <p className="text-[11px] text-neutral-600 leading-relaxed">
             Restoring keeps everything newer, adding the restored deck as the latest version.
           </p>
         </div>

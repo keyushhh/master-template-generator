@@ -123,7 +123,7 @@ function Placeholder({ label, hint }: { label: string; hint?: string }) {
         background: 'var(--neutral-100)',
         border: '3px dashed var(--neutral-300)',
         fontFamily: 'var(--font-mono)', fontSize: 18,
-        color: 'var(--neutral-400)', textTransform: 'uppercase',
+        color: 'var(--neutral-600)', textTransform: 'uppercase',
         letterSpacing: '0.12em', textAlign: 'center', padding: 20,
       }}
     >

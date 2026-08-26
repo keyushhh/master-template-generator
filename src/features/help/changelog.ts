@@ -14,6 +14,28 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.4.0',
+    date: '2026-08-26',
+    summary: 'Add a written slide instead of a blank one, and the studio says when a screen is too small.',
+    added: [
+      'Add slide now opens this deck’s own layouts as finished slides: agenda, statement, headline number, three pillars, metrics, before-and-after, timeline, quote and the rest, each written in the deck’s voice and painted in its palette. Pick one and edit it rather than starting from an empty slide.',
+      'A picture can fill its box instead of sitting inside it, and you can say which part stays in frame from a nine-point anchor. The framing survives the PowerPoint export rather than reverting to the whole photo.',
+      'Save a backup file writes the deck as a file and Open a backup file reads it back, so a deck can move between browsers and machines. Uploaded video cannot travel in a file, and the reader says which slides lost theirs.',
+      'The deck menu shows how much of the browser’s storage the app is using, and warns while there is still room to act rather than after a save has failed.',
+      'A short getting-started tour on first open, replayable any time from the help menu.',
+      'Alt with the up or down arrow moves the selected slide through the deck, so reordering no longer needs a mouse.',
+    ],
+    improved: [
+      'The editor now has a stated minimum size. On a tablet everything is present and the slide is no longer clipped by the tool rail; below tablet width the page says the editor needs a bigger screen and offers Present and the library instead of drawing a layout nobody can work in.',
+      'The format bar no longer covers the bottom of the slide it is formatting.',
+      'Small labels across the app were a grey that failed contrast against white. Every one of them is readable now, and there is a single visible focus ring for anyone working by keyboard.',
+      'Quick Sandbox decks appear in the library, labelled, instead of disappearing the moment you left the studio.',
+      'Exports are named ux-journey-flow.pptx rather than ux_journey___flow.pptx.',
+      'The library header wraps on a narrow window instead of pushing New deck off the edge.',
+      'Presenting from a phone or tablet: the controls come back on a tap, having previously waited for a mouse that was never coming.',
+    ],
+  },
+  {
     version: '3.3.0',
     date: '2026-08-26',
     summary: 'Every template is a deck you can present, not three slides and a gap.',

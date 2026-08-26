@@ -67,13 +67,13 @@ export function ProfileMenu() {
                 <h4 className="text-[13.5px] font-bold text-neutral-900 leading-tight truncate">
                   {user.name}
                 </h4>
-                <p className="text-[11.5px] font-mono text-neutral-500 truncate">{user.email}</p>
+                <p className="text-[11.5px] font-mono text-neutral-600 truncate">{user.email}</p>
               </div>
             </div>
             <button
               onClick={() => setOpen(false)}
               aria-label="Close profile menu"
-              className="text-neutral-400 hover:text-neutral-800 p-1 cursor-pointer shrink-0"
+              className="text-neutral-600 hover:text-neutral-800 p-1 cursor-pointer shrink-0"
             >
               <CloseIcon size={14} />
             </button>

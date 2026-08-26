@@ -1,4 +1,5 @@
 import html2canvas from 'html2canvas';
+import { sanitizeFileName } from './exportName';
 import pptxgen from 'pptxgenjs';
 import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
@@ -147,9 +148,7 @@ async function captureSlide(id: string): Promise<HTMLCanvasElement | null> {
   }
 }
 
-function sanitize(title: string): string {
-  return title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'presentation';
-}
+const sanitize = sanitizeFileName;
 
 /**
  * Build a PPTX from the deck's data model, one native (fully editable) slide

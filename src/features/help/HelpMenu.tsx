@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChangelogModal } from './ChangelogModal';
 import { CHANGELOG, hasUnreadChangelog, LATEST_VERSION } from './changelog';
 import { MOD_KEY } from './platform';
-import { DocumentTextIcon, HelpIcon, KeyboardIcon, SparklesIcon } from '../ui/icons';
+import { DocumentTextIcon, HelpIcon, KeyboardIcon, PlayIcon, SparklesIcon } from '../ui/icons';
 
 interface HelpMenuProps {
   /** Opens the app's keyboard shortcuts overlay. Required rather than optional:
@@ -10,6 +10,8 @@ interface HelpMenuProps {
    *  wired up, which means a row labelled "Keyboard shortcuts" showed something
    *  else entirely. */
   onOpenShortcuts: () => void;
+  /** Replays the first-run tour. Absent where there is nothing to tour. */
+  onOpenTour?: () => void;
 }
 
 /**
@@ -20,7 +22,7 @@ interface HelpMenuProps {
  * changelog nobody would think to look for still gets seen once. Opening it
  * clears the dot for that version, and the next release brings it back.
  */
-export function HelpMenu({ onOpenShortcuts }: HelpMenuProps) {
+export function HelpMenu({ onOpenShortcuts, onOpenTour }: HelpMenuProps) {
   const [open, setOpen] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
   const [unread, setUnread] = useState(() => hasUnreadChangelog());
@@ -53,7 +55,7 @@ export function HelpMenu({ onOpenShortcuts }: HelpMenuProps) {
         className={`relative w-[34px] h-[34px] flex items-center justify-center border transition-colors cursor-pointer ${
           open
             ? 'bg-neutral-900 text-white border-neutral-900'
-            : 'bg-white text-neutral-500 border-neutral-200 hover:text-neutral-900 hover:border-neutral-400'
+            : 'bg-white text-neutral-600 border-neutral-200 hover:text-neutral-900 hover:border-neutral-400'
         }`}
       >
         <HelpIcon size={17} />
@@ -87,7 +89,7 @@ export function HelpMenu({ onOpenShortcuts }: HelpMenuProps) {
                   </span>
                 )}
               </span>
-              <span className="text-[11px] text-neutral-500 leading-snug">
+              <span className="text-[11px] text-neutral-600 leading-snug">
                 Changelog, newest first. Now on {LATEST_VERSION}.
               </span>
             </span>
@@ -97,31 +99,48 @@ export function HelpMenu({ onOpenShortcuts }: HelpMenuProps) {
             onClick={() => { setOpen(false); onOpenShortcuts(); }}
             className={row}
           >
-            <span className="shrink-0 mt-[2px] text-neutral-400">
+            <span className="shrink-0 mt-[2px] text-neutral-600">
               <KeyboardIcon size={15} />
             </span>
             <span className="flex flex-col gap-0.5 min-w-0 flex-1">
               <span className="flex items-center gap-2">
                 <span className="text-[12.5px] font-bold text-neutral-900">Keyboard shortcuts</span>
-                <kbd className="font-mono text-[10px] font-bold text-neutral-500 bg-neutral-100 border border-neutral-200 px-1">
+                <kbd className="font-mono text-[10px] font-bold text-neutral-600 bg-neutral-100 border border-neutral-200 px-1">
                   ?
                 </kbd>
               </span>
-              <span className="text-[11px] text-neutral-500 leading-snug">
+              <span className="text-[11px] text-neutral-600 leading-snug">
                 Search is {MOD_KEY} K. The rest live in the studio.
               </span>
             </span>
           </button>
 
+          {onOpenTour && (
+            <button
+              onClick={() => { setOpen(false); onOpenTour(); }}
+              className={row}
+            >
+              <span className="shrink-0 mt-[2px] text-neutral-600">
+                <PlayIcon size={15} />
+              </span>
+              <span className="flex flex-col gap-0.5 min-w-0 flex-1">
+                <span className="text-[12.5px] font-bold text-neutral-900">Getting started</span>
+                <span className="text-[11px] text-neutral-600 leading-snug">
+                  The four things worth knowing, in about a minute.
+                </span>
+              </span>
+            </button>
+          )}
+
           <div className="my-1 h-px bg-neutral-200" />
 
           <div className="px-3 py-2 flex items-start gap-3">
-            <span className="shrink-0 mt-[2px] text-neutral-400">
+            <span className="shrink-0 mt-[2px] text-neutral-600">
               <DocumentTextIcon size={15} />
             </span>
             <span className="flex flex-col gap-0.5 min-w-0">
               <span className="text-[12.5px] font-bold text-neutral-900">Wozku Master Template</span>
-              <span className="text-[11px] text-neutral-500 leading-snug">
+              <span className="text-[11px] text-neutral-600 leading-snug">
                 Version {LATEST_VERSION} · {CHANGELOG.length} release
                 {CHANGELOG.length === 1 ? '' : 's'}. Everything is stored in this browser.
               </span>

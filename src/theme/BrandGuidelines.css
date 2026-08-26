@@ -21,6 +21,9 @@
 
   /* Column reserved for the floating rail: gap + rail + gap. */
   --sidenav-w: 264px;
+  /* And for the insert rail on the other side, which used to sit on top of the
+     slide's right edge because nothing reserved room for it. */
+  --stagerail-w: 84px;
 
   --shadow-soft: 0 1px 2px rgba(15,23,20,0.04), 0 12px 32px -12px rgba(15,23,20,0.10);
   --shadow-lift: 0 2px 4px rgba(15,23,20,0.05), 0 24px 48px -16px rgba(15,23,20,0.16);
@@ -47,8 +50,9 @@
   height: 100vh;
   overflow: hidden;
   display: block;
-  /* Reserve the fixed rail's width; the stage centres in what's left. */
+  /* Reserve both rails' widths; the stage centres in what's left. */
   padding-left: var(--sidenav-w);
+  padding-right: var(--stagerail-w);
 }
 
 /* ---------- Brand primary scale (emerald green) ---------- */
@@ -66,6 +70,12 @@
   --header-h: 56px;
   --rail-w: 232px;
   --cta-h: 46px;
+
+  /* Where the format toolbar sits and how wide it may be. Both are derived
+     from the reserved rail columns, so moving a rail moves the toolbar with it
+     instead of leaving it off-centre over the stage. */
+  --toolbar-shift: calc((var(--sidenav-w) / 2) - (var(--stagerail-w) / 2));
+  --toolbar-max-w: calc(100vw - var(--sidenav-w) - var(--stagerail-w) - 32px);
 }
 
 .wg-doc .sidenav {
@@ -152,12 +162,19 @@
   color: var(--neutral-400); text-transform: uppercase;
 }
 
-@media (max-width: 720px) {
-  /* No room for the rail beside the stage; the CTA stays, since without it
-     there is no way to bring content in. */
-  .wg-doc { padding-left: 0; }
-  .wg-doc .sidenav { display: none; }
-  .wg-doc .sidenav-cta { left: var(--gap); right: var(--gap); width: auto; }
+/* Tablet. The studio's floor is 768px (iPad portrait); below that the page
+   itself refuses rather than shipping a layout nobody can work in - see
+   TooNarrow.tsx. Between 768 and 1024 everything is present but tighter: the
+   slide rail gives up 60px so the stage keeps a usable size. */
+@media (max-width: 1024px) {
+  .wg-doc { --rail-w: 172px; --sidenav-w: 204px; --stagerail-w: 72px; }
+  .wg-doc .sidenav-head { padding: 8px 7px 6px; }
+  /* The insert rail is vertically centred, so along the bottom edge the
+     toolbar can use that column too rather than scrolling inside 460px. */
+  .wg-doc {
+    --toolbar-shift: calc(var(--sidenav-w) / 2);
+    --toolbar-max-w: calc(100vw - var(--sidenav-w) - 24px);
+  }
 }
 
 /* Upload zone - explicit values to survive the * { padding:0 } reset */

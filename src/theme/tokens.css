@@ -184,7 +184,8 @@
   --chrome-border-strong: var(--neutral-300);
   --chrome-text: var(--neutral-900);
   --chrome-text-dim: var(--neutral-600);
-  --chrome-text-faint: var(--neutral-400);
+  /* neutral-400 on white is 2.5:1, which fails AA even as a label. */
+  --chrome-text-faint: var(--neutral-600);
   --chrome-hover: var(--neutral-100);
   --chrome-active: var(--neutral-200);
 
@@ -199,7 +200,8 @@
   --surface-subtle: var(--bg-card-accent);
   --text-primary: var(--neutral-900);
   --text-secondary: var(--neutral-600);
-  --text-muted: var(--neutral-500);
+  /* The page ground is a light grey, so neutral-500 lands under AA on it. */
+  --text-muted: var(--neutral-600);
   --text-inverse: #ffffff;
   --border-default: var(--neutral-200);
   --border-subtle: var(--neutral-100);

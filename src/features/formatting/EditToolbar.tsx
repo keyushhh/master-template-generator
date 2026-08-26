@@ -339,7 +339,7 @@ function Row({
     >
       {icon && <span style={{ display: 'inline-flex', width: 14, justifyContent: 'center' }}>{icon}</span>}
       <span style={{ flex: 1 }}>{label}</span>
-      {hint && <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)' }}>{hint}</span>}
+      {hint && <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-600)' }}>{hint}</span>}
     </button>
   );
 }
@@ -349,6 +349,46 @@ function Row({
 /** Alt text for an image slot - a screen reader description that also
  *  becomes the picture's alt text in the exported .pptx. Commits on blur/Enter
  *  like the size stepper, so typing doesn't spam the deck's undo history. */
+/**
+ * Where a filled image is anchored, as a nine-point grid.
+ *
+ * A free drag would be more expressive and less useful: nine anchors cover the
+ * cases people actually need (a face top-centre, a product bottom-right), each
+ * one is a single click, and each maps exactly onto what the exporter can bake.
+ */
+function FocalPad({
+  focal,
+  onPick,
+}: {
+  focal?: { x: number; y: number };
+  onPick: (focal: { x: number; y: number }) => void;
+}) {
+  const points = [0, 0.5, 1];
+  const current = { x: focal?.x ?? 0.5, y: focal?.y ?? 0.5 };
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, width: 96 }}>
+      {points.flatMap((y) =>
+        points.map((x) => {
+          const on = current.x === x && current.y === y;
+          return (
+            <button
+              key={`${x}-${y}`}
+              type="button"
+              title={`Anchor ${x === 0 ? 'left' : x === 1 ? 'right' : 'centre'} ${y === 0 ? 'top' : y === 1 ? 'bottom' : 'middle'}`}
+              onClick={() => onPick({ x, y })}
+              style={{
+                height: 26, cursor: 'pointer',
+                border: `1px solid ${on ? 'var(--emerald-500)' : 'var(--neutral-200)'}`,
+                background: on ? 'var(--emerald-50)' : '#fff',
+              }}
+            />
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 function AltTextField({
   value, onCommit,
 }: { value?: string; onCommit: (text: string) => void }) {
@@ -435,7 +475,7 @@ function StepRow({
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 4px' }}>
       <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--neutral-700)' }}>
         {label}
-        {hint && <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', marginLeft: 6 }}>{hint}</span>}
+        {hint && <span style={{ ...mono, fontSize: 9, color: 'var(--neutral-600)', marginLeft: 6 }}>{hint}</span>}
       </span>
       <button title={`Less ${label.toLowerCase()}`} onClick={() => onStep(-1)} style={{ ...ctl, padding: '0 6px' }}>−</button>
       <input
@@ -497,7 +537,7 @@ function SpacingMenu({
     <Menu title="Line height, tracking, paragraph space and bullets" label="Spacing" width={266} badge={touched}>
       {() => (
         <>
-          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 4px' }}>Line</div>
+          <div style={{ ...mono, color: 'var(--neutral-600)', padding: '2px 4px 4px' }}>Line</div>
           <StepRow
             label="Line height"
             shown={lh}
@@ -519,7 +559,7 @@ function SpacingMenu({
           />
 
           <div style={{ height: 1, background: 'var(--neutral-200)', margin: '8px 4px' }} />
-          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 4px' }}>Paragraph</div>
+          <div style={{ ...mono, color: 'var(--neutral-600)', padding: '2px 4px 4px' }}>Paragraph</div>
           <StepRow
             label="Space before"
             hint="px"
@@ -542,7 +582,7 @@ function SpacingMenu({
           />
 
           <div style={{ height: 1, background: 'var(--neutral-200)', margin: '8px 4px' }} />
-          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 4px' }}>List</div>
+          <div style={{ ...mono, color: 'var(--neutral-600)', padding: '2px 4px 4px' }}>List</div>
           <StepRow
             label="Indent"
             hint={`${INDENT_STEP_PX}px steps`}
@@ -654,7 +694,7 @@ function ColorPickerBody({
 
   return (
     <>
-      <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 8px' }}>{paletteLabel}</div>
+      <div style={{ ...mono, color: 'var(--neutral-600)', padding: '2px 4px 8px' }}>{paletteLabel}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
         {noneSwatch && (
           <button
@@ -681,7 +721,7 @@ function ColorPickerBody({
       {/* Colours this deck has actually used, most recent first. */}
       {recent.length > 0 && (
         <>
-          <div style={{ ...mono, color: 'var(--neutral-400)', padding: '12px 4px 6px' }}>Recent</div>
+          <div style={{ ...mono, color: 'var(--neutral-600)', padding: '12px 4px 6px' }}>Recent</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
             {recent.map((h) => chip(h, `#${h}`, false))}
           </div>
@@ -689,7 +729,7 @@ function ColorPickerBody({
       )}
 
       <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center', padding: '0 2px' }}>
-        <span style={{ color: 'var(--neutral-400)', fontSize: 12 }}>#</span>
+        <span style={{ color: 'var(--neutral-600)', fontSize: 12 }}>#</span>
         <input
           value={hex}
           onChange={(e) => setHex(e.target.value)}
@@ -870,7 +910,7 @@ function BackgroundMenu({
 
           {tab === 'gradient' && (
             <>
-              <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 6px' }}>Start</div>
+              <div style={{ ...mono, color: 'var(--neutral-600)', padding: '2px 4px 6px' }}>Start</div>
               <ColorPickerBody
                 value={background?.gradientFrom}
                 onPick={(hex) =>
@@ -882,7 +922,7 @@ function BackgroundMenu({
                   })
                 }
               />
-              <div style={{ ...mono, color: 'var(--neutral-400)', padding: '12px 4px 6px' }}>End</div>
+              <div style={{ ...mono, color: 'var(--neutral-600)', padding: '12px 4px 6px' }}>End</div>
               <ColorPickerBody
                 value={background?.gradientTo}
                 onPick={(hex) =>
@@ -1135,7 +1175,7 @@ export function EditToolbar({
         height: BAR_H, padding: '0 14px',
         // Never wider than the stage it floats over: the contextual middle
         // still expands for a table or chart selection.
-        maxWidth: 'calc(100vw - var(--sidenav-w) - 48px)',
+        maxWidth: 'var(--toolbar-max-w)',
         overflowX: 'auto',
         overflowY: 'hidden',
         background: 'rgba(255,255,255,0.95)',
@@ -1265,7 +1305,7 @@ export function EditToolbar({
                       <Row label={a.label} hint={a.hint} onClick={() => { onAlignGroup(a.key); close(); }} />
                     </span>
                   ))}
-                  <div style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', padding: '8px 6px 2px', letterSpacing: '0.08em', textTransform: 'none', lineHeight: 1.5 }}>
+                  <div style={{ ...mono, fontSize: 9, color: 'var(--neutral-600)', padding: '8px 6px 2px', letterSpacing: '0.08em', textTransform: 'none', lineHeight: 1.5 }}>
                     Moves all {selectedSlotCount} together. Spacing between them
                     doesn’t change.
                   </div>
@@ -1378,6 +1418,40 @@ export function EditToolbar({
 
           {selectedShape.kind === 'image' && (
             <>
+              {/* Fit or fill, and where the picture is anchored while it fills.
+                  This is the difference between a portrait letterboxed in grey
+                  and a portrait filling the frame with the face still in it. */}
+              <Menu
+                label={selectedShape.fit === 'cover' ? 'Fill' : 'Fit'}
+                title="How the picture meets its box"
+                width={216}
+              >
+                {(close) => (
+                  <>
+                    <Row
+                      label="Fit inside the box"
+                      active={selectedShape.fit !== 'cover'}
+                      onClick={() => { onPatchShape?.({ fit: undefined, focal: undefined }); close(); }}
+                    />
+                    <Row
+                      label="Fill the box, crop the rest"
+                      active={selectedShape.fit === 'cover'}
+                      onClick={() => { onPatchShape?.({ fit: 'cover' }); close(); }}
+                    />
+                    {selectedShape.fit === 'cover' && (
+                      <div style={{ padding: '8px 4px 4px' }}>
+                        <div style={{ ...mono, color: 'var(--neutral-600)', marginBottom: 6 }}>
+                          Keep in frame
+                        </div>
+                        <FocalPad
+                          focal={selectedShape.focal}
+                          onPick={(focal) => onPatchShape?.({ focal })}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </Menu>
               <AltTextField
                 value={selectedShape.altText}
                 onCommit={(text) => onPatchShape?.({ altText: text.trim() || undefined })}
@@ -1396,7 +1470,7 @@ export function EditToolbar({
                 <VideoIcon size={14} />
                 {selectedShape.videoUrl || selectedShape.videoAssetId ? 'Replace' : 'Add video'}
               </button>
-              <span style={{ ...mono, fontSize: 9.5, color: 'var(--neutral-400)', maxWidth: 132, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ ...mono, fontSize: 9.5, color: 'var(--neutral-600)', maxWidth: 132, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {selectedShape.videoName ?? sourceLabel(parseVideoSource(selectedShape.videoUrl))}
               </span>
               {([
@@ -1465,7 +1539,7 @@ export function EditToolbar({
                   active={!!selectedShape.behind}
                   onClick={() => { onToggleBehind(); close(); }}
                 />
-                <div style={{ ...mono, fontSize: 9, color: 'var(--neutral-400)', padding: '6px 6px 2px', letterSpacing: '0.08em', textTransform: 'none', lineHeight: 1.5 }}>
+                <div style={{ ...mono, fontSize: 9, color: 'var(--neutral-600)', padding: '6px 6px 2px', letterSpacing: '0.08em', textTransform: 'none', lineHeight: 1.5 }}>
                   {bounds && `Layer ${bounds.index + 1} of ${bounds.total}`}
                   {selectedShape.behind ? ' · behind the slide’s own text' : ''}
                 </div>
@@ -1521,12 +1595,12 @@ export function EditToolbar({
           <Menu title="Align the selected shapes to each other" label="Align" width={200}>
             {(close) => (
               <>
-                <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 6px' }}>Horizontal</div>
+                <div style={{ ...mono, color: 'var(--neutral-600)', padding: '2px 4px 6px' }}>Horizontal</div>
                 <Row label="Left" onClick={() => { onAlignShapes('left'); close(); }} />
                 <Row label="Centre" onClick={() => { onAlignShapes('centerX'); close(); }} />
                 <Row label="Right" onClick={() => { onAlignShapes('right'); close(); }} />
                 <div style={{ height: 1, background: 'var(--neutral-200)', margin: '8px 4px' }} />
-                <div style={{ ...mono, color: 'var(--neutral-400)', padding: '2px 4px 6px' }}>Vertical</div>
+                <div style={{ ...mono, color: 'var(--neutral-600)', padding: '2px 4px 6px' }}>Vertical</div>
                 <Row label="Top" onClick={() => { onAlignShapes('top'); close(); }} />
                 <Row label="Middle" onClick={() => { onAlignShapes('centerY'); close(); }} />
                 <Row label="Bottom" onClick={() => { onAlignShapes('bottom'); close(); }} />
@@ -1581,7 +1655,7 @@ export function EditToolbar({
               <button title="Thinner stroke" aria-label="Thinner stroke"
                 onClick={() => onSetImportedLine({ color: importedShape.line!.color, widthPx: Math.max(1, importedShape.line!.widthPx - 1) })}
                 style={{ ...ctl, padding: '0 6px' }}>−</button>
-              <span style={{ ...mono, fontSize: 10, color: 'var(--neutral-500)', minWidth: 14, textAlign: 'center' }}>
+              <span style={{ ...mono, fontSize: 10, color: 'var(--neutral-600)', minWidth: 14, textAlign: 'center' }}>
                 {importedShape.line.widthPx}
               </span>
               <button title="Thicker stroke" aria-label="Thicker stroke"
@@ -1605,7 +1679,7 @@ export function EditToolbar({
           </button>
         </>
       ) : (
-        <span style={{ fontSize: 12, color: 'var(--neutral-400)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, color: 'var(--neutral-600)', whiteSpace: 'nowrap' }}>
           Click any text to format it · shift-click to add more
         </span>
       )}

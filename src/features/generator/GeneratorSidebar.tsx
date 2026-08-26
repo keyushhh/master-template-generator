@@ -114,16 +114,9 @@ export function GeneratorSidebar({
   };
 
   const handleAddSlide = () => {
-    const index = insertIndexFromScroll();
-    onAddBlank(index);
-    // Bring the slide that was just created into view. Two frames: one for
-    // React to commit the new row, one for the browser to lay it out.
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const rows = scrollRef.current?.querySelectorAll<HTMLElement>('[data-slide-row]');
-        rows?.[index]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      })
-    );
+    // Asks for a slide at this position; the layout picker decides which one,
+    // and the page scrolls the new row into view once it exists.
+    onAddBlank(insertIndexFromScroll());
   };
 
   return (

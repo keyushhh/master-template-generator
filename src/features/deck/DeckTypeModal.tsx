@@ -45,7 +45,7 @@ export function DeckTypeModal({
           <button
             onClick={onClose}
             aria-label="Close"
-            className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-[var(--radius-sharp)] transition-colors cursor-pointer -mr-1"
+            className="w-8 h-8 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-[var(--radius-sharp)] transition-colors cursor-pointer -mr-1"
           >
             <CloseIcon size={16} />
           </button>
@@ -61,7 +61,7 @@ export function DeckTypeModal({
               Recommended
             </div>
             
-            <span className="font-mono text-[10px] font-bold tracking-[0.1em] text-neutral-400 uppercase mb-1">
+            <span className="font-mono text-[10px] font-bold tracking-[0.1em] text-neutral-600 uppercase mb-1">
               Option 1
             </span>
             <h3 className="text-[16px] font-bold text-neutral-900 mb-6">
@@ -89,7 +89,7 @@ export function DeckTypeModal({
             onClick={() => onSelect(true)}
             className="group flex-1 flex flex-col text-left bg-white border border-neutral-200 hover:border-blue-500 p-6 transition-all shadow-sm hover:shadow-md cursor-pointer rounded-[var(--radius-sharp)]"
           >
-            <span className="font-mono text-[10px] font-bold tracking-[0.1em] text-neutral-400 uppercase mb-1">
+            <span className="font-mono text-[10px] font-bold tracking-[0.1em] text-neutral-600 uppercase mb-1">
               Option 2
             </span>
             <h3 className="text-[16px] font-bold text-neutral-900 mb-6">
@@ -113,7 +113,7 @@ export function DeckTypeModal({
           </button>
         </div>
         <div className="px-6 py-5 border-t border-neutral-150 bg-white">
-          <p className="text-[12.5px] font-medium text-neutral-500 leading-relaxed text-center">
+          <p className="text-[12.5px] font-medium text-neutral-600 leading-relaxed text-center">
             If you want to collaborate with others or access this deck later, we recommend choosing the Team Repository option.
           </p>
         </div>

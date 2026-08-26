@@ -290,7 +290,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
           <div className="flex flex-col gap-1">
-            <div className="font-mono text-[10px] font-semibold tracking-[0.14em] uppercase text-neutral-400">
+            <div className="font-mono text-[10px] font-semibold tracking-[0.14em] uppercase text-neutral-600">
               Source Material
             </div>
             <h2 className="text-[17px] font-bold text-neutral-900">Bring in your content</h2>
@@ -298,7 +298,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
           <button
             onClick={onClose}
             aria-label="Close"
-            className="shrink-0 w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
+            className="shrink-0 w-8 h-8 flex items-center justify-center text-neutral-600 hover:text-red-600 hover:bg-red-50 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
           >
             <CloseIcon size={16} />
           </button>
@@ -314,7 +314,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                 className={`flex-1 h-[34px] flex items-center justify-center text-center text-[12.5px] font-bold rounded-[var(--radius-sharp)] transition-colors cursor-pointer ${
                   tab === t.id
                     ? 'bg-neutral-900 text-white'
-                    : 'text-neutral-500 hover:text-neutral-900'
+                    : 'text-neutral-600 hover:text-neutral-900'
                 }`}
               >
                 {t.label}
@@ -332,7 +332,7 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
             </span>
             <button
               onClick={() => { onDocumentParsed(null); setError(null); }}
-              className="flex items-center gap-1.5 text-[11.5px] font-semibold text-neutral-500 hover:text-red-600 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 text-[11.5px] font-semibold text-neutral-600 hover:text-red-600 transition-colors cursor-pointer"
             >
               <TrashIcon size={12} />
               Clear loaded source
@@ -439,11 +439,11 @@ export function SourceMaterialModal({ open, onClose, onDocumentParsed, onImport,
                   accept={UPLOAD_ACCEPT}
                   onChange={handleFileChange}
                 />
-                <span className={`mb-3 transition-colors ${isDragging ? 'text-emerald-500' : 'text-neutral-400'}`}><CloudUploadIcon size={26} /></span>
+                <span className={`mb-3 transition-colors ${isDragging ? 'text-emerald-500' : 'text-neutral-600'}`}><CloudUploadIcon size={26} /></span>
                 <div className="text-[13px] font-bold text-neutral-900 mb-1.5">
                   {isValidating ? busyLabel : 'Drop or click to upload'}
                 </div>
-                <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-500">
+                <div className="text-[11px] font-mono tracking-widest uppercase text-neutral-600">
                   Markdown (.md), text (.txt), presentation (.pptx) or PDF
                 </div>
               </div>

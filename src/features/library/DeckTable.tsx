@@ -138,7 +138,7 @@ function Th({
         onClick={() => onSort(col)}
         className={`w-full h-[34px] flex items-center gap-1.5 px-3 text-[11px] font-semibold transition-colors cursor-pointer ${
           align === 'right' ? 'justify-end' : 'justify-start'
-        } ${active ? 'text-neutral-900' : 'text-neutral-500 hover:text-neutral-800'}`}
+        } ${active ? 'text-neutral-900' : 'text-neutral-600 hover:text-neutral-800'}`}
       >
         {label}
         <span
@@ -175,8 +175,8 @@ function RowAction({
       title={label}
       className={`w-[26px] h-[26px] flex items-center justify-center transition-colors cursor-pointer ${
         danger
-          ? 'text-neutral-400 hover:text-red-600 hover:bg-red-50'
-          : 'text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100'
+          ? 'text-neutral-600 hover:text-red-600 hover:bg-red-50'
+          : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
       }`}
     >
       {children}
@@ -267,7 +267,7 @@ export function DeckTable({
               >
                 <FolderIcon size={13} />
                 Move to folder
-                <span className="text-[10px] text-neutral-400 ml-0.5">▼</span>
+                <span className="text-[10px] text-neutral-600 ml-0.5">▼</span>
               </button>
 
               {moveDropdownOpen && (
@@ -326,7 +326,7 @@ export function DeckTable({
           </button>
           <button
             onClick={onClearSelection}
-            className="ml-auto h-[30px] px-2.5 text-[12px] font-bold text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
+            className="ml-auto h-[30px] px-2.5 text-[12px] font-bold text-neutral-600 hover:text-neutral-900 transition-colors cursor-pointer"
           >
             Clear
           </button>
@@ -401,7 +401,7 @@ export function DeckTable({
                       <span className="flex flex-col min-w-0 gap-[1px]">
                         {renderName(p, 'text-[12.5px] font-bold text-neutral-900 leading-[1.25]')}
                         <span className="flex items-center gap-1.5 min-w-0 leading-[1.25]">
-                          <span className="text-[10.5px] text-neutral-400 truncate">
+                          <span className="text-[10.5px] text-neutral-600 truncate">
                             {sourceLabel(p.deck)}
                           </span>
                           {/* Beside the source line rather than in a column of its
@@ -410,6 +410,14 @@ export function DeckTable({
                               case costs width on every row forever. */}
                           {showFolderOrigin && p.folderId && folderOf(p.folderId) && (
                             <FolderChip folder={folderOf(p.folderId)!} />
+                          )}
+                          {/* A sandbox deck lives outside the repository, so it
+                              says so: it is not shared, and it goes when this
+                              browser's storage does. */}
+                          {p.isSandbox && (
+                            <span className="shrink-0 px-1.5 py-[1px] font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-amber-800 bg-amber-50 border border-amber-200">
+                              Sandbox
+                            </span>
                           )}
                         </span>
                       </span>
@@ -447,7 +455,7 @@ export function DeckTable({
                     {String(visible.length).padStart(2, '0')}
                   </td>
 
-                  <td className="border-b border-neutral-200 px-3 py-2 align-middle text-right text-[11.5px] text-neutral-500 whitespace-nowrap">
+                  <td className="border-b border-neutral-200 px-3 py-2 align-middle text-right text-[11.5px] text-neutral-600 whitespace-nowrap">
                     {relativeTime(p.updatedAt)}
                   </td>
 

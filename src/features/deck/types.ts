@@ -192,6 +192,14 @@ export interface OverlayShape {
    *  as the picture's alt text in the exported .pptx. Absent means an empty
    *  alt, exactly the behaviour before this field existed. */
   altText?: string;
+  /** kind === 'image' - how the picture meets its box. `contain` letterboxes
+   *  the whole image, which is the original behaviour and stays the default;
+   *  `cover` fills the box and crops the overflow. */
+  fit?: 'contain' | 'cover';
+  /** kind === 'image' - which point of the picture stays in frame while
+   *  `cover` crops, as fractions of width and height. Absent is the centre
+   *  (0.5, 0.5). Only read when `fit` is 'cover'. */
+  focal?: { x: number; y: number };
   /** kind === 'text' - the text box's content. Newlines are honoured. */
   text?: string;
   /** kind === 'text' - size/weight/colour/alignment, shared with template slots. */

@@ -162,12 +162,12 @@ export function SlideSorter({
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-4 px-5 h-[60px] shrink-0 bg-white border-b border-neutral-200">
         <div className="flex flex-col gap-0.5 min-w-0">
-          <div className="font-mono text-[10px] font-semibold tracking-[0.14em] uppercase text-neutral-400">
+          <div className="font-mono text-[10px] font-semibold tracking-[0.14em] uppercase text-neutral-600">
             Organize
           </div>
           <span className="text-[15px] font-bold text-neutral-900 truncate">
             {projectName}
-            <span className="text-neutral-400 font-medium">
+            <span className="text-neutral-600 font-medium">
               {' · '}
               {visibleIds.length} slide{visibleIds.length === 1 ? '' : 's'}
               {deck.slides.length - visibleIds.length > 0 &&
@@ -208,13 +208,13 @@ export function SlideSorter({
               <span className="w-px h-5 bg-neutral-200 mx-1" />
               <button
                 onClick={() => setSelected(new Set())}
-                className={`${toolBtn} text-neutral-500 hover:bg-neutral-100`}
+                className={`${toolBtn} text-neutral-600 hover:bg-neutral-100`}
               >
                 Clear
               </button>
             </>
           ) : (
-            <span className="text-[12px] text-neutral-500">
+            <span className="text-[12px] text-neutral-600">
               Click to select · shift-click for a range · drag to reorder · double-click to open a slide
             </span>
           )}
@@ -235,7 +235,7 @@ export function SlideSorter({
         onClick={() => setSelected(new Set())}
       >
         {deck.slides.length === 0 ? (
-          <div className="text-center text-[13px] text-neutral-500 py-20">
+          <div className="text-center text-[13px] text-neutral-600 py-20">
             No slides yet. Add one from the rail.
           </div>
         ) : (
@@ -308,12 +308,12 @@ export function SlideSorter({
                   </div>
 
                   <div className="flex items-baseline gap-2 text-[11.5px] min-w-0">
-                    <span className={`font-mono ${isSelected ? 'text-emerald-600 font-bold' : 'text-neutral-400'}`}>
+                    <span className={`font-mono ${isSelected ? 'text-emerald-600 font-bold' : 'text-neutral-600'}`}>
                       {num}
                     </span>
                     <span
                       className={`truncate ${
-                        isSelected ? 'text-emerald-700 font-semibold' : 'text-neutral-500'
+                        isSelected ? 'text-emerald-700 font-semibold' : 'text-neutral-600'
                       } ${slide.hidden ? 'line-through' : ''}`}
                     >
                       {slide.title}
@@ -330,7 +330,7 @@ export function SlideSorter({
       <button
         onClick={onClose}
         aria-label="Close organizer"
-        className="absolute top-[13px] right-[130px] w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+        className="absolute top-[13px] right-[130px] w-8 h-8 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
       >
         <CloseIcon size={16} />
       </button>

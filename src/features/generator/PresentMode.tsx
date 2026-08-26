@@ -4,7 +4,7 @@ import { FitStage } from './FitStage';
 import { PresentVideoLayer } from '../formatting/PresentVideoLayer';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck, SlideInstance, SlideTransition } from '../deck/types';
-import { DEFAULT_TRANSITION, TRANSITIONS, prefersReducedMotion, resolveTransition, transitionMs } from '../deck/slideTransitions';
+import { TRANSITIONS, prefersReducedMotion, resolveTransition, transitionMs } from '../deck/slideTransitions';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 import {
   ChevronBackIcon,
@@ -161,7 +161,6 @@ export function PresentMode({
   const currentSlideId = visible[Math.min(index, Math.max(visible.length - 1, 0))]?.instanceId;
   const [presenter, setPresenter] = useState(false);
   const [blank, setBlank] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
 
   const [elapsed, setElapsed] = useState(0);
@@ -397,14 +396,14 @@ export function PresentMode({
       idleTimer.current = window.setTimeout(() => setIdle(true), IDLE_MS);
     };
     wake();
-    window.addEventListener('mousemove', wake);
-    window.addEventListener('mousedown', wake);
-    window.addEventListener('keydown', wake);
+    // touchstart as well as the mouse events: presenting from a phone or an
+    // iPad is supported, and there the chrome used to hide and never come back,
+    // because a finger produces no mousemove.
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart'] as const;
+    for (const name of events) window.addEventListener(name, wake, { passive: true });
     return () => {
       window.clearTimeout(idleTimer.current);
-      window.removeEventListener('mousemove', wake);
-      window.removeEventListener('mousedown', wake);
-      window.removeEventListener('keydown', wake);
+      for (const name of events) window.removeEventListener(name, wake);
     };
   }, [open]);
 
@@ -1030,6 +1029,9 @@ export function PresentMode({
           />
         </div>
 
+        {/* Presenting is allowed at any width (the studio itself is not), so on
+            a phone this bar scrolls sideways rather than stacking its controls
+            on top of each other. */}
         <div
           style={{
             display: 'flex',
@@ -1041,6 +1043,9 @@ export function PresentMode({
             background: CHROME_BG,
             backdropFilter: 'blur(12px)',
             borderTop: CHROME_BORDER,
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            scrollbarWidth: 'none',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>

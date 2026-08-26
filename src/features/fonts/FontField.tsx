@@ -46,7 +46,7 @@ export function FontField({
       >
         <span className="flex flex-col min-w-0 w-[74px] shrink-0">
           <span className="text-[11px] font-bold text-neutral-800">{label}</span>
-          <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-neutral-400">
+          <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-neutral-600">
             {hint}
           </span>
         </span>
@@ -59,13 +59,13 @@ export function FontField({
           {shown}
         </span>
         {!value && (
-          <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-neutral-400">
+          <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-neutral-600">
             House
           </span>
         )}
         <span
           aria-hidden
-          className="shrink-0 flex text-neutral-400"
+          className="shrink-0 flex text-neutral-600"
           style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}
         >
           <ChevronDownIcon size={13} />

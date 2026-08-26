@@ -33,7 +33,8 @@ import type { SlideInstance } from '../deck/types';
  * Listed rather than inferred, so the check script can tell a field that was
  * considered and waved through from one nobody has looked at.
  */
-const HOUSE_DEFAULTS = new Set([
+// Exported for scripts/preflight-check.mjs, which reads this list off the source.
+export const HOUSE_DEFAULTS = new Set([
   'confidentialLabel',
   'hudLabel',
   'eyebrow',

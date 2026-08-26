@@ -38,6 +38,10 @@ import { applySwitch } from '../features/deck/templateSwitch';
 import { TemplateSwitchModal } from '../features/generator/TemplateSwitchModal';
 import { EditToolbar } from '../features/formatting/EditToolbar';
 import { StageRail } from '../features/formatting/StageRail';
+import { TooNarrow, useBelowStudioFloor } from '../features/ui/TooNarrow';
+import { buildDeckFile, deckFileName, readDeckFile } from '../features/deck/deckFile';
+import { AddSlideModal } from '../features/generator/AddSlideModal';
+import { FirstRunTour, shouldShowTour } from '../features/help/FirstRunTour';
 import { NotesPanel } from '../features/formatting/NotesPanel';
 import { ChartDataEditor } from '../features/formatting/ChartDataEditor';
 import { VideoSourceModal } from '../features/formatting/VideoSourceModal';
@@ -64,7 +68,6 @@ import {
   deckIsPristine,
   buildDeckFromDocument,
   mintInstanceId,
-  createBlankSlide,
 } from '../features/deck/deckBuilder';
 import { DOCUMENT_TEMPLATE_BUILDERS, fitSlideText } from '../features/deck/templateDocumentBuilders';
 import { canCustomizeBackground } from '../features/deck/slideBackground';
@@ -75,6 +78,7 @@ import {
   listProjects,
   loadProjectSession,
   saveProjectSession,
+  storageUsage,
   setActiveId as setStoreActiveId,
   createProject,
   renameProject,
@@ -83,17 +87,14 @@ import {
   claimOwnerless,
   onProjectsChanged,
   canEdit,
-  roleFor,
   shareProject,
   unshareProject,
-  visibleProjects,
   type ProjectMeta,
   type StoredSession,
 } from '../features/deck/deckStore';
 import { listVersions, saveVersion, shouldSnapshot, type DeckVersion } from '../features/deck/versionStore';
 import { useAuth } from '../features/auth/authStore';
 import { useCollab } from '../features/collab/useCollab';
-import { PresenceStack } from '../features/collab/PresenceStack';
 import { RemoteCursors } from '../features/collab/RemoteCursors';
 import { CursorChat } from '../features/collab/CursorChat';
 import { CommentsLayer } from '../features/comments/CommentsLayer';
@@ -111,138 +112,9 @@ import { ReactionPicker } from '../features/collab/ReactionPicker';
 import { ReactionBursts } from '../features/collab/ReactionBursts';
 import { LaserLayer } from '../features/collab/LaserLayer';
 import { ActivityPanel } from '../features/activity/ActivityPanel';
-import { logDeckActivity } from '../features/activity/activityStore';
 import type { ReactionEvent, LaserPoint, RemoteLaserEvent, SummonEvent } from '../features/collab/collabChannel';
+import { historyReducer, draftReducer, PERSISTED_HISTORY_LIMIT } from '../features/deck/history';
 
-// Undo/redo history for the committed deck.
-const HISTORY_LIMIT = 50;
-/** Smaller cap for what gets written to localStorage - each entry is a full
- *  deck snapshot (images included), so persisting all 50 would balloon
- *  storage fast. A reload only needs to recover a few recent steps. */
-const PERSISTED_HISTORY_LIMIT = 10;
-
-interface DeckHistory {
-  past: Deck[];
-  present: Deck;
-  future: Deck[];
-}
-
-type HistoryAction =
-  | { type: 'commit'; deck: Deck }
-  | { type: 'remote'; deck: Deck }
-  | { type: 'set'; deck: Deck; past?: Deck[]; future?: Deck[] }
-  | { type: 'undo' }
-  | { type: 'redo' };
-
-function historyReducer(state: DeckHistory, action: HistoryAction): DeckHistory {
-  switch (action.type) {
-    case 'commit': {
-      if (action.deck === state.present) return state;
-      const past = [...state.past, state.present].slice(-HISTORY_LIMIT);
-      return { past, present: action.deck, future: [] };
-    }
-    // Someone else's edit, arriving from another tab. It replaces what is on
-    // screen but never enters this person's undo stack: Undo means "take back
-    // what I did", and walking it back through a collaborator's edits would
-    // silently overwrite their work.
-    case 'remote':
-      return { ...state, present: action.deck };
-    case 'set':
-      return { past: action.past ?? [], present: action.deck, future: action.future ?? [] };
-    case 'undo': {
-      if (state.past.length === 0) return state;
-      const previous = state.past[state.past.length - 1];
-      return {
-        past: state.past.slice(0, -1),
-        present: previous,
-        future: [state.present, ...state.future],
-      };
-    }
-    case 'redo': {
-      if (state.future.length === 0) return state;
-      const next = state.future[0];
-      return {
-        past: [...state.past, state.present],
-        present: next,
-        future: state.future.slice(1),
-      };
-    }
-    default:
-      return state;
-  }
-}
-
-/**
- * Undo/redo for the edit-mode draft.
- *
- * Edit mode forks the deck, and the committed history above cannot see inside
- * that fork - which is why Undo used to sit disabled for the whole editing
- * session, i.e. precisely when a user most wants it. The draft therefore carries
- * its own past/future, cleared whenever the fork opens or closes: undoing past
- * the moment you entered edit mode is what Discard is for.
- *
- * Every draft mutation goes through the `edit` action, so there is exactly one
- * place that can add a history entry. A mutation that returns the same object is
- * dropped rather than recorded, so a no-op edit can't leave a dead step the user
- * has to press Undo twice to get past.
- *
- * Deliberately not persisted: each entry is a whole deck snapshot, images
- * included, and the committed history already caps what it writes for that
- * reason. A reload keeps your unsaved draft and starts its undo stack fresh.
- */
-interface DraftHistory {
-  past: Deck[];
-  present: Deck | null;
-  future: Deck[];
-}
-
-type DraftAction =
-  | { type: 'open'; deck: Deck | null }
-  | { type: 'close' }
-  | { type: 'edit'; fn: (prev: Deck) => Deck }
-  | { type: 'remote'; deck: Deck }
-  | { type: 'undo' }
-  | { type: 'redo' };
-
-function draftReducer(state: DraftHistory, action: DraftAction): DraftHistory {
-  switch (action.type) {
-    case 'open':
-      return { past: [], present: action.deck, future: [] };
-    case 'close':
-      return { past: [], present: null, future: [] };
-    case 'remote':
-      if (!state.present) return state;
-      return { ...state, present: action.deck };
-    case 'edit': {
-      if (!state.present) return state;
-      const next = action.fn(state.present);
-      if (next === state.present) return state;
-      return {
-        past: [...state.past, state.present].slice(-HISTORY_LIMIT),
-        present: next,
-        future: [],
-      };
-    }
-    case 'undo': {
-      if (!state.present || state.past.length === 0) return state;
-      return {
-        past: state.past.slice(0, -1),
-        present: state.past[state.past.length - 1],
-        future: [state.present, ...state.future],
-      };
-    }
-    case 'redo': {
-      if (!state.present || state.future.length === 0) return state;
-      return {
-        past: [...state.past, state.present],
-        present: state.future[0],
-        future: state.future.slice(1),
-      };
-    }
-    default:
-      return state;
-  }
-}
 
 export function MasterTemplatePage() {
   const { showToast } = useToast();
@@ -258,6 +130,10 @@ export function MasterTemplatePage() {
   if (user) claimOwnerless(user.id);
 
   const [projects, setProjects] = useState<ProjectMeta[]>(() => listProjects());
+  const belowFloor = useBelowStudioFloor();
+  // Recomputed after each save (see the persistence effect), not per render:
+  // it walks every key in localStorage and only the deck menu shows it.
+  const [storage, setStorage] = useState(() => storageUsage());
   const [activeId, setActiveIdState] = useState<string>(boot.id);
 
   const [ast, setAst] = useState<DocumentNode | null>(boot.session.ast);
@@ -326,6 +202,8 @@ export function MasterTemplatePage() {
   const projectName = projects.find((p) => p.id === activeId)?.name ?? 'Untitled deck';
   const [presentOpen, setPresentOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Once, on a first visit, and replayable from the Help menu afterwards.
+  const [tourOpen, setTourOpen] = useState(() => shouldShowTour());
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -349,7 +227,7 @@ export function MasterTemplatePage() {
   const [draftCommentPos, setDraftCommentPos] = useState<{ x: number; y: number } | null>(null);
   const [isCommentMode, setIsCommentMode] = useState(false);
   const [showComments, setShowComments] = useState(true);
-  const [showResolvedComments, setShowResolvedComments] = useState(false);
+  const [showResolvedComments] = useState(false);
   const [cursorChatActive, setCursorChatActive] = useState(false);
 
   // New Collaboration Features State
@@ -643,6 +521,9 @@ export function MasterTemplatePage() {
       saveFailedRef.current = false;
     }
     setProjects(listProjects()); // keep updatedAt ordering fresh in the switcher
+    // The meter in the deck menu tracks what was just written, so it is right
+    // before the next save rather than after one has already failed.
+    setStorage(storageUsage());
 
     // A restorable snapshot, coalesced so one person's burst of edits is one
     // entry while a handover between two people always gets its own.
@@ -1661,8 +1542,16 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     [mutateDeck]
   );
 
+  /**
+   * Moves a slide to sit either before or after another one.
+   *
+   * A drag always drops *before* the row it lands on, which is what the drop
+   * indicator draws. Keyboard reordering needs the other direction too: moving
+   * a slide down means putting it after its neighbour, and expressing that as
+   * "before the one two ahead" has no answer at the end of the deck.
+   */
   const handleReorder = useCallback(
-    (fromId: string, toId: string) => {
+    (fromId: string, toId: string, place: 'before' | 'after' = 'before') => {
       mutateDeck((prev) => {
         const slides = [...prev.slides];
         const from = slides.findIndex((s) => s.instanceId === fromId);
@@ -1670,6 +1559,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         if (from === -1 || to === -1 || from === to) return prev;
         const [moved] = slides.splice(from, 1);
         to = slides.findIndex((s) => s.instanceId === toId); // recompute after removal
+        if (place === 'after') to += 1;
         slides.splice(to, 0, moved);
         // Adopt the group of its new neighbor so the sidebar label reflects
         // where the slide landed, not the section it originally belonged to.
@@ -1831,28 +1721,37 @@ function pristineDeckFor(templateId: string | undefined): Deck {
   }, [paletteOpen, overlayUp]);
 
   /** Add a blank slide at `index` (default: the end of the deck). */
-  const handleAddBlank = useCallback((index?: number) => {
-    const blank = createBlankSlide();
+  /** Puts a slide at an index and selects it. */
+  const insertSlideAt = useCallback((slide: SlideInstance, index?: number) => {
     mutateDeck((prev) => {
       const at = index === undefined ? prev.slides.length : Math.max(0, Math.min(index, prev.slides.length));
       const slides = [...prev.slides];
-      slides.splice(at, 0, blank);
+      slides.splice(at, 0, slide);
       return { ...prev, slides };
     });
-    setCurrentSlideId(blank.instanceId);
+    setCurrentSlideId(slide.instanceId);
+    // Two frames: one for React to commit the new row, one for the browser to
+    // lay it out before it is scrolled to.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document
+          .querySelector<HTMLElement>(`[data-slide-row="${slide.instanceId}"]`)
+          ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      })
+    );
   }, [mutateDeck]);
 
+  /** Where the next added slide lands, remembered while the picker is open. */
+  const [addSlideAt, setAddSlideAt] = useState<number | null>(null);
+
+  const handleAddBlank = useCallback((index?: number) => {
+    setAddSlideAt(index ?? deck.slides.length);
+  }, [deck.slides.length]);
+
   const handleInsertAfter = useCallback((instanceId: string) => {
-    const blank = createBlankSlide();
-    mutateDeck((prev) => {
-      const idx = prev.slides.findIndex((s) => s.instanceId === instanceId);
-      const next = idx === -1
-        ? [...prev.slides, blank]
-        : [...prev.slides.slice(0, idx + 1), blank, ...prev.slides.slice(idx + 1)];
-      return { ...prev, slides: next };
-    });
-    setCurrentSlideId(blank.instanceId);
-  }, [mutateDeck]);
+    const idx = displayDeck.slides.findIndex((s) => s.instanceId === instanceId);
+    setAddSlideAt(idx === -1 ? displayDeck.slides.length : idx + 1);
+  }, [displayDeck.slides]);
 
   // ── Find & Replace Handlers ──────────────────────────────────────────────
   const handleReplaceCurrent = useCallback(
@@ -2403,6 +2302,31 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     showToast(`Duplicated as "${name}"`);
   }, [activeId, projects, displayDeck, handleCreateDeck, showToast]);
 
+  /** Writes the open deck to a file, so work can leave this browser. */
+  const handleBackupDeck = useCallback(() => {
+    const name = projects.find((p) => p.id === activeId)?.name || 'Deck';
+    const file = buildDeckFile(name, { ast, deck: displayDeck, baselineDeck }, new Date());
+    const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = deckFileName(name);
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Saved ${deckFileName(name)}`);
+  }, [activeId, projects, ast, displayDeck, baselineDeck, showToast]);
+
+  /** Reads a backup file back in, as a new deck rather than over this one. */
+  const handleRestoreDeck = useCallback(async (file: File) => {
+    try {
+      const { name, session, notes } = readDeckFile(await file.text());
+      handleCreateDeck(name, session.deck);
+      for (const note of notes) showToast(note, 'info');
+      showToast(`Opened "${name}" from a backup file`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'That file could not be read as a deck.', 'error');
+    }
+  }, [handleCreateDeck, showToast]);
+
   const handleRenameDeck = useCallback((id: string, name: string) => {
     renameProject(id, name);
     setProjects(listProjects());
@@ -2654,6 +2578,19 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     handleFitAll,
   ]);
 
+  // Below iPad portrait the editor is not drawn at all: see TooNarrow. Present
+  // mode stays reachable, because a deck presents at any size.
+  if (belowFloor && !presentOpen) {
+    return (
+      <TooNarrow
+        deckName={projectName}
+        slideCount={displayDeck.slides.filter((s) => !s.hidden).length}
+        canPresent={displayDeck.slides.some((s) => !s.hidden)}
+        onPresent={() => setPresentOpen(true)}
+      />
+    );
+  }
+
   return (
     <div className="wg-doc">
       <GeneratorSidebar
@@ -2707,7 +2644,6 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onUndo={handleUndo}
         onRedo={handleRedo}
         canReset={canReset}
-        resetArmed={resetArmed}
         onResetClick={handleResetClick}
         onOpenReview={() => setReviewOpen(true)}
         canExport={displayDeck.slides.some((s) => !s.hidden)}
@@ -2720,7 +2656,6 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         followingUserId={followingUserId}
         onToggleFollow={(uid) => setFollowingUserId((prev) => (prev === uid ? null : uid))}
         onToggleActivity={() => setActivityPanelOpen((v) => !v)}
-        onFollowPeer={setCurrentSlideId}
         onSummon={handleSummonEveryone}
         reachableSlideIds={followableSlideIds}
         canEditDeck={mayEdit}
@@ -2728,8 +2663,10 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         activeId={activeId}
         onSwitchDeck={handleSwitchDeck}
         onNewDeck={() => setNewDeckOpen(true)}
+        onBackupDeck={handleBackupDeck}
+        onRestoreDeck={handleRestoreDeck}
+        storage={storage}
         onDuplicateDeck={handleDuplicateCurrentDeck}
-        onRenameDeck={handleRenameDeck}
         onDeleteDeck={handleDeleteDeck}
       />
 
@@ -2902,7 +2839,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         fallback={(retry) => (
           <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
             <p className="text-sm font-bold text-neutral-900">This slide could not be drawn</p>
-            <p className="max-w-sm text-xs text-neutral-500">
+            <p className="max-w-sm text-xs text-neutral-600">
               The rest of the deck is fine and your work is saved. Try the slide again, or pick
               another one from the list.
             </p>
@@ -3074,10 +3011,10 @@ function pristineDeckFor(templateId: string | undefined): Deck {
             position: 'fixed',
             // Clears the stage's own nav/zoom bar along the bottom edge.
             bottom: 74,
-            // Derived from the reserved rail column rather than a hardcoded
-            // half-width, so changing the rail can't silently push the toolbar
-            // off-centre over the stage.
-            left: 'calc(50% + (var(--sidenav-w) / 2))',
+            // Derived from the two reserved rail columns rather than a
+            // hardcoded half-width, so changing either rail can't silently push
+            // the toolbar off-centre over the stage.
+            left: 'calc(50% + var(--toolbar-shift))',
             transform: 'translateX(-50%)',
             zIndex: 101,
           }}
@@ -3278,11 +3215,12 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onDeleteKit={handleDeleteKit}
       />
       <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      <FirstRunTour open={tourOpen} onClose={() => setTourOpen(false)} />
       <FindReplaceModal
         open={findReplaceOpen}
         onClose={() => setFindReplaceOpen(false)}
         slides={displayDeck.slides}
-        activeSlideId={currentSlideId || ''}
         onJumpToSlide={(slideId) => setCurrentSlideId(slideId)}
         onReplaceCurrent={handleReplaceCurrent}
         onReplaceAll={handleReplaceAll}
@@ -3293,6 +3231,21 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         currentProjectId={activeId}
         onInsert={handleBorrowSlides}
       />
+      <AddSlideModal
+        open={addSlideAt !== null}
+        onClose={() => setAddSlideAt(null)}
+        onAdd={(slide) => insertSlideAt(slide, addSlideAt ?? undefined)}
+        presentationTemplateId={deck.presentationTemplateId}
+        ast={ast}
+        logoUrl={displayDeck.logoUrl}
+        theme={deckTheme}
+        positionLabel={
+          addSlideAt === null || addSlideAt >= displayDeck.slides.length
+            ? 'It goes at the end of the deck'
+            : `It goes in at position ${addSlideAt + 1}`
+        }
+      />
+
       <NewDeckModal
         open={newDeckOpen}
         onClose={() => setNewDeckOpen(false)}

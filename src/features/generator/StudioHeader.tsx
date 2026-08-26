@@ -28,14 +28,8 @@ import { DeckSwitcher } from './DeckSwitcher';
 import logoBlack from '../../assets/wozku-logo-black.svg';
 import {
   ChatIcon,
-  CommentIcon,
   DownloadIcon,
-  EyeIcon,
-  EyeOffIcon,
-  HistoryIcon,
-  LightningIcon,
   RedoIcon,
-  RefreshIcon,
   ShareIcon,
   UndoIcon,
 } from '../ui/icons';
@@ -65,13 +59,16 @@ interface StudioHeaderProps {
   onUndo: () => void;
   onRedo: () => void;
   canReset: boolean;
-  resetArmed: boolean;
   onResetClick: () => void;
   /** Opens the Export sheet. Lives here rather than in the sidebar: it is an
    *  output action, and Present - the other one - is already here. */
   onOpenReview: () => void;
   canExport: boolean;
   onOpenShare?: () => void;
+  /** Writes the open deck to a file, and reads one back as a new deck. */
+  onBackupDeck?: () => void;
+  onRestoreDeck?: (file: File) => void;
+  storage?: { readable: string; percent: number; nearLimit: boolean };
   onOpenHistory?: () => void;
   /** Whether comment pins are visible on the canvas */
   showComments?: boolean;
@@ -82,7 +79,6 @@ interface StudioHeaderProps {
   followingUserId?: string | null;
   onToggleFollow?: (userId: string) => void;
   onToggleActivity?: () => void;
-  onFollowPeer?: (slideId: string) => void;
   onSummon?: () => void;
   /** Slides a peer can actually be followed to. */
   reachableSlideIds?: Set<string>;
@@ -95,8 +91,28 @@ interface StudioHeaderProps {
   activeId: string | null;
   onSwitchDeck: (id: string) => void;
   onNewDeck: () => void;
-  onRenameDeck: (id: string, name: string) => void;
   onDeleteDeck: (id: string) => void;
+}
+
+/** True at tablet widths, where the header has to give something up. */
+function useCompactHeader(): boolean {
+  const [compact, setCompact] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 1024
+  );
+  useEffect(() => {
+    // resize as well as the query, for the same reason as the studio floor: a
+    // programmatic resize does not reliably fire the media query's change.
+    const update = () => setCompact(window.innerWidth <= 1024);
+    const query = window.matchMedia('(max-width: 1024px)');
+    update();
+    query.addEventListener('change', update);
+    window.addEventListener('resize', update);
+    return () => {
+      query.removeEventListener('change', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+  return compact;
 }
 
 const MODES: { id: 'view' | 'edit' | 'present'; label: string }[] = [
@@ -168,11 +184,13 @@ export function StudioHeader({
   onUndo,
   onRedo,
   canReset,
-  resetArmed,
   onResetClick,
   onOpenReview,
   canExport,
   onOpenShare,
+  onBackupDeck,
+  onRestoreDeck,
+  storage,
   onOpenHistory,
   showComments = true,
   onToggleShowComments,
@@ -181,7 +199,6 @@ export function StudioHeader({
   followingUserId,
   onToggleFollow,
   onToggleActivity,
-  onFollowPeer,
   onSummon,
   reachableSlideIds,
   canEditDeck = true,
@@ -190,7 +207,6 @@ export function StudioHeader({
   activeId,
   onSwitchDeck,
   onNewDeck,
-  onRenameDeck,
   onDeleteDeck,
 }: StudioHeaderProps) {
   const [renaming, setRenaming] = useState(false);
@@ -210,6 +226,7 @@ export function StudioHeader({
 
   /** Which segment reads as current. Present wins while its overlay is up, so
    *  the control agrees with what fills the screen. */
+  const compact = useCompactHeader();
   const activeIndex = presenting ? 2 : mode === 'edit' ? 1 : 0;
 
   const selectMode = (id: 'view' | 'edit' | 'present') => {
@@ -262,7 +279,11 @@ export function StudioHeader({
       }}
     >
       {/* ── Brand + identity ──────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flexShrink: 1 }}>
+      {/* Capped so it cannot run under the absolutely centred mode control on a
+          tablet. No overflow:hidden here: the deck menu hangs out of this box,
+          and clipping the cluster clipped the menu with it. The deck title does
+          its own ellipsis. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flexShrink: 1, maxWidth: 'calc(50% - 132px)' }}>
         <Link
           to="/"
           title="All decks"
@@ -342,12 +363,14 @@ export function StudioHeader({
             activeId={activeId}
             onSwitch={onSwitchDeck}
             onNew={onNewDeck}
-            onRename={onRenameDeck}
             onDelete={onDeleteDeck}
             onDuplicate={onDuplicateDeck}
             onOpenHistory={onOpenHistory}
             onOpenActivity={onToggleActivity}
             onOpenShare={onOpenShare}
+            onBackupDeck={onBackupDeck}
+            onRestoreDeck={onRestoreDeck}
+            storage={storage}
             onOpenExport={() => canExport && onOpenReview()}
             onReset={canReset ? onResetClick : undefined}
             canReset={canReset}
@@ -363,18 +386,22 @@ export function StudioHeader({
           </div>
         )}
 
+        {/* Whether the work survived is the one status in the studio a person
+            cannot afford to miss, so it is spoken as well as shown. */}
         <span
+          aria-live="polite"
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 5,
             fontSize: 11,
-            color: dirty ? 'var(--emerald-600)' : 'var(--neutral-400)',
+            color: dirty ? 'var(--emerald-600)' : 'var(--neutral-500)',
             whiteSpace: 'nowrap',
           }}
         >
           {dirty && (
             <span
+              aria-hidden
               className="wg-pulse"
               style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--emerald-500)', flexShrink: 0 }}
             />
@@ -459,6 +486,8 @@ export function StudioHeader({
       </div>
 
       {/* ── Actions ───────────────────────────────────────────────────────── */}
+      {/* Capped like the brand cluster: on a tablet these used to run under the
+          centred mode control, so Present sat behind an icon. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
         {peers.length > 0 && (
           <>
@@ -472,6 +501,8 @@ export function StudioHeader({
             <span style={{ width: 1, height: 20, background: 'var(--neutral-200)', margin: '0 6px' }} />
           </>
         )}
+        {!compact && (
+        <>
         <IconBtn onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z)" label="Undo">
           <UndoIcon size={16} />
         </IconBtn>
@@ -514,6 +545,8 @@ export function StudioHeader({
               </span>
             )}
           </div>
+        )}
+        </>
         )}
 
         <button

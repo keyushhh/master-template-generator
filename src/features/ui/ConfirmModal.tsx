@@ -58,7 +58,7 @@ export function ConfirmModal({
         className="w-full max-w-[380px] bg-white border border-neutral-200 shadow-xl p-5"
       >
         <h3 className="text-[15px] font-bold text-neutral-900">{title}</h3>
-        <p className="mt-1.5 text-[13px] text-neutral-500 leading-relaxed">{message}</p>
+        <p className="mt-1.5 text-[13px] text-neutral-600 leading-relaxed">{message}</p>
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onCancel}

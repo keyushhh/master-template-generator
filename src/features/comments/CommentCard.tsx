@@ -200,7 +200,7 @@ export function CommentCard({
               }}
               className="mx-3 mb-2 rounded-lg p-1 flex flex-col gap-0.5"
             >
-              <div className="px-2 py-1 text-[10px] font-bold tracking-wider uppercase text-neutral-400">
+              <div className="px-2 py-1 text-[10px] font-bold tracking-wider uppercase text-neutral-600">
                 Mention team member
               </div>
               {DEMO_USERS.map((u) => (
@@ -256,7 +256,7 @@ export function CommentCard({
                   setShowMentions(false);
                 }}
                 title="Add emoji"
-                className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+                className="w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <SmileIcon size={16} />
               </button>
@@ -268,7 +268,7 @@ export function CommentCard({
                   setShowEmojis(false);
                 }}
                 title="Mention someone (@)"
-                className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+                className="w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <MentionIcon size={16} />
               </button>
@@ -278,7 +278,7 @@ export function CommentCard({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-2.5 py-1 text-[12px] font-semibold text-neutral-400 hover:text-white rounded transition-colors cursor-pointer"
+                className="px-2.5 py-1 text-[12px] font-semibold text-neutral-600 hover:text-white rounded transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -322,7 +322,7 @@ export function CommentCard({
                   type="button"
                   onClick={() => setShowMenu((v) => !v)}
                   title="More actions"
-                  className="w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+                  className="w-6 h-6 flex items-center justify-center text-neutral-600 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
                 >
                   <MoreHorizontalIcon size={15} />
                 </button>
@@ -361,7 +361,7 @@ export function CommentCard({
                   className={`w-6 h-6 flex items-center justify-center rounded transition-colors cursor-pointer ${
                     comment.resolved
                       ? 'text-emerald-400 bg-emerald-950/50 hover:bg-emerald-900/50'
-                      : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                      : 'text-neutral-600 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   <CheckIcon size={14} />
@@ -373,7 +373,7 @@ export function CommentCard({
                 type="button"
                 onClick={onClose}
                 title="Close"
-                className="w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+                className="w-6 h-6 flex items-center justify-center text-neutral-600 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <CloseIcon size={14} />
               </button>
@@ -396,7 +396,7 @@ export function CommentCard({
                   <span className="text-[13px] font-bold text-white truncate">
                     {comment.userName}
                   </span>
-                  <span className="text-[11px] text-neutral-400">
+                  <span className="text-[11px] text-neutral-600">
                     {timeAgo(comment.createdAt)}
                   </span>
                 </div>
@@ -422,7 +422,7 @@ export function CommentCard({
                         <span className="text-[12px] font-bold text-white truncate">
                           {reply.userName}
                         </span>
-                        <span className="text-[10.5px] text-neutral-400">
+                        <span className="text-[10.5px] text-neutral-600">
                           {timeAgo(reply.createdAt)}
                         </span>
                       </div>
@@ -447,7 +447,7 @@ export function CommentCard({
                   }}
                   className="mb-2 rounded-lg p-1 flex flex-col gap-0.5 shadow-xl"
                 >
-                  <div className="px-2 py-0.5 text-[9.5px] font-bold tracking-wider uppercase text-neutral-400">
+                  <div className="px-2 py-0.5 text-[9.5px] font-bold tracking-wider uppercase text-neutral-600">
                     Mention team member
                   </div>
                   {DEMO_USERS.map((u) => (
@@ -502,7 +502,7 @@ export function CommentCard({
                   type="button"
                   onClick={() => setShowMentions((v) => !v)}
                   title="Mention someone (@)"
-                  className="text-neutral-400 hover:text-white p-0.5 transition-colors cursor-pointer"
+                  className="text-neutral-600 hover:text-white p-0.5 transition-colors cursor-pointer"
                 >
                   <MentionIcon size={14} />
                 </button>

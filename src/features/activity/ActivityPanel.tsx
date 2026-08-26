@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { CloseIcon, HistoryIcon, CommentIcon, UserPlusIcon, CreateIcon, CheckIcon } from '../ui/icons';
+import { CloseIcon, HistoryIcon, CommentIcon, UserPlusIcon, CreateIcon } from '../ui/icons';
 import { initialsOf } from '../auth/demoUsers';
 import { useDeckActivity, type ActivityEntry } from './activityStore';
 
@@ -90,7 +90,7 @@ export function ActivityPanel({ open, onClose, projectId }: Props) {
           type="button"
           onClick={onClose}
           aria-label="Close activity stream"
-          className="text-neutral-400 hover:text-neutral-900 p-1 cursor-pointer transition-colors"
+          className="text-neutral-600 hover:text-neutral-900 p-1 cursor-pointer transition-colors"
         >
           <CloseIcon size={14} />
         </button>
@@ -99,7 +99,7 @@ export function ActivityPanel({ open, onClose, projectId }: Props) {
       {/* Activity Timeline List */}
       <div className="flex-1 overflow-y-auto divide-y divide-neutral-100 p-2">
         {activities.length === 0 ? (
-          <div className="py-16 text-center text-[12px] font-mono text-neutral-400">
+          <div className="py-16 text-center text-[12px] font-mono text-neutral-600">
             No activity recorded yet
           </div>
         ) : (
@@ -127,7 +127,7 @@ export function ActivityPanel({ open, onClose, projectId }: Props) {
                   <span className="text-[12px] font-bold text-neutral-900 truncate">
                     {act.userName}
                   </span>
-                  <span className="text-[10.5px] font-mono text-neutral-400 shrink-0">
+                  <span className="text-[10.5px] font-mono text-neutral-600 shrink-0">
                     {timeAgo(act.timestamp)}
                   </span>
                 </div>
@@ -137,7 +137,7 @@ export function ActivityPanel({ open, onClose, projectId }: Props) {
                 </p>
 
                 {act.detail && (
-                  <p className="text-[11px] text-neutral-500 line-clamp-2 leading-relaxed mt-1">
+                  <p className="text-[11px] text-neutral-600 line-clamp-2 leading-relaxed mt-1">
                     {act.detail}
                   </p>
                 )}
@@ -149,7 +149,7 @@ export function ActivityPanel({ open, onClose, projectId }: Props) {
 
       {/* Footer Info */}
       <div className="p-2.5 bg-neutral-50 border-t border-neutral-200 text-center">
-        <span className="text-[10.5px] font-mono text-neutral-400">
+        <span className="text-[10.5px] font-mono text-neutral-600">
           Live Collaboration Stream • Syncs across all peers
         </span>
       </div>

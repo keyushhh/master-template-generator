@@ -36,7 +36,7 @@ export function LoginPage() {
 
         <form onSubmit={submit} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-neutral-500">Email</span>
+            <span className="text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-neutral-600">Email</span>
             <input
               type="email"
               value={email}
@@ -48,7 +48,7 @@ export function LoginPage() {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-neutral-500">Password</span>
+            <span className="text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-neutral-600">Password</span>
             <input
               type="password"
               value={password}
@@ -74,7 +74,7 @@ export function LoginPage() {
 
         {/* No backend yet, so the accounts have to be written down somewhere. */}
         <div className="p-3.5 bg-white border border-neutral-200 rounded-[var(--radius-sharp)] flex flex-col gap-2">
-          <span className="text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-neutral-500">
+          <span className="text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-neutral-600">
             Demo accounts
           </span>
           <div className="flex flex-col gap-1.5">
@@ -93,12 +93,12 @@ export function LoginPage() {
                 </span>
                 <span className="text-[12px] text-neutral-600 group-hover:text-neutral-900 transition-colors">
                   <span className="font-mono">{u.email}</span>
-                  <span className="text-neutral-400"> / {u.password}</span>
+                  <span className="text-neutral-600"> / {u.password}</span>
                 </span>
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-neutral-400 leading-relaxed">
+          <p className="text-[11px] text-neutral-600 leading-relaxed">
             Sign in as different people in two tabs to try sharing and live editing.
           </p>
         </div>

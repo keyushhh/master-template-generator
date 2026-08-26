@@ -583,7 +583,8 @@ async function addImageCropped(
   slide: pptxgen.Slide,
   dataUrl: string,
   b: Box,
-  crop: NonNullable<ImportedShape['crop']>
+  crop: NonNullable<ImportedShape['crop']>,
+  options?: { rotate?: number; transparency?: number; altText?: string }
 ) {
   const spanX = 1 - crop.l - crop.r;
   const spanY = 1 - crop.t - crop.b;
@@ -603,9 +604,64 @@ async function addImageCropped(
       -crop.l * sw, -crop.t * sh, sw, sh,
       0, 0, canvas.width, canvas.height
     );
-    slide.addImage({ data: canvas.toDataURL('image/png'), x: b.x, y: b.y, w: b.w, h: b.h });
+    slide.addImage({
+      data: canvas.toDataURL('image/png'),
+      x: b.x, y: b.y, w: b.w, h: b.h,
+      rotate: options?.rotate,
+      transparency: options?.transparency,
+      altText: options?.altText,
+    });
   } catch {
-    await addImageContain(slide, dataUrl, b);
+    await addImageContain(slide, dataUrl, b, options);
+  }
+}
+
+/**
+ * The crop a "fill the box" image implies.
+ *
+ * The canvas draws this with object-fit: cover and an object-position, which
+ * PowerPoint has no equivalent for, so the visible window is computed here and
+ * baked the same way an imported crop is. Without this a filled image exported
+ * letterboxed, which is a different picture from the one on screen.
+ */
+function coverCrop(
+  imageAspect: number,
+  boxAspect: number,
+  focal: { x: number; y: number } | undefined
+): NonNullable<ImportedShape['crop']> {
+  const fx = Math.min(1, Math.max(0, focal?.x ?? 0.5));
+  const fy = Math.min(1, Math.max(0, focal?.y ?? 0.5));
+  if (imageAspect > boxAspect) {
+    // Image is wider than the box: trim the sides.
+    const cut = 1 - boxAspect / imageAspect;
+    return { l: cut * fx, r: cut * (1 - fx), t: 0, b: 0 };
+  }
+  const cut = 1 - imageAspect / boxAspect;
+  return { l: 0, r: 0, t: cut * fy, b: cut * (1 - fy) };
+}
+
+/**
+ * A filled image whose focal point is not the centre.
+ *
+ * `addImageCover` below does centre-cover natively through pptxgenjs, which
+ * keeps the original bytes and is the better answer when the framing is
+ * centred. Off-centre framing has no OOXML equivalent, so the visible window is
+ * baked here instead - the alternative is an export that reframes the picture.
+ */
+async function addImageCoverFocal(
+  slide: pptxgen.Slide,
+  dataUrl: string,
+  b: Box,
+  boxAspect: number,
+  focal: { x: number; y: number } | undefined,
+  options?: { rotate?: number; transparency?: number; altText?: string }
+) {
+  try {
+    const img = await loadImage(dataUrl);
+    const imageAspect = img.naturalWidth / img.naturalHeight || 1;
+    await addImageCropped(slide, dataUrl, b, coverCrop(imageAspect, boxAspect, focal), options);
+  } catch {
+    await addImageContain(slide, dataUrl, b, options);
   }
 }
 
@@ -1562,7 +1618,13 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
         : undefined;
 
     if (s.kind === 'image') {
-      if (s.imageUrl) await addImageContain(slide, s.imageUrl, b, { rotate, transparency, altText: s.altText });
+      if (s.imageUrl) {
+        const opts = { rotate, transparency, altText: s.altText };
+        const centred = !s.focal || (s.focal.x === 0.5 && s.focal.y === 0.5);
+        if (s.fit === 'cover' && centred) addImageCover(slide, s.imageUrl, b);
+        else if (s.fit === 'cover') await addImageCoverFocal(slide, s.imageUrl, b, s.w / s.h, s.focal, opts);
+        else await addImageContain(slide, s.imageUrl, b, opts);
+      }
       continue;
     }
 

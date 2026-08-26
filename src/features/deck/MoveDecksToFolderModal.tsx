@@ -83,7 +83,7 @@ export function MoveDecksToFolderModal({
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer"
+            className="w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-neutral-900 transition-colors cursor-pointer"
           >
             ✕
           </button>
@@ -92,7 +92,7 @@ export function MoveDecksToFolderModal({
         {/* Search */}
         <div className="p-4 border-b border-neutral-200 bg-white">
           <div className="relative w-full">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-400">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-600">
               <SearchIcon size={14} />
             </span>
             <input
@@ -108,7 +108,7 @@ export function MoveDecksToFolderModal({
         {/* Deck List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-[240px]">
           {filteredProjects.length === 0 ? (
-            <div className="py-10 text-center text-[13px] font-semibold text-neutral-400">
+            <div className="py-10 text-center text-[13px] font-semibold text-neutral-600">
               No decks found matching "{query}"
             </div>
           ) : (
@@ -159,7 +159,7 @@ export function MoveDecksToFolderModal({
                       <h4 className="text-[13px] font-bold text-neutral-900 truncate">
                         {p.name}
                       </h4>
-                      <p className="text-[11px] text-neutral-400 truncate">
+                      <p className="text-[11px] text-neutral-600 truncate">
                         {p.deck?.slides.length ?? 0} slides • {isAlreadyIn ? 'Currently in this folder' : p.folderId ? 'In another folder' : 'Main library'}
                       </p>
                     </div>
@@ -178,7 +178,7 @@ export function MoveDecksToFolderModal({
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-neutral-200 bg-neutral-50/50">
-          <span className="text-[12px] font-semibold text-neutral-500">
+          <span className="text-[12px] font-semibold text-neutral-600">
             {selectedIds.size} {selectedIds.size === 1 ? 'deck' : 'decks'} selected
           </span>
           <div className="flex items-center gap-2">

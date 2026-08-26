@@ -134,13 +134,13 @@ export function BorrowSlideModal({
       >
         <div className="relative flex flex-col gap-0.5 px-5 py-3.5 border-b border-neutral-150 shrink-0">
           <h2 className="text-[15px] font-bold text-neutral-900">Borrow a slide</h2>
-          <span className="text-[11.5px] text-neutral-500">
+          <span className="text-[11.5px] text-neutral-600">
             Pick from any other deck. Slides arrive in this deck&rsquo;s brand colours.
           </span>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+            className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
           >
             <CloseIcon size={15} />
           </button>
@@ -149,7 +149,7 @@ export function BorrowSlideModal({
         {decks.length === 0 ? (
           <div className="px-5 py-12 text-center">
             <p className="text-[13px] font-bold text-neutral-700">No other decks yet</p>
-            <p className="mt-1 text-[12px] text-neutral-500">
+            <p className="mt-1 text-[12px] text-neutral-600">
               Once you have a second deck, its slides become available here.
             </p>
           </div>
@@ -180,7 +180,7 @@ export function BorrowSlideModal({
                     >
                       {d.name}
                     </span>
-                    <span className="font-mono text-[9.5px] text-neutral-400">
+                    <span className="font-mono text-[9.5px] text-neutral-600">
                       {count} slides &middot; {relativeTime(d.updatedAt)}
                     </span>
                   </button>
@@ -190,7 +190,7 @@ export function BorrowSlideModal({
 
             <div className="flex-1 min-w-0 overflow-y-auto p-4">
               {slides.length === 0 ? (
-                <p className="text-[12px] text-neutral-400 text-center py-10">
+                <p className="text-[12px] text-neutral-600 text-center py-10">
                   Every slide in this deck is hidden.
                 </p>
               ) : (
@@ -231,7 +231,7 @@ export function BorrowSlideModal({
                             </span>
                           )}
                         </div>
-                        <span className="text-[11px] text-neutral-500 truncate">{s.title}</span>
+                        <span className="text-[11px] text-neutral-600 truncate">{s.title}</span>
                       </button>
                     );
                   })}
@@ -242,7 +242,7 @@ export function BorrowSlideModal({
         )}
 
         <div className="shrink-0 flex items-center gap-2.5 px-5 py-3 border-t border-neutral-150">
-          <span className="text-[11.5px] text-neutral-500">
+          <span className="text-[11.5px] text-neutral-600">
             {picked.length === 0
               ? 'Nothing picked yet'
               : `${picked.length} slide${picked.length === 1 ? '' : 's'} picked`}

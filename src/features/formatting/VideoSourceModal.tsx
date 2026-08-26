@@ -105,12 +105,12 @@ export function VideoSourceModal({
         className="w-full max-w-[520px] bg-white border border-neutral-200 shadow-xl p-5"
       >
         <h3 className="text-[15px] font-bold text-neutral-900">Video source</h3>
-        <p className="mt-1.5 text-[13px] text-neutral-500 leading-relaxed">
+        <p className="mt-1.5 text-[13px] text-neutral-600 leading-relaxed">
           A link plays anywhere the deck goes. An uploaded file is stored in this browser and travels
           only in the HTML and PowerPoint exports.
         </p>
 
-        <label className="mt-4 block text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-400 font-mono">
+        <label className="mt-4 block text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-600 font-mono">
           Paste a link
         </label>
         <div className="mt-1.5 flex gap-2">
@@ -126,13 +126,13 @@ export function VideoSourceModal({
           <button
             onClick={applyUrl}
             disabled={!url.trim()}
-            className="h-9 px-3.5 text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-neutral-200 disabled:text-neutral-400 transition-colors cursor-pointer"
+            className="h-9 px-3.5 text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-neutral-200 disabled:text-neutral-600 transition-colors cursor-pointer"
           >
             Use link
           </button>
         </div>
         {url.trim() && (
-          <p className="mt-1.5 text-[11.5px] font-mono text-neutral-400">
+          <p className="mt-1.5 text-[11.5px] font-mono text-neutral-600">
             {parsed ? `Recognised as ${sourceLabel(parsed)}` : 'Not a link we can play'}
           </p>
         )}
@@ -161,7 +161,7 @@ export function VideoSourceModal({
         >
           {busy ? 'Storing…' : 'Upload a video file'}
         </button>
-        <p className="mt-1.5 text-[11.5px] text-neutral-400">
+        <p className="mt-1.5 text-[11.5px] text-neutral-600">
           Up to {MAX_VIDEO_BYTES / (1024 * 1024)}MB. {shape?.videoName ? `Current: ${shape.videoName}` : ''}
         </p>
 

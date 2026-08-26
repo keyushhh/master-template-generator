@@ -305,7 +305,15 @@ export function ShapeOverlay({
                 src={shape.imageUrl}
                 alt={shape.altText ?? ''}
                 draggable={false}
-                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                style={{
+                  width: '100%', height: '100%', display: 'block',
+                  objectFit: shape.fit === 'cover' ? 'cover' : 'contain',
+                  // Only meaningful while cropping, and the centre is the
+                  // default so an image placed before this existed is unchanged.
+                  objectPosition: shape.fit === 'cover'
+                    ? `${(shape.focal?.x ?? 0.5) * 100}% ${(shape.focal?.y ?? 0.5) * 100}%`
+                    : undefined,
+                }}
               />
             )}
 
@@ -317,7 +325,7 @@ export function ShapeOverlay({
                   background: 'var(--neutral-100)',
                   border: '3px dashed var(--neutral-300)',
                   fontFamily: 'var(--font-mono)', fontSize: 18,
-                  color: 'var(--neutral-400)', textTransform: 'uppercase',
+                  color: 'var(--neutral-600)', textTransform: 'uppercase',
                   letterSpacing: '0.12em', textAlign: 'center', padding: 20,
                 }}
               >
@@ -460,7 +468,7 @@ export function ShapeOverlay({
                   onPointerDown={(e) => { if (inTextEdit) e.stopPropagation(); }}
                   onBlur={(e) => {
                     setTextEditId(null);
-                    const next = (e.currentTarget as HTMLElement).innerText.replace(/ /g, ' ');
+                    const next = (e.currentTarget as HTMLElement).innerText.replace(/ /g, ' ');
                     if (next !== (shape.text ?? '')) onPatch(shape.id, { text: next });
                   }}
                   onKeyDown={(e) => {

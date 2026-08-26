@@ -7,6 +7,7 @@ const DevPanel = lazy(() => import('../features/dev/DevPanel').then((m) => ({ de
 import { FitStage } from '../features/generator/FitStage';
 import { PresentMode } from '../features/generator/PresentMode';
 import { HelpMenu } from '../features/help/HelpMenu';
+import { FirstRunTour } from '../features/help/FirstRunTour';
 import { ProfileMenu } from '../features/identity/ProfileMenu';
 import { NotificationBell } from '../features/notifications/NotificationBell';
 import { KeyboardShortcutsHelp } from '../features/generator/KeyboardShortcutsHelp';
@@ -53,11 +54,6 @@ import {
   AddIcon,
   AlbumsIcon,
   ArrowBackNavIcon,
-  ArrowForwardNavIcon,
-  ArrowUpIcon,
-  DatabaseIcon,
-  LockIcon,
-  PeopleIcon,
   CopyIcon,
   CreateIcon,
   DownloadIcon,
@@ -69,22 +65,11 @@ import {
   TableIcon,
   PlayIcon,
   SearchIcon,
-  SortIcon,
   ZoomInIcon,
   ZoomOutIcon,
   TrashIcon,
 } from '../features/ui/icons';
 
-const FOLDER_COLOR_HEX: Record<FolderColor, string> = {
-  orange: '#f97316',
-  amber: '#f59e0b',
-  purple: '#a855f7',
-  blue: '#3b82f6',
-  emerald: '#10b981',
-  rose: '#f43f5e',
-  indigo: '#6366f1',
-  slate: '#64748b',
-};
 import { ScrollToTop } from '../features/ui/ScrollToTop';
 import { DeckTable, type Sort, type SortKey } from '../features/library/DeckTable';
 import { relativeTime } from '../features/library/relativeTime';
@@ -185,7 +170,7 @@ const SKELETON_THRESHOLD = 8;
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <span className="font-mono text-[9.5px] font-bold tracking-[0.2em] uppercase text-neutral-400">
+    <span className="font-mono text-[9.5px] font-bold tracking-[0.2em] uppercase text-neutral-600">
       {children}
     </span>
   );
@@ -199,7 +184,7 @@ function KitChip({ theme, muted }: { theme: DeckTheme; muted?: boolean }) {
         className="shrink-0 w-[9px] h-[9px] border border-black/10"
         style={{ background: themeCss(theme.accent.base) }}
       />
-      <span className={`truncate text-[11.5px] ${muted ? 'text-neutral-500' : 'text-neutral-700 font-semibold'}`}>
+      <span className={`truncate text-[11.5px] ${muted ? 'text-neutral-600' : 'text-neutral-700 font-semibold'}`}>
         {theme.name}
       </span>
     </span>
@@ -259,7 +244,7 @@ function DeckMenu({
               <FolderIcon size={15} />
               Move to folder
             </span>
-            <span className="text-[10px] text-neutral-400">▶</span>
+            <span className="text-[10px] text-neutral-600">▶</span>
           </button>
 
           {moveOpen && (
@@ -347,20 +332,6 @@ function LibrarySkeleton() {
   );
 }
 
-function getLocalStorageUsage() {
-  let total = 0;
-  for (const x in localStorage) {
-    if (Object.prototype.hasOwnProperty.call(localStorage, x)) {
-      total += (localStorage[x].length + x.length) * 2;
-    }
-  }
-  const sizeMb = total / (1024 * 1024);
-  const percent = Math.min(100, Math.max(2, (sizeMb / 5.0) * 100));
-  return {
-    readable: `${sizeMb.toFixed(2)} MB`,
-    percent,
-  };
-}
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -373,19 +344,17 @@ export function HomePage() {
   const [deferCovers] = useState(() => listProjects().length > SKELETON_THRESHOLD);
 
   const [projects, setProjects] = useState<ProjectSummary[]>(() =>
-    deferCovers ? [] : listProjectSummaries().filter((p) => !p.isSandbox)
+    deferCovers ? [] : listProjectSummaries()
   );
   const [folders, setFolders] = useState<FolderMeta[]>(() => listFolders());
 
   // A deck shared with you from another tab should appear without a reload.
   useEffect(() => onProjectsChanged(() => {
-    setProjects(listProjectSummaries().filter((p) => !p.isSandbox));
+    setProjects(listProjectSummaries());
   }), []);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   
   /** Navigation history stack for folder navigation ← / → */
-  const [navHistory, setNavHistory] = useState<Array<string | null>>([null]);
-  const [navIndex, setNavIndex] = useState(0);
 
   const [kits, setKits] = useState(() => listBrandKits());
   const [loading, setLoading] = useState(deferCovers);
@@ -428,6 +397,7 @@ export function HomePage() {
   const [presentId, setPresentId] = useState<string | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const [deckTypeModalOpen, setDeckTypeModalOpen] = useState(false);
   const [newDeckOpen, setNewDeckOpen] = useState(false);
   const [isSandboxMode, setIsSandboxMode] = useState(false);
@@ -583,7 +553,7 @@ export function HomePage() {
 
   const reload = useCallback(() => {
     const freshFolders = listFolders();
-    setProjects(listProjectSummaries().filter((p) => !p.isSandbox));
+    setProjects(listProjectSummaries());
     setFolders(freshFolders);
     setKits(listBrandKits());
     // A folder that vanished out from under an open view (deleted elsewhere,
@@ -591,11 +561,7 @@ export function HomePage() {
     // id nothing matches - decks nowhere, no folder name to show, no way out
     // but the browser back button. Bounce to the root instead.
     setActiveFolderId((id) => {
-      if (id && !freshFolders.some((f) => f.id === id)) {
-        setNavHistory([null]);
-        setNavIndex(0);
-        return null;
-      }
+      if (id && !freshFolders.some((f) => f.id === id)) return null;
       return id;
     });
   }, []);
@@ -635,29 +601,8 @@ export function HomePage() {
     reload();
   };
 
-  const navigateToFolder = (folderId: string | null) => {
-    const nextHistory = navHistory.slice(0, navIndex + 1);
-    nextHistory.push(folderId);
-    setNavHistory(nextHistory);
-    setNavIndex(nextHistory.length - 1);
-    setActiveFolderId(folderId);
-  };
+  const navigateToFolder = (folderId: string | null) => setActiveFolderId(folderId);
 
-  const goBackNav = () => {
-    if (navIndex > 0) {
-      const prevIdx = navIndex - 1;
-      setNavIndex(prevIdx);
-      setActiveFolderId(navHistory[prevIdx]);
-    }
-  };
-
-  const goForwardNav = () => {
-    if (navIndex < navHistory.length - 1) {
-      const nextIdx = navIndex + 1;
-      setNavIndex(nextIdx);
-      setActiveFolderId(navHistory[nextIdx]);
-    }
-  };
 
   const handleCreateOrUpdateFolder = (name: string, color: FolderColor) => {
     if (editingFolder) {
@@ -816,6 +761,9 @@ export function HomePage() {
       return !q || p.name.toLowerCase().includes(q);
     });
   }, [projects, query, kitFilter, themeOf, activeFolderId, user, accessFilter]);
+
+  const teamDeckCount = useMemo(() => projects.filter((p) => !p.isSandbox).length, [projects]);
+  const sandboxCount = useMemo(() => projects.filter((p) => p.isSandbox).length, [projects]);
 
   /** Whether anyone has actually shared anything, so the filter only appears
    *  once there is something to filter. */
@@ -1003,7 +951,7 @@ export function HomePage() {
           }}
           title="Rename this deck"
           aria-label={`Rename ${p.name}`}
-          className="shrink-0 self-center p-0.5 text-neutral-400 opacity-0 transition-opacity group-hover/name:opacity-100 focus-visible:opacity-100 hover:text-neutral-900 cursor-pointer"
+          className="shrink-0 self-center p-0.5 text-neutral-600 opacity-0 transition-opacity group-hover/name:opacity-100 focus-visible:opacity-100 hover:text-neutral-900 cursor-pointer"
         >
           <CreateIcon size={13} />
         </button>
@@ -1014,17 +962,19 @@ export function HomePage() {
     <div className="min-h-screen bg-[var(--stage-bg)] text-neutral-900 selection:bg-emerald-500 selection:text-white transition-colors duration-300 relative overflow-hidden pb-24">
       {/* ── App Header ─────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-20 border-b border-neutral-200/80 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex h-[56px] max-w-[1220px] items-center justify-between px-8">
-          <div className="flex items-center gap-3">
+        {/* Wraps rather than clipping: under about 900px the search field used to
+            slide under the wordmark and New deck ran off the right edge. */}
+        <div className="mx-auto flex min-h-[56px] max-w-[1220px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 sm:px-8 sm:py-0">
+          <div className="flex items-center gap-3 shrink-0">
             <img src={logoBlack} alt="Wozku Studio" className="h-8 w-auto" />
-            <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+            <span className="font-mono text-[11px] font-bold tracking-[0.16em] uppercase text-neutral-600">
               Studio
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative w-64 sm:w-72">
-              <span className="absolute inset-y-0 left-3 flex items-center text-neutral-400">
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
+            <div className="relative w-full max-w-[340px] sm:w-72">
+              <span className="absolute inset-y-0 left-3 flex items-center text-neutral-600">
                 <SearchIcon size={14} />
               </span>
               <input
@@ -1040,7 +990,7 @@ export function HomePage() {
               {query && (
                 <button
                   onClick={() => setQuery('')}
-                  className="absolute inset-y-0 right-2 flex items-center text-neutral-400 hover:text-neutral-700 cursor-pointer"
+                  className="absolute inset-y-0 right-2 flex items-center text-neutral-600 hover:text-neutral-700 cursor-pointer"
                 >
                   &times;
                 </button>
@@ -1048,7 +998,7 @@ export function HomePage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <HelpMenu onOpenShortcuts={() => setShortcutsOpen(true)} />
+              <HelpMenu onOpenShortcuts={() => setShortcutsOpen(true)} onOpenTour={() => setTourOpen(true)} />
 
               <button
                 onClick={() => { setEditingFolder(null); setFolderModalOpen(true); }}
@@ -1086,9 +1036,14 @@ export function HomePage() {
               <h2 className="text-[22px] font-bold text-neutral-900 tracking-[-0.02em] leading-none" style={{ fontFamily: 'var(--font-display)' }}>
                 Team Repository
               </h2>
-              <span className="inline-flex items-center gap-1.5 text-[12px] text-neutral-500 font-medium leading-none">
-                <span className="text-neutral-400 flex items-center"><AlbumsIcon size={13} /></span>
-                <span><strong className="text-neutral-700 font-semibold">{projects.length}</strong> decks active</span>
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-neutral-600 font-medium leading-none">
+                <span className="text-neutral-600 flex items-center"><AlbumsIcon size={13} /></span>
+                <span><strong className="text-neutral-700 font-semibold">{teamDeckCount}</strong> team {teamDeckCount === 1 ? 'deck' : 'decks'}</span>
+                {sandboxCount > 0 && (
+                  <span className="text-neutral-600">
+                    &middot; {sandboxCount} in {sandboxCount === 1 ? 'a sandbox' : 'sandboxes'}
+                  </span>
+                )}
               </span>
             </div>
           </div>
@@ -1112,13 +1067,13 @@ export function HomePage() {
                 <div className="flex items-center gap-2 px-3 h-9 bg-white border border-neutral-200 rounded-[var(--radius-sharp)]">
                   <button
                     onClick={() => navigateToFolder(null)}
-                    className="text-[12px] font-semibold text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
+                    className="text-[12px] font-semibold text-neutral-600 hover:text-neutral-900 transition-colors cursor-pointer"
                   >
                     Decks
                   </button>
                   <span className="text-[12px] text-neutral-300">/</span>
                   <span className="text-[13px] font-bold text-neutral-900">{activeFolder.name}</span>
-                  <span className="text-[11px] font-mono font-bold text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-[var(--radius-sharp)]">
+                  <span className="text-[11px] font-mono font-bold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-[var(--radius-sharp)]">
                     {filtered.length} {filtered.length === 1 ? 'Deck' : 'Decks'}
                   </span>
                 </div>
@@ -1193,7 +1148,7 @@ export function HomePage() {
                   <h2 className="text-[22px] font-bold tracking-[-0.02em] text-neutral-900" style={{ fontFamily: 'var(--font-display)' }}>
                     {activeFolder.name}
                   </h2>
-                  <p className="text-[12.5px] text-neutral-400 mt-0.5">
+                  <p className="text-[12.5px] text-neutral-600 mt-0.5">
                     Folder Directory • Total {filtered.length} {filtered.length === 1 ? 'deck' : 'decks'}
                   </p>
                 </div>
@@ -1222,7 +1177,7 @@ export function HomePage() {
               >
                 Fourteen layouts.<br />One house system.
               </h1>
-              <p className="text-[13.5px] leading-relaxed text-neutral-500">
+              <p className="text-[13.5px] leading-relaxed text-neutral-600">
                 Every deck starts from the same set. Write a Business Record or drop in an
                 existing <span className="font-mono text-[12.5px]">.pptx</span> and it comes
                 back on brand.
@@ -1309,7 +1264,7 @@ export function HomePage() {
                   <h3 className="text-[20px] font-bold text-neutral-900 mb-2">
                     This folder is empty
                   </h3>
-                  <p className="text-[13px] text-neutral-500 mb-8 leading-relaxed">
+                  <p className="text-[13px] text-neutral-600 mb-8 leading-relaxed">
                     Decks you create or move into <span className="font-semibold text-neutral-800">"{activeFolder?.name}"</span> will appear here.
                   </p>
                   <div className="flex items-center gap-3">
@@ -1328,7 +1283,7 @@ export function HomePage() {
                       Add existing decks
                     </button>
                   </div>
-                  <p className="text-[11.5px] text-neutral-400 mt-6 font-medium">
+                  <p className="text-[11.5px] text-neutral-600 mt-6 font-medium">
                     Tip: You can also move existing decks into this folder using the <span className="font-semibold text-neutral-600">(•••)</span> context menu on any deck.
                   </p>
                 </div>
@@ -1366,7 +1321,7 @@ export function HomePage() {
                           theme={heroTheme}
                         />
                       ) : (
-                        <span className="flex items-center justify-center w-full aspect-[16/9] text-[12px] text-neutral-400">
+                        <span className="flex items-center justify-center w-full aspect-[16/9] text-[12px] text-neutral-600">
                           Empty deck
                         </span>
                       )}
@@ -1382,7 +1337,7 @@ export function HomePage() {
                         {nameField(hero, 'text-[30px] font-bold tracking-[-0.02em] text-neutral-900')}
                       </div>
 
-                      <div className="flex items-center gap-3 flex-wrap text-[11.5px] text-neutral-500">
+                      <div className="flex items-center gap-3 flex-wrap text-[11.5px] text-neutral-600">
                         <KitChip theme={heroTheme} />
                         <span className="w-px h-3 bg-neutral-300" />
                         <span className="font-mono tabular-nums">
@@ -1413,7 +1368,7 @@ export function HomePage() {
                           <button
                             onClick={(e) => { e.stopPropagation(); setMenuId(menuId === hero.id ? null : hero.id); }}
                             aria-label={`Actions for ${hero.name}`}
-                            className="w-[42px] h-[42px] flex items-center justify-center text-neutral-500 hover:text-neutral-900 bg-white border border-neutral-200 hover:border-neutral-400 transition-colors cursor-pointer"
+                            className="w-[42px] h-[42px] flex items-center justify-center text-neutral-600 hover:text-neutral-900 bg-white border border-neutral-200 hover:border-neutral-400 transition-colors cursor-pointer"
                           >
                             <EllipsisIcon size={16} />
                           </button>
@@ -1438,7 +1393,7 @@ export function HomePage() {
                             title={folderListView ? 'Already at the smallest size' : 'Smaller folder icons'}
                             aria-pressed={folderListView}
                             className={`w-8 h-full flex items-center justify-center transition-colors cursor-pointer ${
-                              folderListView ? 'text-emerald-700 bg-emerald-50' : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'
+                              folderListView ? 'text-emerald-700 bg-emerald-50' : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
                             }`}
                           >
                             <ZoomOutIcon size={13} />
@@ -1448,7 +1403,7 @@ export function HomePage() {
                             onClick={() => adjustFolderZoom(16)}
                             aria-label="Larger folder icons"
                             title="Larger folder icons"
-                            className="w-8 h-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+                            className="w-8 h-full flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
                           >
                             <ZoomInIcon size={13} />
                           </button>
@@ -1467,16 +1422,16 @@ export function HomePage() {
                     {folderListView ? (
                       <div className="flex flex-col">
                         <div className="grid grid-cols-[1fr_130px_90px_150px] items-center gap-3 px-2 pb-2 border-b border-neutral-200">
-                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-600">
                             Name
                           </span>
-                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-600">
                             Date created
                           </span>
-                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-600">
                             Decks
                           </span>
-                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                          <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-600">
                             Actions
                           </span>
                         </div>
@@ -1524,10 +1479,10 @@ export function HomePage() {
                                     {f.name}
                                   </span>
                                 </span>
-                                <span className="text-[12px] text-neutral-500">
+                                <span className="text-[12px] text-neutral-600">
                                   {relativeTime(f.createdAt)}
                                 </span>
-                                <span className="font-mono text-[11px] text-neutral-400 tabular-nums">
+                                <span className="font-mono text-[11px] text-neutral-600 tabular-nums">
                                   {deckCount} {deckCount === 1 ? 'deck' : 'decks'}
                                 </span>
                                 <span className="flex items-center justify-start gap-1">
@@ -1535,7 +1490,7 @@ export function HomePage() {
                                     onClick={(e) => { e.stopPropagation(); navigateToFolder(f.id); }}
                                     title="Open Folder"
                                     aria-label={`Open folder "${f.name}"`}
-                                    className={`${actionBtn} text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100`}
+                                    className={`${actionBtn} text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100`}
                                   >
                                     <FolderOpenOutlineIcon size={14} />
                                   </button>
@@ -1551,7 +1506,7 @@ export function HomePage() {
                                     onClick={(e) => { e.stopPropagation(); setEditingFolder(f); setFolderModalOpen(true); }}
                                     title="Rename / Recolor"
                                     aria-label={`Rename folder "${f.name}"`}
-                                    className={`${actionBtn} text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100`}
+                                    className={`${actionBtn} text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100`}
                                   >
                                     <CreateIcon size={14} />
                                   </button>
@@ -1633,7 +1588,7 @@ export function HomePage() {
                                     className={`w-6 h-6 flex items-center justify-center rounded-[var(--radius-sharp)] transition-colors ${
                                       isMenuOpen
                                         ? 'text-emerald-700 bg-emerald-100'
-                                        : 'text-neutral-400 hover:text-neutral-900 bg-transparent hover:bg-neutral-100'
+                                        : 'text-neutral-600 hover:text-neutral-900 bg-transparent hover:bg-neutral-100'
                                     }`}
                                   >
                                     <EllipsisIcon size={14} />
@@ -1657,7 +1612,7 @@ export function HomePage() {
                                 <h4 className="text-[14px] font-semibold text-neutral-900 truncate">
                                   {f.name}
                                 </h4>
-                                <p className="text-[12px] font-medium text-neutral-400">
+                                <p className="text-[12px] font-medium text-neutral-600">
                                   {deckCount} {deckCount === 1 ? 'deck' : 'decks'}
                                 </p>
                               </div>
@@ -1678,13 +1633,13 @@ export function HomePage() {
                   <section className="pb-20">
                     <div className="flex items-baseline gap-3 pb-3">
                       <Eyebrow>Uncategorised</Eyebrow>
-                      <span className="font-mono text-[10.5px] text-neutral-400 tabular-nums">00</span>
+                      <span className="font-mono text-[10.5px] text-neutral-600 tabular-nums">00</span>
                     </div>
                     <div className="border border-neutral-200 bg-white/70 px-5 py-8 text-center">
                       <p className="text-[13px] font-bold text-neutral-700">
                         Every deck is in a folder
                       </p>
-                      <p className="mt-1 text-[12px] text-neutral-500">
+                      <p className="mt-1 text-[12px] text-neutral-600">
                         New decks land here until you file them.
                       </p>
                     </div>
@@ -1698,7 +1653,7 @@ export function HomePage() {
                       <div className="flex items-center justify-between gap-4 pb-3">
                         <div className="flex items-baseline gap-3">
                           <Eyebrow>{showFolderOrigin ? 'Results' : 'Uncategorised'}</Eyebrow>
-                          <span className="font-mono text-[10.5px] text-neutral-400 tabular-nums">
+                          <span className="font-mono text-[10.5px] text-neutral-600 tabular-nums">
                             {String(rest.length).padStart(2, '0')}
                           </span>
                         </div>
@@ -1716,7 +1671,7 @@ export function HomePage() {
                               className={`flex items-center gap-1.5 h-[27px] px-2.5 text-[11px] font-bold transition-colors cursor-pointer ${
                                 view === v.id
                                   ? 'bg-neutral-900 text-white'
-                                  : 'text-neutral-500 hover:text-neutral-900'
+                                  : 'text-neutral-600 hover:text-neutral-900'
                               }`}
                             >
                               {v.icon}
@@ -1795,7 +1750,7 @@ export function HomePage() {
                                             theme={theme}
                                           />
                                         ) : (
-                                          <span className="flex items-center justify-center w-full h-full text-[11px] text-neutral-400">
+                                          <span className="flex items-center justify-center w-full h-full text-[11px] text-neutral-600">
                                             Empty deck
                                           </span>
                                         )}
@@ -1805,7 +1760,7 @@ export function HomePage() {
                                       </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-neutral-150 text-[11px] text-neutral-500">
+                                    <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-neutral-150 text-[11px] text-neutral-600">
                                       <span className="flex items-center gap-1.5 min-w-0">
                                         <KitChip theme={theme} />
                                         {/* Where the deck actually lives, on a
@@ -1821,7 +1776,7 @@ export function HomePage() {
                                           className={`p-1 rounded-[var(--radius-sharp)] transition-colors ${
                                             menuId === p.id
                                               ? 'text-emerald-700 bg-emerald-100'
-                                              : 'text-neutral-400 hover:text-neutral-700'
+                                              : 'text-neutral-600 hover:text-neutral-700'
                                           }`}
                                         >
                                           <EllipsisIcon size={14} />
@@ -1924,6 +1879,10 @@ export function HomePage() {
       />
 
       <KeyboardShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      
+
+      <FirstRunTour open={tourOpen} onClose={() => setTourOpen(false)} />
 
       {presenting && presenting.deck && (
         <PresentMode

@@ -14,6 +14,7 @@ import {
   CloseIcon,
   CopyIcon,
   CreateIcon,
+  CloudUploadIcon,
   DownloadIcon,
   FolderIcon,
   HistoryIcon,
@@ -37,7 +38,7 @@ const FOLDER_COLORS: { id: FolderColor; name: string; bg: string }[] = [
 function KbdBadge({ shortcut }: { shortcut: string }) {
   if (shortcut === '⇧⌘E') {
     return (
-      <span className="font-mono text-[11px] text-neutral-400 font-medium inline-flex items-center gap-[1.5px] select-none">
+      <span className="font-mono text-[11px] text-neutral-600 font-medium inline-flex items-center gap-[1.5px] select-none">
         <svg
           width="11"
           height="11"
@@ -56,7 +57,7 @@ function KbdBadge({ shortcut }: { shortcut: string }) {
       </span>
     );
   }
-  return <span className="font-mono text-[10.5px] text-neutral-400">{shortcut}</span>;
+  return <span className="font-mono text-[10.5px] text-neutral-600">{shortcut}</span>;
 }
 
 interface FileMenuProps {
@@ -64,7 +65,6 @@ interface FileMenuProps {
   activeId: string | null;
   onSwitch: (id: string) => void;
   onNew: () => void;
-  onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onDuplicate?: () => void;
   onOpenHistory?: () => void;
@@ -74,6 +74,12 @@ interface FileMenuProps {
   onReset?: () => void;
   canReset?: boolean;
   onTriggerRenameActive?: () => void;
+  /** Writes this deck to a file so it can leave the browser. */
+  onBackupDeck?: () => void;
+  /** Reads a deck file back in as a new deck. */
+  onRestoreDeck?: (file: File) => void;
+  /** How much of the browser's storage budget the app is using. */
+  storage?: { readable: string; percent: number; nearLimit: boolean };
   isEditMode?: boolean;
   isDirty?: boolean;
   onSave?: () => void;
@@ -85,7 +91,6 @@ export function DeckSwitcher({
   projects,
   activeId,
   onNew,
-  onRename,
   onDelete,
   onDuplicate,
   onOpenHistory,
@@ -95,6 +100,9 @@ export function DeckSwitcher({
   onReset,
   canReset = false,
   onTriggerRenameActive,
+  onBackupDeck,
+  onRestoreDeck,
+  storage,
   isEditMode = false,
   isDirty = false,
   onSave,
@@ -111,6 +119,7 @@ export function DeckSwitcher({
 
   const rootRef = useRef<HTMLDivElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
 
   const pendingDelete = projects.find((p) => p.id === pendingDeleteId) ?? null;
   const active = projects.find((p) => p.id === activeId) ?? null;
@@ -182,7 +191,7 @@ export function DeckSwitcher({
           className={`flex items-center justify-center w-[22px] h-[22px] rounded-none transition-colors cursor-pointer ${
             open
               ? 'bg-neutral-200 text-neutral-900'
-              : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'
+              : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
           }`}
         >
           <span
@@ -236,7 +245,7 @@ export function DeckSwitcher({
               <AddIcon size={14} />
               <span>New deck</span>
             </span>
-            <span className="font-mono text-[10.5px] text-neutral-400">⌘N</span>
+            <span className="font-mono text-[10.5px] text-neutral-600">⌘N</span>
           </button>
 
           {onDuplicate && (
@@ -303,7 +312,7 @@ export function DeckSwitcher({
                   }`}
                 >
                   <span>Save changes</span>
-                  <span className="font-mono text-[10.5px] text-neutral-400">⌘S</span>
+                  <span className="font-mono text-[10.5px] text-neutral-600">⌘S</span>
                 </button>
               )}
               {onDiscard && (
@@ -373,6 +382,38 @@ export function DeckSwitcher({
             </button>
           )}
 
+          {onBackupDeck && (
+            <button
+              type="button"
+              onClick={() => {
+                onBackupDeck();
+                setOpen(false);
+              }}
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[12.5px] font-medium text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer text-left"
+            >
+              <span className="flex items-center gap-2.5">
+                <DownloadIcon size={14} />
+                <span>Save a backup file</span>
+              </span>
+            </button>
+          )}
+
+          {onRestoreDeck && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                restoreInputRef.current?.click();
+              }}
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[12.5px] font-medium text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer text-left"
+            >
+              <span className="flex items-center gap-2.5">
+                <CloudUploadIcon size={14} />
+                <span>Open a backup file...</span>
+              </span>
+            </button>
+          )}
+
           {onOpenShare && (
             <button
               type="button"
@@ -403,7 +444,7 @@ export function DeckSwitcher({
               className={`w-full flex items-center justify-between px-3 py-1.5 text-[12.5px] font-medium transition-colors text-left ${
                 canReset
                   ? 'text-neutral-800 hover:bg-neutral-100 cursor-pointer'
-                  : 'text-neutral-400 opacity-60 cursor-not-allowed'
+                  : 'text-neutral-600 opacity-60 cursor-not-allowed'
               }`}
             >
               <span className="flex items-center gap-2.5">
@@ -428,6 +469,48 @@ export function DeckSwitcher({
               </span>
             </button>
           )}
+
+          {/* Hidden: the menu item above clicks it. */}
+          {onRestoreDeck && (
+            <input
+              ref={restoreInputRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) onRestoreDeck(file);
+              }}
+            />
+          )}
+
+          {/* What the browser is holding. Shown here rather than only when a
+              save fails, which was the first time anyone heard about it. */}
+          {storage && (
+            <>
+              <div className="my-1.5 border-t border-neutral-150" />
+              <div className="px-3 pt-1 pb-2 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[9.5px] font-bold tracking-[0.14em] uppercase text-neutral-600">
+                    Browser storage
+                  </span>
+                  <span className="font-mono text-[10px] text-neutral-600">{storage.readable} of 5 MB</span>
+                </div>
+                <div className="h-1 bg-neutral-200 relative overflow-hidden">
+                  <div
+                    className={`absolute inset-y-0 left-0 ${storage.nearLimit ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                    style={{ width: `${Math.max(2, storage.percent)}%` }}
+                  />
+                </div>
+                {storage.nearLimit && (
+                  <span className="text-[11px] leading-snug text-amber-700">
+                    Nearly full. Save a backup file, then delete a deck you no longer need.
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -445,14 +528,14 @@ export function DeckSwitcher({
             <div className="flex items-center justify-between pb-3 border-b border-neutral-150">
               <div>
                 <h3 className="text-[14px] font-bold text-neutral-900">Move to Folder</h3>
-                <p className="text-[11.5px] text-neutral-500 truncate max-w-[300px]">
+                <p className="text-[11.5px] text-neutral-600 truncate max-w-[300px]">
                   {active?.name ?? 'Untitled deck'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setMoveModalOpen(false)}
-                className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-neutral-900 rounded-none cursor-pointer"
+                className="w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-neutral-900 rounded-none cursor-pointer"
               >
                 <CloseIcon size={14} />
               </button>
@@ -461,7 +544,7 @@ export function DeckSwitcher({
             {/* Modal Content */}
             {!creatingFolder ? (
               <div className="py-3">
-                <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-neutral-400 mb-2">
+                <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-neutral-600 mb-2">
                   Select destination
                 </div>
                 <div className="max-h-[220px] overflow-y-auto space-y-1 pr-1">
@@ -540,7 +623,7 @@ export function DeckSwitcher({
             ) : (
               <form onSubmit={handleCreateAndMove} className="py-3 space-y-4">
                 <div>
-                  <label className="block text-[11px] font-mono font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                  <label className="block text-[11px] font-mono font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
                     Folder Name
                   </label>
                   <input
@@ -554,7 +637,7 @@ export function DeckSwitcher({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-mono font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                  <label className="block text-[11px] font-mono font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
                     Color Accent
                   </label>
                   <div className="flex items-center gap-2 flex-wrap">

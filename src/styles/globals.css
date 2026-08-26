@@ -231,3 +231,33 @@ input[list]::-webkit-calendar-picker-indicator {
   .wg-tx-in, .wg-tx-out { animation: none !important; }
   .wg-tx-out { display: none; }
 }
+
+/* -------------------------------------------------------------------------
+   Keyboard focus
+   Twenty-three controls cleared their outline and put nothing back, so a
+   keyboard user lost their place the moment they left an input. This is one
+   ring for the whole app, deliberately unlayered so it beats Tailwind's
+   `outline-none` utility without needing !important at each call site.
+
+   `:focus-visible` rather than `:focus`, so a mouse click on a button does not
+   leave a ring behind: the ring is for people navigating by keyboard.
+   ------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+/* On a dark surface the emerald ring is legible but the offset gap shows the
+   surface behind it, so the ring reads as a halo rather than a border. */
+.wg-on-dark :focus-visible,
+[data-dark-surface] :focus-visible {
+  outline-color: var(--emerald-400);
+}
+
+/* A slot on the canvas already draws its own focus treatment (see
+   [data-editable]:focus above), and a second ring around it at a scaled-down
+   zoom is noise rather than information. */
+[data-editable]:focus-visible {
+  outline-offset: 0;
+}

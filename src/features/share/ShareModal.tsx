@@ -84,7 +84,7 @@ function RoleMenu({
         className={
           compact
             ? 'flex items-center gap-1 h-7 pl-2 pr-1.5 bg-neutral-100 hover:bg-neutral-200 rounded-[var(--radius-sharp)] text-[12px] font-semibold text-neutral-700 cursor-pointer transition-colors'
-            : 'flex items-center gap-1 text-[12.5px] font-semibold text-neutral-500 hover:text-neutral-900 cursor-pointer transition-colors'
+            : 'flex items-center gap-1 text-[12.5px] font-semibold text-neutral-600 hover:text-neutral-900 cursor-pointer transition-colors'
         }
       >
         {ROLE_LABEL[value]}
@@ -155,9 +155,9 @@ function Row({
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-semibold text-neutral-900 truncate">
           {name}
-          {you && <span className="text-neutral-400 font-normal"> (you)</span>}
+          {you && <span className="text-neutral-600 font-normal"> (you)</span>}
         </div>
-        <div className="text-[11.5px] text-neutral-500 truncate">{email}</div>
+        <div className="text-[11.5px] text-neutral-600 truncate">{email}</div>
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -253,7 +253,7 @@ export function ShareModal({
             <button
               type="button"
               onClick={copyLink}
-              className="flex items-center gap-1.5 text-[12.5px] font-semibold text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 text-[12.5px] font-semibold text-neutral-600 hover:text-neutral-900 transition-colors cursor-pointer"
             >
               <LinkIcon size={14} />
               Copy link
@@ -261,7 +261,7 @@ export function ShareModal({
             <button
               onClick={onClose}
               aria-label="Close Share dialog"
-              className="text-neutral-400 hover:text-neutral-900 transition-colors cursor-pointer"
+              className="text-neutral-600 hover:text-neutral-900 transition-colors cursor-pointer"
             >
               <CloseIcon size={16} />
             </button>
@@ -283,7 +283,7 @@ export function ShareModal({
                   onChange={(e) => { setInviteEmail(e.target.value); setInviteError(null); }}
                   placeholder="Invite by email"
                   disabled={!isOwner}
-                  className="flex-1 min-w-0 bg-transparent border-none outline-none text-[12.5px] text-neutral-900 disabled:text-neutral-400 placeholder:text-neutral-400"
+                  className="flex-1 min-w-0 bg-transparent border-none outline-none text-[12.5px] text-neutral-900 disabled:text-neutral-600 placeholder:text-neutral-600"
                 />
                 {inviteEmail.trim() && (
                   <div className="shrink-0">
@@ -304,7 +304,7 @@ export function ShareModal({
               <button
                 type="submit"
                 disabled={!isOwner}
-                className="h-9 px-4 text-[12.5px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 disabled:bg-neutral-200 disabled:text-neutral-400 disabled:cursor-not-allowed rounded-[var(--radius-sharp)] transition-colors cursor-pointer shrink-0"
+                className="h-9 px-4 text-[12.5px] font-bold text-white bg-neutral-900 hover:bg-neutral-800 disabled:bg-neutral-200 disabled:text-neutral-600 disabled:cursor-not-allowed rounded-[var(--radius-sharp)] transition-colors cursor-pointer shrink-0"
               >
                 Invite
               </button>
@@ -313,14 +313,14 @@ export function ShareModal({
               <span role="alert" className="text-[11.5px] font-semibold text-rose-700">{inviteError}</span>
             )}
             {!isOwner && (
-              <span className="text-[11.5px] text-neutral-500">
+              <span className="text-[11.5px] text-neutral-600">
                 Only {owner?.name ?? 'the owner'} can change who has access.
               </span>
             )}
           </div>
 
           <div className="flex flex-col">
-            <span className="text-[12.5px] font-semibold text-neutral-500 pb-1">Who has access</span>
+            <span className="text-[12.5px] font-semibold text-neutral-600 pb-1">Who has access</span>
 
             {owner && (
               <Row
@@ -329,7 +329,7 @@ export function ShareModal({
                 email={owner.email}
                 you={owner.id === currentUserId}
               >
-                <span className="text-[12.5px] font-semibold text-neutral-400">owner</span>
+                <span className="text-[12.5px] font-semibold text-neutral-600">owner</span>
               </Row>
             )}
 
@@ -355,7 +355,7 @@ export function ShareModal({
                       }}
                     />
                   ) : (
-                    <span className="text-[12.5px] font-semibold text-neutral-400">
+                    <span className="text-[12.5px] font-semibold text-neutral-600">
                       {c.role === 'editor' ? 'can edit' : 'can view'}
                     </span>
                   )}
@@ -364,7 +364,7 @@ export function ShareModal({
             })}
 
             {!collaborators.length && (
-              <p className="text-[11.5px] text-neutral-400 py-1.5">
+              <p className="text-[11.5px] text-neutral-600 py-1.5">
                 Nobody else has been invited yet.
               </p>
             )}
@@ -391,7 +391,7 @@ export function ShareModal({
         </div>
 
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-neutral-200">
-          <span className="text-[12.5px] text-neutral-500">Need a file to send on?</span>
+          <span className="text-[12.5px] text-neutral-600">Need a file to send on?</span>
           <button
             type="button"
             onClick={() => {

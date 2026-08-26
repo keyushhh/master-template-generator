@@ -104,7 +104,7 @@ function FontRow({
             fontSize: 9,
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
-            color: 'var(--neutral-400)',
+            color: 'var(--neutral-600)',
             flexShrink: 0,
           }}
         >
@@ -128,7 +128,7 @@ const LABEL: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: '0.14em',
   textTransform: 'uppercase',
-  color: 'var(--neutral-400)',
+  color: 'var(--neutral-600)',
 };
 
 /**
@@ -229,7 +229,7 @@ export function FontPicker({
           borderRadius: 'var(--radius-sharp)',
         }}
       >
-        <span style={{ display: 'flex', color: 'var(--neutral-400)', flexShrink: 0 }}>
+        <span style={{ display: 'flex', color: 'var(--neutral-600)', flexShrink: 0 }}>
           <SearchIcon size={13} />
         </span>
         <input
@@ -291,20 +291,20 @@ export function FontPicker({
         <span style={LABEL}>{searching ? 'Google Fonts' : 'More from Google Fonts'}</span>
 
         {catalogState === 'loading' && (
-          <span style={{ display: 'block', padding: '10px 8px', fontSize: 11.5, color: 'var(--neutral-400)' }}>
+          <span style={{ display: 'block', padding: '10px 8px', fontSize: 11.5, color: 'var(--neutral-600)' }}>
             Loading the catalogue…
           </span>
         )}
 
         {catalogState === 'error' && (
-          <span style={{ display: 'block', padding: '10px 8px', fontSize: 11.5, color: 'var(--neutral-500)', lineHeight: 1.5 }}>
+          <span style={{ display: 'block', padding: '10px 8px', fontSize: 11.5, color: 'var(--neutral-600)', lineHeight: 1.5 }}>
             Could not reach the font catalogue. The house faces above still work,
             and they need no network.
           </span>
         )}
 
         {catalog && results.length === 0 && (
-          <span style={{ display: 'block', padding: '10px 8px', fontSize: 11.5, color: 'var(--neutral-400)' }}>
+          <span style={{ display: 'block', padding: '10px 8px', fontSize: 11.5, color: 'var(--neutral-600)' }}>
             Nothing matches “{query}”.
           </span>
         )}
@@ -322,7 +322,7 @@ export function FontPicker({
         ))}
 
         {catalog && !searching && results.length >= LIMIT && (
-          <span style={{ display: 'block', padding: '6px 8px 2px', fontSize: 10.5, color: 'var(--neutral-400)', lineHeight: 1.5 }}>
+          <span style={{ display: 'block', padding: '6px 8px 2px', fontSize: 10.5, color: 'var(--neutral-600)', lineHeight: 1.5 }}>
             Showing the {LIMIT} most used. Type to search the rest.
           </span>
         )}

@@ -7,10 +7,17 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "test": "npm run test:unit && npm run test:checks",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:checks": "node scripts/pptx-theme-check.mjs && node scripts/brand-kit-check.mjs && node scripts/preflight-check.mjs && node scripts/pptx-font-check.mjs && node scripts/font-catalog-check.mjs && node scripts/resolve-check.mjs && node scripts/pptx-format-check.mjs && node scripts/overflow-check.mjs && node scripts/typesize-check.mjs && node scripts/shared-slides-check.mjs && node scripts/pdf-import-check.mjs && node scripts/pptx-import-check.mjs && node scripts/image-fit-check.mjs && node scripts/a11y-check.mjs && node scripts/dash-check.mjs",
+    "test:e2e": "playwright test",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "test:pptx": "node scripts/pptx-theme-check.mjs",
     "snapshot:pptx": "node scripts/pptx-snapshot.mjs",
     "test:brand": "node scripts/brand-kit-check.mjs",
-    "test": "node scripts/pptx-theme-check.mjs && node scripts/brand-kit-check.mjs && node scripts/preflight-check.mjs && node scripts/pptx-font-check.mjs && node scripts/font-catalog-check.mjs && node scripts/resolve-check.mjs && node scripts/pptx-format-check.mjs && node scripts/overflow-check.mjs && node scripts/typesize-check.mjs && node scripts/shared-slides-check.mjs && node scripts/pdf-import-check.mjs && node scripts/pptx-import-check.mjs && node scripts/dash-check.mjs",
     "test:preflight": "node scripts/preflight-check.mjs",
     "fonts:catalog": "node scripts/build-font-catalog.mjs",
     "test:fonts": "node scripts/pptx-font-check.mjs && node scripts/font-catalog-check.mjs",
@@ -18,7 +25,8 @@
     "test:format": "node scripts/pptx-format-check.mjs",
     "test:overflow": "node scripts/overflow-check.mjs",
     "test:dashes": "node scripts/dash-check.mjs",
-    "test:import": "node scripts/pdf-import-check.mjs && node scripts/pptx-import-check.mjs"
+    "test:import": "node scripts/pdf-import-check.mjs && node scripts/pptx-import-check.mjs",
+    "test:a11y": "node scripts/a11y-check.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -33,9 +41,17 @@
     "vite": "^5.4.11"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "typescript": "^5.7.2"
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "globals": "^15.15.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^2.1.9"
   }
 }

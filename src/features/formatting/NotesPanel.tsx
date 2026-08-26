@@ -65,7 +65,7 @@ export function NotesPanel({ slideTitle, notes, onChange, onClose }: NotesPanelP
             style={{
               fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
               letterSpacing: '0.14em', textTransform: 'uppercase',
-              color: 'var(--neutral-400)',
+              color: 'var(--neutral-600)',
             }}
           >
             Speaker notes
@@ -87,7 +87,7 @@ export function NotesPanel({ slideTitle, notes, onChange, onClose }: NotesPanelP
             flexShrink: 0, width: 26, height: 26, padding: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'var(--neutral-400)',
+            color: 'var(--neutral-600)',
           }}
         >
           <CloseIcon size={14} />

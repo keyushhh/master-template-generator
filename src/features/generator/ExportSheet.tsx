@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { sanitizeFileName } from './exportName';
 import { FitStage } from './FitStage';
 import { analyzeCoverage } from '../deck/deckBuilder';
 import { useToast } from '../toast/Toast';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import type { DocumentNode } from '../business-record/parser/ast';
 import type { Deck } from '../deck/types';
-import { AlertIcon, ArrowForwardIcon, CheckIcon, CloseIcon, CopyIcon, LayersIcon, WarningIcon } from '../ui/icons';
+import { AlertIcon, ArrowForwardIcon, CheckIcon, CloseIcon, CopyIcon, LayersIcon } from '../ui/icons';
 import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 import { useFitReport } from '../fit/fitStore';
 import { placeholderReport } from '../preflight/placeholders';
@@ -71,16 +72,7 @@ const FORMATS: {
   },
 ];
 
-/**
- * Mirrors `sanitize()` in exportHelper so the sheet can show the filename that
- * is about to land in Downloads. Deliberately a copy rather than an import:
- * exportHelper pulls in pptxgenjs, jsPDF and html2canvas (~900kB), and it is
- * lazily imported for exactly that reason - importing one helper from it
- * statically would drag the whole chunk into the initial bundle.
- */
-function sanitize(name: string): string {
-  return name.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'presentation';
-}
+const sanitize = sanitizeFileName;
 
 /**
  * Export.
@@ -275,7 +267,7 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
           )}
 
           <div className="flex flex-col gap-1.5 min-w-0 flex-1 pt-0.5">
-            <div className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+            <div className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-600">
               Export deck
             </div>
             <h2 className="text-[19px] font-bold leading-tight text-neutral-900 break-words pr-7">
@@ -295,19 +287,19 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                 {visible.length} slide{visible.length === 1 ? '' : 's'}
               </span>
               {hiddenCount > 0 && (
-                <span className="text-[12.5px] text-neutral-400">· {hiddenCount} excluded</span>
+                <span className="text-[12.5px] text-neutral-600">· {hiddenCount} excluded</span>
               )}
               <span className="text-neutral-300 group-hover:text-neutral-600 transition-colors flex items-center">
                 <ArrowForwardIcon size={12} />
               </span>
             </button>
-            <span className="text-[11px] text-neutral-400 pl-[1px]">Organize, reorder or exclude slides</span>
+            <span className="text-[11px] text-neutral-600 pl-[1px]">Organize, reorder or exclude slides</span>
           </div>
 
           <button
             onClick={() => !busy && onClose()}
             aria-label="Close"
-            className="absolute top-3.5 right-3.5 w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
+            className="absolute top-3.5 right-3.5 w-7 h-7 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-[var(--radius-sharp)] transition-colors cursor-pointer"
           >
             <CloseIcon size={15} />
           </button>
@@ -527,7 +519,7 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
 
           {/* ── Format: one choice, explained ───────────────────────────────── */}
           <div className="p-5 pt-4 flex flex-col gap-3">
-            <div className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+            <div className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-600">
               Format
             </div>
 
@@ -559,12 +551,12 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                     }
                   >
                     <span
-                      className={`text-[12.5px] font-bold ${active ? 'text-emerald-700' : 'text-neutral-500'}`}
+                      className={`text-[12.5px] font-bold ${active ? 'text-emerald-700' : 'text-neutral-600'}`}
                     >
                       {f.tab}
                     </span>
                     <span
-                      className={`font-mono text-[10px] ${active ? 'text-emerald-600/70' : 'text-neutral-400'}`}
+                      className={`font-mono text-[10px] ${active ? 'text-emerald-600/70' : 'text-neutral-600'}`}
                     >
                       {f.ext}
                     </span>
@@ -577,7 +569,7 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                 is separated from firing. */}
             <div className="flex flex-col gap-1 min-h-[64px]">
               <span className="text-[13px] font-bold text-neutral-900">{format.headline}</span>
-              <span className="text-[12px] text-neutral-500 leading-relaxed">{format.detail}</span>
+              <span className="text-[12px] text-neutral-600 leading-relaxed">{format.detail}</span>
             </div>
 
             {/* The artifact, named before it exists. Click to rename. */}
@@ -612,14 +604,14 @@ export function ExportSheet({ open, onClose, deck, ast, projectName, onOpenSorte
                     }}
                     onClick={(e) => e.stopPropagation()}
                   />
-                  <span className="font-mono text-[11.5px] text-neutral-400 shrink-0">{format.ext}</span>
+                  <span className="font-mono text-[11.5px] text-neutral-600 shrink-0">{format.ext}</span>
                 </span>
               ) : (
                 <span className="font-mono text-[11.5px] text-neutral-700 truncate group-hover:text-emerald-700 transition-colors">
                   {filename}
                 </span>
               )}
-              <span className="ml-auto shrink-0 text-[10.5px] text-neutral-400 whitespace-nowrap">
+              <span className="ml-auto shrink-0 text-[10.5px] text-neutral-600 whitespace-nowrap">
                 {visible.length} slide{visible.length === 1 ? '' : 's'} · 1920 × 1080
               </span>
             </div>

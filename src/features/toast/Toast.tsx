@@ -82,7 +82,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: 'var(--neutral-400)',
+                color: 'var(--neutral-600)',
                 fontSize: 16,
                 lineHeight: 1,
                 padding: 0,

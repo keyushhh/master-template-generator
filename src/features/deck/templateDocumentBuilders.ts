@@ -36,7 +36,6 @@ import {
   estimateTextHeight,
   TEXT_ONLY_TEXT_W,
   TEXT_ONLY_TEXT_H,
-  chunk,
   ensurePeriod,
   splitTitleLines,
 } from './deckBuilder';

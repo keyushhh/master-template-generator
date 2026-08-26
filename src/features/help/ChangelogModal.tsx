@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusTrap } from '../a11y/useFocusTrap';
-import { CloseIcon, CheckIcon } from '../ui/icons';
+import { CloseIcon } from '../ui/icons';
 import { CHANGELOG, formatReleaseDate, markChangelogSeen, type ChangeKind } from './changelog';
 
 /** We'll use softer colors for the pills and timeline dots to give a premium feel. */
@@ -48,14 +48,14 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h2 className="text-[18px] font-bold text-neutral-900 tracking-tight">What&rsquo;s new</h2>
-              <span className="px-2 py-0.5 rounded-[var(--radius-sharp)] bg-neutral-100 font-mono text-[10px] text-neutral-500 font-medium">
+              <span className="px-2 py-0.5 rounded-[var(--radius-sharp)] bg-neutral-100 font-mono text-[10px] text-neutral-600 font-medium">
                 {CHANGELOG.length} updates
               </span>
             </div>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-[var(--radius-sharp)] transition-colors cursor-pointer -mr-2"
+              className="w-8 h-8 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-[var(--radius-sharp)] transition-colors cursor-pointer -mr-2"
             >
               <CloseIcon size={16} />
             </button>
@@ -73,8 +73,8 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                     isActive
                       ? bg
                       : isInactive
-                      ? 'bg-transparent text-neutral-300 hover:text-neutral-500 hover:bg-neutral-100'
-                      : 'bg-transparent text-neutral-500 hover:bg-neutral-100'
+                      ? 'bg-transparent text-neutral-300 hover:text-neutral-600 hover:bg-neutral-100'
+                      : 'bg-transparent text-neutral-600 hover:bg-neutral-100'
                   }`}
                 >
                   <span aria-hidden className="w-[5px] h-[5px] rounded-none" style={{ background: isActive ? text : 'currentColor' }} />
@@ -85,7 +85,7 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
             {activeFilter && (
               <button
                 onClick={() => setActiveFilter(null)}
-                className="ml-2 px-3 py-1.5 rounded-[var(--radius-sharp)] text-[11px] font-bold tracking-wide uppercase text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer"
+                className="ml-2 px-3 py-1.5 rounded-[var(--radius-sharp)] text-[11px] font-bold tracking-wide uppercase text-neutral-600 hover:text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer"
               >
                 Clear filter
               </button>
@@ -97,7 +97,7 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
         <div className="flex-1 overflow-y-auto px-6 py-8 relative">
           {visibleReleases.length === 0 && (
             <div className="flex items-center justify-center h-40">
-              <p className="text-[14px] text-neutral-400 font-medium">No updates found for this filter.</p>
+              <p className="text-[14px] text-neutral-600 font-medium">No updates found for this filter.</p>
             </div>
           )}
 
@@ -123,7 +123,7 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
                           </span>
                         )}
                       </div>
-                      <span className="text-[12px] font-medium text-neutral-400">
+                      <span className="text-[12px] font-medium text-neutral-600">
                         {formatReleaseDate(release.date)}
                       </span>
                     </div>

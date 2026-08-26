@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { SlideInstance, SlideTransition } from '../deck/types';
 import type { DocumentNode } from '../business-record/parser/ast';
 import { SlideStage } from './PresentationCanvas';
-import { CopyIcon, CreateIcon, DuplicateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FlashIcon, GripIcon, LayersIcon, TrashIcon, WarningIcon } from '../ui/icons';
+import { CreateIcon, DuplicateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FlashIcon, GripIcon, LayersIcon, TrashIcon, WarningIcon } from '../ui/icons';
 import type { DeckTheme } from '../theme/deckTheme';
 import { describeIssue, SEVERE_BY } from '../fit/fitScan';
 import { pruneFit, useSlideFit } from '../fit/fitStore';
@@ -31,7 +31,7 @@ interface SlideNavListProps {
   onSetTransition: (instanceId: string, transition: SlideTransition | null) => void;
   onRename: (instanceId: string, title: string) => void;
   /** Move `fromId` to sit just before `toId` in the deck order. */
-  onReorder: (fromId: string, toId: string) => void;
+  onReorder: (fromId: string, toId: string, place?: 'before' | 'after') => void;
   /** Insert a new blank slide immediately after the given instanceId. */
   onInsertAfter: (instanceId: string) => void;
   /** The slide on the stage. */
@@ -155,7 +155,7 @@ function MenuRow({ label, icon, onClick, danger, hint }: { label: string; icon: 
         <span className="shrink-0 flex items-center">{icon}</span>
         {label}
       </div>
-      {hint && <span className="font-mono text-[10px] text-neutral-400 font-normal">{hint}</span>}
+      {hint && <span className="font-mono text-[10px] text-neutral-600 font-normal">{hint}</span>}
     </button>
   );
 }
@@ -242,7 +242,7 @@ function CardAction({
         type="button"
         aria-label={label}
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(e.currentTarget.getBoundingClientRect()); }}
-        className={`flex items-center justify-center w-[22px] h-[22px] rounded-none cursor-pointer border-none bg-transparent transition-colors text-neutral-500 ${
+        className={`flex items-center justify-center w-[22px] h-[22px] rounded-none cursor-pointer border-none bg-transparent transition-colors text-neutral-600 ${
           danger
             ? 'hover:text-red-600 hover:bg-red-50'
             : accent
@@ -357,6 +357,33 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
                        "Add slide" can drop the new slide where the user is
                        looking instead of always at the end. */
                     data-slide-row={slide.instanceId}
+                    /* Reordering was drag-only, which made it the one editor
+                       action with no keyboard path. Alt plus an arrow moves the
+                       focused slide past its neighbour, the same gesture the
+                       canvas uses for shape layer order. */
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Slide ${slides.indexOf(slide) + 1}, ${slide.title}${slide.hidden ? ', hidden' : ''}`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleNavigate(slide);
+                        return;
+                      }
+                      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+                      e.preventDefault();
+                      const from = slides.indexOf(slide);
+                      const up = e.key === 'ArrowUp';
+                      const target = slides[from + (up ? -1 : 1)];
+                      if (!target) return;
+                      onReorder(slide.instanceId, target.instanceId, up ? 'before' : 'after');
+                      // Follow the slide rather than the position, so a second
+                      // press moves the same slide again.
+                      requestAnimationFrame(() => {
+                        const el = document.querySelector<HTMLElement>(`[data-slide-row="${slide.instanceId}"]`);
+                        el?.focus();
+                      });
+                    }}
                     draggable
                     onDragStart={(e) => {
                       setDragId(slide.instanceId);
@@ -648,7 +675,7 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
                             onSetTransition(menu.id, null);
                             setMenu(null);
                           }}
-                          className="w-full flex items-center gap-2.5 pl-8 pr-3 py-[6px] text-[11.5px] font-medium text-neutral-400 hover:bg-neutral-100 cursor-pointer"
+                          className="w-full flex items-center gap-2.5 pl-8 pr-3 py-[6px] text-[11.5px] font-medium text-neutral-600 hover:bg-neutral-100 cursor-pointer"
                         >
                           Use deck default
                         </button>

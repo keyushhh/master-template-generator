@@ -104,7 +104,7 @@ function TemplateCard({
             </button>
           )}
         </div>
-        <p className="text-[11.5px] text-neutral-500 line-clamp-2 leading-relaxed">
+        <p className="text-[11.5px] text-neutral-600 line-clamp-2 leading-relaxed">
           {tmpl.description}
         </p>
       </div>
@@ -291,7 +291,7 @@ export function NewDeckModal({
                   <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-none border border-emerald-200/80">
                     {isSandboxMode ? 'Quick Sandbox' : 'Template Gallery'}
                   </span>
-                  <span className="text-[11.5px] text-neutral-400 font-medium">
+                  <span className="text-[11.5px] text-neutral-600 font-medium">
                     {allTemplates.length} styles available
                   </span>
                 </div>
@@ -303,7 +303,7 @@ export function NewDeckModal({
 
             <div className="flex items-center gap-3">
               <div className="relative w-full sm:w-[240px]">
-                <span className="absolute inset-y-0 left-3 flex items-center text-neutral-400 pointer-events-none">
+                <span className="absolute inset-y-0 left-3 flex items-center text-neutral-600 pointer-events-none">
                   <SearchIcon size={14} />
                 </span>
                 <input
@@ -315,7 +315,7 @@ export function NewDeckModal({
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="absolute inset-y-0 right-2.5 flex items-center text-neutral-400 hover:text-neutral-700 text-[14px] cursor-pointer"
+                    className="absolute inset-y-0 right-2.5 flex items-center text-neutral-600 hover:text-neutral-700 text-[14px] cursor-pointer"
                   >
                     &times;
                   </button>
@@ -325,7 +325,7 @@ export function NewDeckModal({
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-none transition-colors cursor-pointer shrink-0"
+                className="w-8 h-8 flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-none transition-colors cursor-pointer shrink-0"
               >
                 <CloseIcon size={16} />
               </button>
@@ -355,7 +355,7 @@ export function NewDeckModal({
                   }`}
                 >
                   <span>{cat.label}</span>
-                  <span className={`text-[10px] font-mono px-1 rounded-none ${active ? 'bg-white/20 text-white' : 'text-neutral-400'}`}>
+                  <span className={`text-[10px] font-mono px-1 rounded-none ${active ? 'bg-white/20 text-white' : 'text-neutral-600'}`}>
                     {count}
                   </span>
                 </button>
@@ -366,7 +366,7 @@ export function NewDeckModal({
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
             <div className="flex-1 p-6 overflow-y-auto bg-neutral-100/50">
               {filteredTemplates.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-8 text-neutral-400">
+                <div className="h-full flex flex-col items-center justify-center text-center p-8 text-neutral-600">
                   <p className="text-[14px] font-medium text-neutral-600">No templates found</p>
                   <p className="text-[12px] mt-1">Try adjusting your search or category filter</p>
                 </div>
@@ -394,25 +394,25 @@ export function NewDeckModal({
             {/* Right Drawer: Live Slide Preview & Options */}
             <div className="w-full md:w-[360px] shrink-0 border-t md:border-t-0 md:border-l border-neutral-200 bg-white p-5 flex flex-col gap-4 overflow-y-auto">
               <div className="flex flex-col gap-1 pb-3 border-b border-neutral-200">
-                <span className="font-mono text-[9px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                <span className="font-mono text-[9px] font-bold tracking-[0.14em] uppercase text-neutral-600">
                   Selected Template
                 </span>
                 <div className="flex items-baseline justify-between">
                   <h3 className="text-[16px] font-bold text-neutral-900" style={{ fontFamily: `"${activeTemplate.fonts.display}", sans-serif` }}>
                     {activeTemplate.name}
                   </h3>
-                  <span className="text-[11px] font-mono text-neutral-400">
+                  <span className="text-[11px] font-mono text-neutral-600">
                     {activeTemplate.slideCountText}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-500">
+                <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-600">
                   <span>Fonts: <strong className="text-neutral-700">{activeTemplate.fonts.display}</strong> + <strong className="text-neutral-700">{activeTemplate.fonts.sans}</strong></span>
                 </div>
               </div>
 
               {/* Every slide in the template, steppable before committing to it */}
               <div className="flex flex-col gap-1.5">
-                <span className="font-mono text-[9px] font-bold tracking-[0.14em] uppercase text-neutral-400">
+                <span className="font-mono text-[9px] font-bold tracking-[0.14em] uppercase text-neutral-600">
                   Preview
                 </span>
                 <div className="flex items-center gap-1.5">
@@ -421,7 +421,7 @@ export function NewDeckModal({
                     onClick={() => stepPreview(-1)}
                     disabled={previewSlides.length < 2}
                     aria-label="Previous slide"
-                    className="shrink-0 h-7 w-7 flex items-center justify-center border border-neutral-200 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400 disabled:opacity-30 disabled:cursor-default cursor-pointer bg-white"
+                    className="shrink-0 h-7 w-7 flex items-center justify-center border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-400 disabled:opacity-30 disabled:cursor-default cursor-pointer bg-white"
                   >
                     <ChevronBackIcon size={13} />
                   </button>
@@ -451,19 +451,19 @@ export function NewDeckModal({
                     onClick={() => stepPreview(1)}
                     disabled={previewSlides.length < 2}
                     aria-label="Next slide"
-                    className="shrink-0 h-7 w-7 flex items-center justify-center border border-neutral-200 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400 disabled:opacity-30 disabled:cursor-default cursor-pointer bg-white"
+                    className="shrink-0 h-7 w-7 flex items-center justify-center border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-400 disabled:opacity-30 disabled:cursor-default cursor-pointer bg-white"
                   >
                     <ChevronForwardIcon size={13} />
                   </button>
                 </div>
-                <span className="text-[11px] text-neutral-500 truncate">
+                <span className="text-[11px] text-neutral-600 truncate">
                   {previewSlide?.title}
                 </span>
               </div>
 
               {/* Deck Name Input */}
               <div className="flex flex-col gap-1.5">
-                <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-400">
+                <span className="font-mono text-[9.5px] font-bold tracking-[0.16em] uppercase text-neutral-600">
                   Deck name
                 </span>
                 <input

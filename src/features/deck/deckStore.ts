@@ -1,4 +1,5 @@
 import type { DocumentNode } from '../business-record/parser/ast';
+import { migrate, stamp } from './schema';
 import type { Deck } from './types';
 
 /**
@@ -46,6 +47,9 @@ export interface ProjectMeta {
 }
 
 export interface StoredSession {
+  /** Stamped on write by `saveProjectSession`. Absent on sessions written
+   *  before versioning existed, which are version 1 by definition. */
+  schemaVersion?: number;
   ast: DocumentNode | null;
   deck: Deck;
   draft?: Deck | null;
@@ -178,7 +182,9 @@ export function loadProjectSession(id: string): StoredSession | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredSession;
     if (!parsed.deck || !Array.isArray(parsed.deck.slides)) return null;
-    return parsed;
+    // Every read goes through the migration, so the rest of the app only ever
+    // sees a current session and no caller has to know what version it was.
+    return migrate(parsed).session;
   } catch {
     return null;
   }
@@ -188,7 +194,7 @@ export function loadProjectSession(id: string): StoredSession | null {
  *  than silently dropping the write) on storage failure, e.g. quota exceeded. */
 export function saveProjectSession(id: string, session: StoredSession): boolean {
   try {
-    localStorage.setItem(sessionKey(id), JSON.stringify(session));
+    localStorage.setItem(sessionKey(id), JSON.stringify(stamp(session)));
   } catch {
     return false;
   }
@@ -196,6 +202,47 @@ export function saveProjectSession(id: string, session: StoredSession): boolean 
   const projects = index.projects.map((p) => (p.id === id ? { ...p, updatedAt: Date.now() } : p));
   writeIndex({ ...index, projects });
   return true;
+}
+
+/**
+ * How much of the browser's ~5MB localStorage budget this app is using.
+ *
+ * Reported before a write fails rather than after: the storage ceiling used to
+ * announce itself only as a failed save, which is the worst moment to learn
+ * about it. Counts UTF-16 code units, which is what browsers charge for.
+ */
+export interface StorageUsage {
+  bytes: number;
+  readable: string;
+  /** 0 to 100, against the 5MB budget browsers give a single origin. */
+  percent: number;
+  /** Past this, a large image or a long deck is likely to fail to save. */
+  nearLimit: boolean;
+}
+
+const STORAGE_BUDGET_BYTES = 5 * 1024 * 1024;
+
+export function storageUsage(): StorageUsage {
+  let bytes = 0;
+  try {
+    // length/key rather than Object.keys: the latter walks the Storage object's
+    // own properties, which is a browser quirk rather than the API.
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key === null) continue;
+      bytes += ((localStorage.getItem(key)?.length ?? 0) + key.length) * 2;
+    }
+  } catch {
+    // Storage unavailable (private mode); nothing is stored, so nothing is used.
+  }
+  const mb = bytes / (1024 * 1024);
+  const percent = Math.min(100, (bytes / STORAGE_BUDGET_BYTES) * 100);
+  return {
+    bytes,
+    readable: mb < 0.1 ? `${Math.round(bytes / 1024)} KB` : `${mb.toFixed(1)} MB`,
+    percent,
+    nearLimit: percent >= 80,
+  };
 }
 
 /** Add a new deck to the index, save its session, and make it active. */
