@@ -14,6 +14,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.6.1',
+    date: '2026-08-26',
+    summary: 'One PDF export instead of two.',
+    improved: [
+      'The export sheet offered a plain PDF and a separate Handout PDF, both landing as ".pdf" and easy to pick wrong. Handout is gone; PDF still exports one slide per page, exactly what is on screen.',
+    ],
+  },
+  {
     version: '3.6.0',
     date: '2026-08-26',
     summary: 'A lockable slide, scatter and combo charts, a diff on every saved version, and the studio can reach Help again after the first day.',
