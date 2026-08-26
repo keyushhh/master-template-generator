@@ -1,13 +1,14 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SlideInstance, SlideTransition } from '../deck/types';
 import { variantGroupOf, variantLabel } from '../deck/variants';
 import type { DocumentNode } from '../business-record/parser/ast';
 import { SlideStage } from './PresentationCanvas';
-import { CreateIcon, DuplicateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FlashIcon, GripIcon, LayersIcon, TrashIcon, WarningIcon } from '../ui/icons';
-import type { DeckTheme } from '../theme/deckTheme';
+import { CreateIcon, DuplicateIcon, EllipsisIcon, EyeIcon, EyeOffIcon, FlashIcon, GripIcon, LayersIcon, LockIcon, TrashIcon, WarningIcon } from '../ui/icons';
+import { WOZKU_THEME, type DeckTheme } from '../theme/deckTheme';
 import { describeIssue, SEVERE_BY } from '../fit/fitScan';
 import { pruneFit, useSlideFit } from '../fit/fitStore';
+import { brandCheckReport, type BrandCheckIssue } from '../preflight/brandCheck';
 import { ConfirmModal, cannotBeUndone } from '../ui/ConfirmModal';
 import { TRANSITIONS } from '../deck/slideTransitions';
 import type { CollabPeer } from '../collab/collabChannel';
@@ -24,6 +25,7 @@ interface SlideNavListProps {
   /** The deck's theme, so a rail thumbnail matches the stage. */
   theme?: DeckTheme;
   onToggleHidden: (instanceId: string) => void;
+  onToggleLock: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
   /** Add a second version of this slide, kept beside it. */
   onAddVariant: (instanceId: string) => void;
@@ -119,6 +121,35 @@ function FitBadge({ slideId }: { slideId: string }) {
       title={`${issues.length === 1 ? 'Text is' : `${issues.length} pieces of text are`} being cut off on this slide:\n${issues
         .slice(0, 4)
         .map((i) => `· “${i.text}” - ${describeIssue(i).toLowerCase()}`)
+        .join('\n')}`}
+    >
+      <WarningIcon size={9} />
+      {issues.length > 1 && (
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 700, lineHeight: 1 }}>
+          {issues.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Marks a thumbnail carrying a typed colour the brand check would flag: low
+ * contrast against its own fill, or off the theme's palette entirely.
+ *
+ * The export sheet already runs this same check once, right before a file
+ * leaves the app - this is the same question asked while the slide is still
+ * being worked on, so the colour gets fixed instead of caught at the door.
+ */
+function ContrastBadge({ issues }: { issues: BrandCheckIssue[] }) {
+  if (issues.length === 0) return null;
+  return (
+    <div
+      className="absolute bottom-1.5 right-1.5 z-20 flex items-center gap-1"
+      style={{ padding: '2px 5px', background: 'rgba(180,83,9,0.94)', color: '#fff' }}
+      title={`${issues.length === 1 ? 'One colour is' : `${issues.length} colours are`} off brand on this slide:\n${issues
+        .slice(0, 4)
+        .map((i) => `· ${i.detail}`)
         .join('\n')}`}
     >
       <WarningIcon size={9} />
@@ -261,7 +292,16 @@ function CardAction({
   );
 }
 
-export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidden, onDuplicate, onAddVariant, onChooseVariant, onChangeLayout, onDelete, onSetTransition, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
+export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidden, onToggleLock, onDuplicate, onAddVariant, onChooseVariant, onChangeLayout, onDelete, onSetTransition, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
+  const contrastBySlide = useMemo(() => {
+    const map = new Map<string, BrandCheckIssue[]>();
+    for (const issue of brandCheckReport(slides, theme ?? WOZKU_THEME)) {
+      const list = map.get(issue.instanceId) ?? [];
+      list.push(issue);
+      map.set(issue.instanceId, list);
+    }
+    return map;
+  }, [slides, theme]);
   // Double-click-to-rename state: which row is being renamed + its draft text.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -557,6 +597,15 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
                         })()}
 
                         <FitBadge slideId={slide.instanceId} />
+                        <ContrastBadge issues={contrastBySlide.get(slide.instanceId) ?? []} />
+                        {slide.locked && (
+                          <span
+                            title="Locked: no drag, resize or edit"
+                            className="absolute top-1 left-1 z-20 flex items-center justify-center w-[18px] h-[18px] bg-neutral-900/80 text-white rounded-[3px]"
+                          >
+                            <LockIcon size={10} />
+                          </span>
+                        )}
 
                         {/* Hover actions: the one you reach for most, plus a
                             menu. Five icons over every thumbnail was the
@@ -738,6 +787,12 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
                 </>
               );
             })()}
+            <MenuRow
+              icon={<LockIcon size={15} />}
+              label={slides.find((sl) => sl.instanceId === menu.id)?.locked ? 'Unlock slide' : 'Lock slide'}
+              hint={slides.find((sl) => sl.instanceId === menu.id)?.locked ? undefined : 'No drag, resize or edit'}
+              onClick={() => { onToggleLock(menu.id); setMenu(null); }}
+            />
             <div className="my-1 h-px bg-neutral-200" />
             <MenuRow
               icon={<TrashIcon size={15} />}

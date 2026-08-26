@@ -3,6 +3,7 @@ import { CloseIcon } from '../ui/icons';
 import { useFocusTrap } from '../a11y/useFocusTrap';
 import { userById } from '../auth/demoUsers';
 import type { DeckVersion } from './versionStore';
+import { diffDecks, diffSummaryText } from './versionDiff';
 
 interface Props {
   open: boolean;
@@ -62,6 +63,8 @@ export function VersionHistoryPanel({ open, onClose, versions, onRestore, canRes
           ) : (
             versions.map((v, i) => {
               const author = userById(v.authorId);
+              const older = versions[i + 1];
+              const diffText = older ? diffSummaryText(diffDecks(older.deck, v.deck)) : null;
               return (
                 <div
                   key={v.id}
@@ -89,6 +92,7 @@ export function VersionHistoryPanel({ open, onClose, versions, onRestore, canRes
                     </div>
                     <div className="text-[11.5px] text-neutral-600 truncate">
                       {author?.name ?? 'Unknown editor'} · {v.deck.slides.length} slides
+                      {diffText && <> · <span className="text-neutral-700 font-medium">{diffText}</span></>}
                     </div>
                   </div>
                   {i !== 0 && canRestore && (

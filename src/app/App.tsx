@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ToastProvider } from '../features/toast/Toast';
+import { SkipLink } from '../features/ui/SkipLink';
 import { FitDevShortcut } from '../features/fit/FitDevShortcut';
 import { AuthProvider } from '../features/auth/authStore';
 import { RequireAuth } from '../features/auth/RequireAuth';
@@ -24,6 +25,7 @@ export function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
+        <SkipLink />
         <FitDevShortcut />
         <BrowserRouter>
           <AuthProvider>

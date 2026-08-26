@@ -102,7 +102,7 @@ editing, persistence or export.
 
 * React, TypeScript, Vite
 * CSS custom properties plus Tailwind CSS v4
-* Framer Motion for interaction
+* CSS transitions for interaction
 
 ## Development
 

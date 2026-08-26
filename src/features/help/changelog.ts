@@ -14,6 +14,24 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '3.6.0',
+    date: '2026-08-26',
+    summary: 'A lockable slide, scatter and combo charts, a diff on every saved version, and the studio can reach Help again after the first day.',
+    added: [
+      'A slide can be locked from its menu. Nothing about it can be dragged, resized, deleted or typed into until it is unlocked again, a guard against a stray click on a slide someone has already signed off on.',
+      'Two more chart types: scatter, and combo, which draws every series but the last as bars and the last as a line over them. Both export as real PowerPoint charts, not pictures of one.',
+      'Version history now says what changed since the version before it, not just when it was saved: how many slides were added, removed or edited.',
+      'A slide carrying an off-brand colour, or text that fails contrast against its own fill, is flagged right on its thumbnail, the same check the export sheet runs, now visible while the slide is still being worked on.',
+      'The studio can reach the Help menu (changelog, keyboard shortcuts, replay the getting-started tour) again after first open. It was only ever reachable from the library page before.',
+      'The app can now be added to an iPhone or iPad home screen with its own icon, instead of a screenshot of whatever page was open.',
+    ],
+    improved: [
+      'A toast now carries an icon for its kind, and a repeated failure updates one toast instead of stacking a new one every time.',
+      'Every card in the deck library grid lifts slightly on hover, matching the motion already on the featured cover.',
+      'A keyboard user can jump straight past the top bar into the slide or the library grid with one skip link, and every toolbar dropdown now identifies itself to a screen reader as a menu.',
+    ],
+  },
+  {
     version: '3.5.0',
     date: '2026-08-26',
     summary: 'Two versions of a slide, a window for the projector, rehearsing against the clock, and the deck writes its own record back out.',

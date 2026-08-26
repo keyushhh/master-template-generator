@@ -26,6 +26,7 @@ interface GeneratorSidebarProps {
   onImportDeck: (deck: Deck, name: string, warnings: string[], relit?: boolean) => void;
   onGenerate: () => void;
   onToggleHidden: (instanceId: string) => void;
+  onToggleLock: (instanceId: string) => void;
   onDuplicate: (instanceId: string) => void;
   onAddVariant: (instanceId: string) => void;
   onChooseVariant: (instanceId: string) => void;
@@ -60,6 +61,7 @@ export function GeneratorSidebar({
   onImportDeck,
   onGenerate,
   onToggleHidden,
+  onToggleLock,
   onDuplicate,
   onAddVariant,
   onChooseVariant,
@@ -155,6 +157,7 @@ export function GeneratorSidebar({
               logoUrl={deck.logoUrl}
               theme={theme}
               onToggleHidden={onToggleHidden}
+              onToggleLock={onToggleLock}
               onDuplicate={onDuplicate}
               onAddVariant={onAddVariant}
               onChooseVariant={onChooseVariant}

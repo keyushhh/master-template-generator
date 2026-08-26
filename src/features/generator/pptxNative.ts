@@ -1686,7 +1686,7 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
       // out in different colours from the slide it was exported from - and a
       // client kit's charts are in the client's colours, not Wozku's.
       const chartType = s.chartType ?? 'bar';
-      slide.addChart(chartType, data, {
+      const chartOpts = {
         ...b,
         showLegend: data.length > 1,
         showTitle: false,
@@ -1695,7 +1695,24 @@ async function addOverlayShapes(slide: pptxgen.Slide, content: SlideInstance['co
           chartType === 'pie' ? (s.chartCategories?.length ?? data[0]?.values.length ?? 1) : data.length,
           s.chartColors
         ),
-      });
+      };
+      if (chartType === 'combo') {
+        // pptxgenjs has no single "combo" chart name: it takes an array of
+        // {type, data} layers instead. The last series draws as a line over
+        // the rest as bars, the same split the canvas renders.
+        const lineSeries = data.length > 1 ? data.slice(-1) : data;
+        const barSeries = data.length > 1 ? data.slice(0, -1) : [];
+        slide.addChart(
+          [
+            ...(barSeries.length ? [{ type: 'bar' as const, data: barSeries, options: {} }] : []),
+            { type: 'line' as const, data: lineSeries, options: {} },
+          ],
+          data,
+          chartOpts
+        );
+      } else {
+        slide.addChart(chartType, data, chartOpts);
+      }
       continue;
     }
 

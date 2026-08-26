@@ -1042,7 +1042,7 @@ export function HomePage() {
         </div>
       </header>
 
-      <main className="relative z-[1] mx-auto w-full max-w-[1220px] px-8 pt-6">
+      <main id="main-content" tabIndex={-1} className="relative z-[1] mx-auto w-full max-w-[1220px] px-8 pt-6 outline-none">
         {/* ── Workspace Context Header (Root Library View) ── */}
         {!activeFolder && (
           <div className="flex items-center justify-between gap-3 pb-5 mb-6 border-b border-neutral-200/60">
@@ -1753,7 +1753,7 @@ export function HomePage() {
                                       e.dataTransfer.setData('text/plain', p.id);
                                       e.dataTransfer.effectAllowed = 'move';
                                     }}
-                                    className={`group relative bg-white border border-neutral-200 hover:border-neutral-400 ${isFolderView ? 'p-3' : 'p-4'} transition-all cursor-grab active:cursor-grabbing flex flex-col justify-between`}
+                                    className={`wg-deck-card group relative bg-white border border-neutral-200 hover:border-neutral-400 ${isFolderView ? 'p-3' : 'p-4'} transition-all cursor-grab active:cursor-grabbing flex flex-col justify-between`}
                                   >
                                     <div>
                                       <div className="w-full aspect-[16/9] bg-neutral-100 mb-3 overflow-hidden border border-neutral-200">

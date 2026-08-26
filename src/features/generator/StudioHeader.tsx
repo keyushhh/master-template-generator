@@ -35,6 +35,7 @@ import {
 } from '../ui/icons';
 import { PresenceStack } from '../collab/PresenceStack';
 import type { CollabPeer } from '../collab/collabChannel';
+import { HelpMenu } from '../help/HelpMenu';
 
 export type StudioMode = 'view' | 'edit';
 
@@ -72,6 +73,11 @@ interface StudioHeaderProps {
   onRestoreDeck?: (file: File) => void;
   storage?: { readable: string; percent: number; nearLimit: boolean };
   onOpenHistory?: () => void;
+  /** Opens the keyboard shortcuts overlay, via the same Help menu used on the
+   *  library page - the studio had a tour and a shortcuts overlay with no
+   *  door to either once first-run had passed. */
+  onOpenShortcuts?: () => void;
+  onOpenTour?: () => void;
   /** Whether comment pins are visible on the canvas */
   showComments?: boolean;
   onToggleShowComments?: () => void;
@@ -196,6 +202,8 @@ export function StudioHeader({
   onRestoreDeck,
   storage,
   onOpenHistory,
+  onOpenShortcuts,
+  onOpenTour,
   showComments = true,
   onToggleShowComments,
   openCommentsCount = 0,
@@ -554,6 +562,8 @@ export function StudioHeader({
         )}
         </>
         )}
+
+        {onOpenShortcuts && <HelpMenu onOpenShortcuts={onOpenShortcuts} onOpenTour={onOpenTour} />}
 
         <button
           onClick={() => onOpenShare?.()}

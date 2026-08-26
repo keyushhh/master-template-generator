@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { AlertIcon, CheckCircleIcon, InfoIcon } from '../ui/icons';
 
 type ToastKind = 'error' | 'success' | 'info';
 
@@ -22,6 +23,16 @@ const KIND_COLOR: Record<ToastKind, string> = {
   info: 'var(--neutral-900)',
 };
 
+const KIND_ICON: Record<ToastKind, React.ComponentType<{ size?: number }>> = {
+  error: AlertIcon,
+  success: CheckCircleIcon,
+  info: InfoIcon,
+};
+
+/** More than this many at once is not "here's what happened", it's noise -
+ *  a burst of failed exports should say so once, not scroll the screen. */
+const MAX_VISIBLE = 4;
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
@@ -33,7 +44,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const showToast = useCallback(
     (message: string, kind: ToastKind = 'info') => {
       const id = ++idRef.current;
-      setToasts((prev) => [...prev, { id, message, kind }]);
+      setToasts((prev) => {
+        // The same message piling up (a repeated failure) reads as one toast
+        // that survives, not a stack of identical ones.
+        const already = prev.find((t) => t.message === message && t.kind === kind);
+        const rest = already ? prev.filter((t) => t.id !== already.id) : prev;
+        const next = [...rest, { id, message, kind }];
+        return next.slice(-MAX_VISIBLE);
+      });
       setTimeout(() => dismiss(id), DURATION_MS[kind]);
     },
     [dismiss]
@@ -56,7 +74,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           maxWidth: 380,
         }}
       >
-        {toasts.map((t) => (
+        {toasts.map((t) => {
+          const Icon = KIND_ICON[t.kind];
+          return (
           <div
             key={t.id}
             style={{
@@ -74,6 +94,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               color: 'var(--neutral-800)',
             }}
           >
+            <span aria-hidden style={{ flexShrink: 0, marginTop: 1, color: KIND_COLOR[t.kind] }}>
+              <Icon size={15} />
+            </span>
             <span style={{ flex: 1 }}>{t.message}</span>
             <button
               onClick={() => dismiss(t.id)}
@@ -91,7 +114,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               ×
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </ToastContext.Provider>
   );

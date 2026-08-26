@@ -146,7 +146,7 @@ export interface OverlayTableRow {
   cells: OverlayTableCell[];
 }
 
-export type OverlayChartType = 'bar' | 'line' | 'pie';
+export type OverlayChartType = 'bar' | 'line' | 'pie' | 'scatter' | 'combo';
 
 export interface OverlayChartSeries {
   name: string;
@@ -488,6 +488,11 @@ export interface SlideInstance {
    *  visible. Absent, which is every slide until someone makes a variant,
    *  means an ordinary standalone slide. See features/deck/variants.ts. */
   variantGroup?: string;
+  /** Locked slides skip drag, resize, delete and text edit; everything else
+   *  (present, export, reorder via the sorter) still sees them. A guard
+   *  against a stray click on a slide someone has already signed off on, not
+   *  a permission system. Absent means unlocked, the original behaviour. */
+  locked?: boolean;
 }
 
 export interface Deck {

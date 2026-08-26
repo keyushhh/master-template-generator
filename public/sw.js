@@ -20,7 +20,7 @@
  * deletes every older cache, so an old build's assets do not accumulate.
  */
 
-const CACHE = 'wozku-v1';
+const CACHE = 'wozku-v2';
 
 /** The shell, so a first offline open has something to render. */
 const SHELL = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest'];

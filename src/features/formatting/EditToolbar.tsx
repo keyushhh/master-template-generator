@@ -174,6 +174,7 @@ function Menu({
         title={title}
         aria-label={title}
         aria-expanded={open}
+        aria-haspopup="menu"
         onClick={() => { if (!open) place(); setOpen((o) => !o); }}
         style={{ ...ctl, ...(open || active ? ctlOn : {}) }}
       >
@@ -190,6 +191,8 @@ function Menu({
         createPortal(
           <div
             ref={panel}
+            role="menu"
+            aria-label={title}
             /**
              * Swallowing mousedown is what keeps the canvas selection alive while
              * you use the menu - without it, pressing a row blurs the slot being
@@ -1494,7 +1497,7 @@ export function EditToolbar({
 
           {selectedShape.kind === 'chart' && (
             <>
-              {(['bar', 'line', 'pie'] as const).map((t) => (
+              {(['bar', 'line', 'pie', 'scatter', 'combo'] as const).map((t) => (
                 <button
                   key={t}
                   title={`${t[0].toUpperCase()}${t.slice(1)} chart`}

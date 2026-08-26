@@ -840,8 +840,19 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     return () => clearTimeout(timer);
   }, [activeSummon, displayDeck.slides]);
 
+  const [textRevision, bumpTextRevision] = useReducer((n: number) => n + 1, 0);
+
   const handleEditSlide = useCallback(
     (instanceId: string, updater: (content: SlideContent) => SlideContent) => {
+      if (draft?.slides.find((s) => s.instanceId === instanceId)?.locked) {
+        showToast('This slide is locked. Unlock it from the slide menu to edit.', 'info');
+        // The contentEditable span a keystroke just landed in is uncontrolled -
+        // rejecting the model change alone leaves the typed text sitting in the
+        // DOM. Bumping the revision remounts every text span from the
+        // (unchanged) model, the same trick undo uses to undo typing.
+        bumpTextRevision();
+        return;
+      }
       dispatchDraft({
         type: 'edit',
         fn: (prev) => {
@@ -857,7 +868,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
       });
       setDirty(true);
     },
-    []
+    [draft, showToast, bumpTextRevision]
   );
 
   /**
@@ -1501,6 +1512,18 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     [mutateDeck]
   );
 
+  const handleToggleLock = useCallback(
+    (instanceId: string) => {
+      mutateDeck((prev) => ({
+        ...prev,
+        slides: prev.slides.map((s) =>
+          s.instanceId === instanceId ? { ...s, locked: !s.locked } : s
+        ),
+      }));
+    },
+    [mutateDeck]
+  );
+
   const handleBulkSetHidden = useCallback(
     (instanceIds: string[], hidden: boolean) => {
       const ids = new Set(instanceIds);
@@ -1606,7 +1629,6 @@ function pristineDeckFor(templateId: string | undefined): Deck {
    * to do - flush any pending typing, bump the text revision, move the stack -
    * can't drift apart between the two entry points.
    */
-  const [textRevision, bumpTextRevision] = useReducer((n: number) => n + 1, 0);
 
   const timeTravel = useCallback(
     (dir: 'undo' | 'redo') => {
@@ -2651,6 +2673,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         onImportDeck={handleImportDeck}
         onGenerate={handleGenerate}
         onToggleHidden={handleToggleHidden}
+        onToggleLock={handleToggleLock}
         onDuplicate={handleDuplicate}
         onAddVariant={handleAddVariant}
         onChooseVariant={handleChooseVariant}
@@ -2698,6 +2721,8 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         canExport={displayDeck.slides.some((s) => !s.hidden)}
         onOpenShare={() => setShareOpen(true)}
         onOpenHistory={() => setHistoryOpen(true)}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
+        onOpenTour={() => setTourOpen(true)}
         showComments={showComments}
         onToggleShowComments={() => setShowComments((v) => !v)}
         openCommentsCount={openCommentsCount}
@@ -2848,9 +2873,12 @@ function pristineDeckFor(templateId: string | undefined): Deck {
 
       <div
         ref={slideContainerRef}
+        id="main-content"
+        tabIndex={-1}
         style={{
           cursor: isLaserActive ? 'crosshair' : isCommentMode ? 'crosshair' : undefined,
           position: 'relative',
+          outline: 'none',
         }}
         onPointerMove={(e) => {
           const stage = (e.target as HTMLElement).closest?.('[data-slide]')

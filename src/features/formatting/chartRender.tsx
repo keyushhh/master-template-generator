@@ -75,6 +75,17 @@ export function ChartVisual({ chartType, categories, series, width, height, dark
       {chartType === 'line' && (
         <LineSeries categories={categories} series={series} max={max} plotW={plotW} plotH={plotH} padL={padL} padT={padT} palette={palette} />
       )}
+      {chartType === 'scatter' && (
+        <ScatterSeries categories={categories} series={series} max={max} plotW={plotW} plotH={plotH} padL={padL} padT={padT} palette={palette} />
+      )}
+      {chartType === 'combo' && (
+        <>
+          {/* Every series but the last as bars, the last as the line laid over
+              them - the same split the PowerPoint export builds. */}
+          <BarSeries categories={categories} series={series.slice(0, -1)} max={max} plotW={plotW} plotH={plotH} padL={padL} padT={padT} palette={palette} />
+          <LineSeries categories={categories} series={series.slice(-1)} max={max} plotW={plotW} plotH={plotH} padL={padL} padT={padT} palette={palette.slice(-1)} />
+        </>
+      )}
 
       {categories.map((cat, i) => {
         const cx = padL + (plotW / categories.length) * (i + 0.5);
@@ -143,6 +154,24 @@ function LineSeries({
           </g>
         );
       })}
+    </>
+  );
+}
+
+function ScatterSeries({
+  categories, series, max, plotW, plotH, padL, padT, palette,
+}: { categories: string[]; series: OverlayChartSeries[]; max: number; plotW: number; plotH: number; padL: number; padT: number; palette: string[] }) {
+  const step = plotW / Math.max(1, categories.length - 1 || 1);
+  return (
+    <>
+      {series.map((s, si) =>
+        categories.map((_, ci) => {
+          const v = s.values[ci] ?? 0;
+          const x = categories.length > 1 ? padL + step * ci : padL + plotW / 2;
+          const y = padT + plotH - (v / max) * plotH;
+          return <circle key={`${si}-${ci}`} cx={x} cy={y} r={1.4} fill={palette[si % palette.length]} />;
+        })
+      )}
     </>
   );
 }
