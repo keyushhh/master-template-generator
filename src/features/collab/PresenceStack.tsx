@@ -63,7 +63,7 @@ export function PresenceStack({
             {/* Spotlight following indicator badge */}
             {isFollowing && (
               <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-neutral-900 border border-white rounded-none flex items-center justify-center">
-                <span className="w-1 h-1 bg-emerald-400 rounded-none animate-ping" />
+                <span className="w-1 h-1 bg-emerald-400 rounded-none" />
               </span>
             )}
           </button>

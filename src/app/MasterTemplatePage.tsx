@@ -805,18 +805,6 @@ function pristineDeckFor(templateId: string | undefined): Deck {
     }
   }, [selection, reportSelection]);
 
-  // Follow Mode sync
-  useEffect(() => {
-    if (!followingUserId) return;
-    const target = peers.find((p) => p.userId === followingUserId);
-    if (target?.slideId && target.slideId !== currentSlideId) {
-      const idx = displayDeck.slides.findIndex((s) => s.instanceId === target.slideId);
-      if (idx >= 0) {
-        setCurrentSlideId(target.slideId);
-      }
-    }
-  }, [followingUserId, peers, currentSlideId, displayDeck.slides]);
-
   // Handle summon action from local user
   const handleSummonEveryone = useCallback(() => {
     if (!currentSlideId) return;
@@ -2665,6 +2653,7 @@ function pristineDeckFor(templateId: string | undefined): Deck {
       <GeneratorSidebar
         hasPresentation={!!ast}
         peers={peers}
+        followingUserId={followingUserId}
         ast={ast}
         deck={displayDeck}
         deckGenerated={deck.generated}
@@ -2846,7 +2835,6 @@ function pristineDeckFor(templateId: string | undefined): Deck {
               backgroundColor: followingUser.color || '#10B981',
               borderRadius: 0,
             }}
-            className="animate-pulse"
           />
           <span style={{ fontSize: 12, fontWeight: 700 }}>
             Following {followingUser.name}
@@ -2950,7 +2938,6 @@ function pristineDeckFor(templateId: string | undefined): Deck {
         revision={textRevision}
         currentId={currentSlideId}
         onNavigate={(id) => {
-          setFollowingUserId(null); // break follow mode on manual navigation
           setCurrentSlideId(id);
         }}
         onPickVideo={setVideoPickerFor}

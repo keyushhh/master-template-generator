@@ -14,6 +14,7 @@ const SCROLL_EDGE_SLOP = 4;
 interface GeneratorSidebarProps {
   hasPresentation: boolean;
   peers?: CollabPeer[];
+  followingUserId?: string | null;
   /** Parsed document - carried into PDF export so the client logo renders. */
   ast: DocumentNode | null;
   deck: Deck;
@@ -45,7 +46,7 @@ interface GeneratorSidebarProps {
   /** The deck's resolved theme, so a rail thumbnail matches the stage. */
   theme?: DeckTheme;
   /** The chosen template, so an imported .pptx keeps it instead of falling
-   *  back to the house one. */
+   *  fallback to the house one. */
   presentationTemplateId?: string;
   /** Opens the brand kit picker. */
 }
@@ -53,6 +54,7 @@ interface GeneratorSidebarProps {
 export function GeneratorSidebar({
   hasPresentation,
   peers,
+  followingUserId,
   ast,
   deck,
   deckGenerated,
@@ -153,6 +155,7 @@ export function GeneratorSidebar({
             <SlideNavList
               slides={deck.slides}
               peers={peers}
+              followingUserId={followingUserId}
               ast={ast}
               logoUrl={deck.logoUrl}
               theme={theme}

@@ -44,6 +44,7 @@ interface SlideNavListProps {
   /** The slide on the stage. */
   currentId: string | null;
   onNavigate: (instanceId: string) => void;
+  followingUserId?: string | null;
 }
 
 /**
@@ -292,7 +293,11 @@ function CardAction({
   );
 }
 
-export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidden, onToggleLock, onDuplicate, onAddVariant, onChooseVariant, onChangeLayout, onDelete, onSetTransition, onRename, onReorder, onInsertAfter, currentId, onNavigate }: SlideNavListProps) {
+export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidden, onToggleLock, onDuplicate, onAddVariant, onChooseVariant, onChangeLayout, onDelete, onSetTransition, onRename, onReorder, onInsertAfter, currentId, onNavigate, followingUserId }: SlideNavListProps) {
+  const followedPeer = useMemo(
+    () => (followingUserId ? peers?.find((p) => p.userId === followingUserId) : null),
+    [followingUserId, peers]
+  );
   const contrastBySlide = useMemo(() => {
     const map = new Map<string, BrandCheckIssue[]>();
     for (const issue of brandCheckReport(slides, theme ?? WOZKU_THEME)) {
@@ -394,6 +399,7 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
         <div className="space-y-3">
           {slides.map((slide) => {
                 const isActive = currentId === slide.instanceId && !slide.hidden;
+                const isFollowedSlide = Boolean(followedPeer?.slideId && followedPeer.slideId === slide.instanceId);
                 const isDropTarget = overId === slide.instanceId && dragId && dragId !== slide.instanceId;
                 return (
                   <div
@@ -456,14 +462,20 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
                       <div className="absolute -top-1.5 left-1 right-1 h-0.5 bg-emerald-500 z-30" />
                     )}
 
-                    {/* Accent edge: the clearest "you are here" marker, and it
-                        costs no horizontal room the thumbnail needs. */}
+                    {/* Accent edge: active viewer slide or followed collaborator slide */}
                     <span
                       aria-hidden
                       style={{
                         position: 'absolute',
-                        left: -2, top: 2, bottom: 22, width: 2,
-                        background: isActive ? 'var(--emerald-500)' : 'transparent',
+                        left: -2, top: 2, bottom: 22, width: isFollowedSlide || isActive ? 2.5 : 2,
+                        background: isActive
+                          ? 'var(--emerald-500)'
+                          : isFollowedSlide
+                            ? (followedPeer?.color || '#3b82f6')
+                            : 'transparent',
+                        boxShadow: isFollowedSlide && !isActive
+                          ? `0 0 8px ${followedPeer?.color || '#3b82f6'}`
+                          : undefined,
                         transition: 'background .15s',
                       }}
                     />
@@ -471,8 +483,12 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
                       <span
                         className="font-mono text-[10.5px] tracking-[0.06em]"
                         style={{
-                          color: isActive ? 'var(--emerald-600)' : 'var(--chrome-text-faint)',
-                          fontWeight: isActive ? 700 : 400,
+                          color: isActive
+                            ? 'var(--emerald-600)'
+                            : isFollowedSlide
+                              ? (followedPeer?.color || 'var(--chrome-text-faint)')
+                              : 'var(--chrome-text-faint)',
+                          fontWeight: isActive || isFollowedSlide ? 700 : 400,
                         }}
                       >
                         {slide.hidden ? '–' : numbering.get(slide.instanceId)}
@@ -514,13 +530,36 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
                           style={{
                             position: 'absolute',
                             inset: 0,
-                            border: isActive
-                              ? '1.5px solid var(--emerald-500)'
-                              : '1px solid var(--neutral-200)',
+                            border: isFollowedSlide
+                              ? `2px solid ${followedPeer?.color || '#3b82f6'}`
+                              : isActive
+                                ? '1.5px solid var(--emerald-500)'
+                                : '1px solid var(--neutral-200)',
+                            boxShadow: isFollowedSlide
+                              ? `0 0 0 1px ${followedPeer?.color || '#3b82f6'}, 0 0 12px ${(followedPeer?.color || '#3b82f6')}40`
+                              : undefined,
                             pointerEvents: 'none',
                             zIndex: 15,
+                            transition: 'border-color .15s, box-shadow .15s',
                           }}
                         />
+
+                        {/* Highlight badge for followed collaborator */}
+                        {isFollowedSlide && followedPeer && (
+                          <div
+                            className="absolute bottom-1.5 left-1.5 z-25 flex items-center px-1.5 py-0.5 shadow-sm select-none pointer-events-none"
+                            style={{
+                              backgroundColor: followedPeer.color || '#3b82f6',
+                              color: '#ffffff',
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 8.5,
+                              fontWeight: 700,
+                              letterSpacing: '0.04em',
+                            }}
+                          >
+                            <span className="truncate max-w-[90px]">{followedPeer.name}</span>
+                          </div>
+                        )}
 
                         {/* Multiplayer Collaborator Presence Chips on Slide */}
                         {(() => {
@@ -528,16 +567,21 @@ export function SlideNavList({ slides, peers, ast, logoUrl, theme, onToggleHidde
                           if (!peersOnThisSlide.length) return null;
                           return (
                             <div className="absolute top-1 right-1 z-20 flex items-center -space-x-1 pointer-events-none">
-                              {peersOnThisSlide.map((p) => (
-                                <span
-                                  key={p.clientId}
-                                  title={`${p.name} is on Slide ${numbering.get(slide.instanceId) ?? ''}`}
-                                  className="w-[17px] h-[17px] rounded-none flex items-center justify-center text-[7.5px] font-mono font-bold text-white shadow-xs border border-white"
-                                  style={{ backgroundColor: p.color }}
-                                >
-                                  {initialsOf(p.name)}
-                                </span>
-                              ))}
+                              {peersOnThisSlide.map((p) => {
+                                const isThisFollowed = followingUserId === p.userId;
+                                return (
+                                  <span
+                                    key={p.clientId}
+                                    title={`${p.name} is on Slide ${numbering.get(slide.instanceId) ?? ''}`}
+                                    className={`w-[17px] h-[17px] rounded-none flex items-center justify-center text-[7.5px] font-mono font-bold text-white shadow-xs border ${
+                                      isThisFollowed ? 'ring-2 ring-neutral-900 border-white z-20 scale-110' : 'border-white'
+                                    }`}
+                                    style={{ backgroundColor: p.color }}
+                                  >
+                                    {initialsOf(p.name)}
+                                  </span>
+                                );
+                              })}
                             </div>
                           );
                         })()}
